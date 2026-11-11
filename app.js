@@ -94,7 +94,16 @@
     commitment: "If a required skill is not mastered during scheduled training, I will work with the student to identify the specific performance issue and establish a clear plan for remediation, additional practice, and reevaluation.\n\nMy commitment is to provide coaching, explanation, repetition, and structured practice that gives the student a reasonable opportunity to achieve proficiency. Certification remains performance-based and will only be awarded when the required standard has been demonstrated.",
     proficiency: "Certification readiness means required knowledge and skills are demonstrated safely, correctly, and with sufficient control to show repeatable performance. The instructor may require additional practice or evaluation whenever performance does not meet the required standard.",
     paymentNotes: "The remaining balance is due prior to the open-water training portion.\n\nAdditional training required to achieve skill proficiency is not included in the course fee and may be billed separately. Any additional training requirement will be discussed with the student before additional charges are incurred.",
-    acknowledgment: "I understand that this is a performance-based certification program. I understand that attendance, participation, or completion of scheduled class dates does not guarantee certification. I understand that all required knowledge and skills must be demonstrated to the required level of proficiency.\n\nI understand that if I do not initially master a required skill, my instructor will work with me to establish a reasonable plan for additional practice and evaluation. I understand that certification will not be issued until the required standard has been met."
+    acknowledgment: "I understand that this is a performance-based certification program. I understand that attendance, participation, or completion of scheduled class dates does not guarantee certification. I understand that all required knowledge and skills must be demonstrated to the required level of proficiency.\n\nI understand that if I do not initially master a required skill, my instructor will work with me to establish a reasonable plan for additional practice and evaluation. I understand that certification will not be issued until the required standard has been met.",
+    // Optional sections and labels. Every course has these; an empty value leaves that part out of the proposal.
+    schedule: "", hours: "", location: "", payment: "", paymentUrl: "",
+    feeLabel: "Open Water Scuba Diver + Nitrox Program",
+    depositPurpose: "training dates", balanceDue: "due before open water",
+    logisticsTitle: "", logistics: "", logisticsCallout: "", logisticsLink: "",
+    prereqs: [], topics: "",
+    matrixTitle: "Open Water Certification — Required Skill Matrix",
+    matrixIntro: "This matrix is the student's performance checklist. NAUI specifies that applicable scuba skills are introduced in confined water and performed in open water.",
+    costRows: [{ item: "eLearning", cost: "Included" }, { item: "Instruction", cost: "Included" }, { item: "Certification Processing", cost: "Included" }]
   };
 
   // ---------- courses ----------
@@ -105,13 +114,31 @@
   function registerCourse(def) {
     if (!def || !def.id) return;
     if (!COURSES[def.id]) COURSE_ORDER.push(def.id);
-    COURSES[def.id] = Object.assign({ dives: 4, schedule: [], skills: [], final: [], finalTitle: "Final Evaluation", siteLabel: "Open water site" }, def);
+    COURSES[def.id] = Object.assign({
+      dives: 4, schedule: [], skills: [], final: [], finalTitle: "Final Evaluation", siteLabel: "Open water site",
+      // Skill matrix layout. "three": Confined status, Open water status, Pass. "two": first status column, then M (pass).
+      cols: "three", colLabels: ["Confined", "Open water"],
+      key: "IP = Introduced/Practiced · PR = Proficient · M = Mastered/Pass · R = Remediation Required",
+      skillHint: "NAUI specifies that applicable scuba skills are introduced in confined water and performed in open water. Tick Pass when the skill is mastered.",
+      unit: "Day", structCols: ["Day", "Focus", "Primary objectives"],
+      midDepth: "40 ft", maxDepth: "60 ft", // roster depth scale
+      prereqs: [], // per-student prerequisite checklist: { k, label, detail, type }
+      diveTab: "Dive log", diveTitle: "Dive-by-Dive Record",
+      alwaysRecords: true // false: dive log and remediation appear in the proposal only once filled in
+    }, def);
+  }
+  // A course added after the data loaded: bring its saved records up to its own shape.
+  function adoptCourse(id) {
+    if (!state) return;
+    state.enrollments = state.enrollments.map(e => e.course === id ? mergeDeep(blankEnrollment(e.studentId, id, true), e) : e);
+    // Saved settings keep their edits and pick up any setting added since.
+    if (COURSES[id].defaults && id !== "open-water") state.programs[id] = Object.assign(clone(COURSES[id].defaults), state.programs[id] || {});
   }
   registerCourse({
     id: "open-water", name: "Open Water", fullName: "Open Water Diver + Nitrox",
     skills: SKILLS, final: FINAL, finalTitle: "Emergency & Final Performance", dives: 4,
     schedule: ["Day 1 — Academics + confined", "Day 2 — Open water dives 1 & 2", "Day 3 — Open water dives 3 & 4"],
-    defaults: DEFAULT_PROGRAM
+    defaults: DEFAULT_PROGRAM, alwaysRecords: true
   });
 
   // ---------- state ----------
@@ -132,13 +159,15 @@
   }
 
   // One student's record in one course. course "open-water" is this app's Open Water + Nitrox course.
-  function blankEnrollment(studentId, course) {
+  function blankEnrollment(studentId, course, noDefaults) {
     const c = COURSES[course || "open-water"] || COURSES["open-water"];
-    const dates = {}; c.schedule.forEach((_, i) => { dates["d" + (i + 1)] = ""; });
+    const days = (!noDefaults && typeof state !== "undefined" && state && P({ course: c.id }).days) || [];
+    const dates = {}; c.schedule.forEach((_, i) => { dates["d" + (i + 1)] = (days[i] && days[i].date) || ""; });
+    const prereq = {}; c.prereqs.forEach(q => { prereq[q.k] = { ok: false, detail: "" }; });
     return {
       id: newId("e"), studentId: studentId || null, course: c.id,
       created: new Date().toISOString(), location: "", notes: "",
-      dates,
+      dates, prereq,
       skills: {}, final: {},
       dives: Array.from({ length: c.dives }, () => ({ date: "", loc: "", depth: "", dur: "", gas: "", notes: "", ini: "" })),
       remed: [],
@@ -160,7 +189,7 @@
       enrollments = [];
       students = students.map(old => {
         const person = mergeDeep(blankPerson(), { id: old.id, created: old.created, name: old.name, email: old.email, phone: old.phone, emergencyName: old.emergency || "" });
-        const e = mergeDeep(blankEnrollment(person.id), old);
+        const e = mergeDeep(blankEnrollment(person.id, "open-water", true), old);
         e.id = newId("e"); e.studentId = person.id; e.course = "open-water";
         ["name", "email", "phone", "emergency"].forEach(k => delete e[k]);
         enrollments.push(e);
@@ -168,7 +197,7 @@
       });
     }
     data.students = students.map(p => mergeDeep(blankPerson(), p));
-    data.enrollments = enrollments.map(e => mergeDeep(blankEnrollment(e.studentId, COURSES[e.course] ? e.course : "open-water"), e));
+    data.enrollments = enrollments.map(e => COURSES[e.course] ? mergeDeep(blankEnrollment(e.studentId, e.course, true), e) : e);
     return data;
   }
   let saveTimer = null;
@@ -236,7 +265,8 @@
     const r = SK.filter((_, i) => s.skills[i] && (s.skills[i].cw === "R" || s.skills[i].ow === "R")).length
             + FI.filter((_, i) => s.final[i] && (s.final[i].cw === "R" || s.final[i].ow === "R")).length;
     const tot = SK.length + FI.length;
-    return { m, f, r, nS: SK.length, nF: FI.length, pct: tot ? Math.round(((m + f) / tot) * 100) : 0 };
+    const q = c.prereqs.filter(x => s.prereq && s.prereq[x.k] && s.prereq[x.k].ok).length;
+    return { m, f, r, q, nQ: c.prereqs.length, nS: SK.length, nF: FI.length, pct: tot ? Math.round(((m + f) / tot) * 100) : 0 };
   }
   function owed(s) {
     const extras = (s.pay.extras || []).reduce((a, x) => a + (Number(x.amt) || 0), 0);
@@ -331,22 +361,27 @@
           <span class="meta">${s.dates.d1 ? esc(fmtDate(s.dates.d1)) : "No date set"} · ${p.pct}%${p.r ? " · " + p.r + " R" : ""}</span>
           <span class="bar"><i style="width:${p.pct}%"></i></span></button></li>`;
       }).join("") || `<li class="meta" style="padding:8px 10px">${owList().length ? "No matches." : "No one enrolled yet."}</li>`}</ul>
-      <div class="depth" aria-hidden="true"><i></i><div><span>0 ft · surface</span><span>15 ft · safety stop</span><span>40 ft</span><span>60 ft · OW max depth</span></div></div>`;
+      <div class="depth" aria-hidden="true"><i></i><div><span>0 ft · surface</span><span>15 ft · safety stop</span><span>${esc(C().midDepth)}</span><span>${esc(C().maxDepth)} · max depth</span></div></div>`;
   }
 
-  const TABS = [["details", "Details"], ["skills", "Skill matrix"], ["final", "Final evaluation"], ["dives", "Dive log"], ["remed", "Remediation"], ["pay", "Payment"], ["ack", "Sign-off"], ["proposal", "Proposal"]];
+  function tabsFor(c) {
+    return [["details", "Details"], ["skills", "Skill matrix"]]
+      .concat(c.final.length ? [["final", "Final evaluation"]] : [])
+      .concat([["dives", c.diveTab], ["remed", "Remediation"], ["pay", "Payment"], ["ack", "Sign-off"], ["proposal", "Proposal"]]);
+  }
 
   function renderRecord() {
     const s = cur();
     if (!s) {
       return `<div class="empty"><h2>Enroll a student in ${esc(C().name)}</h2>
-        <p>Each ${esc(C().name)} record holds the course schedule, the required skill matrix, final evaluation, dive log, remediation plan, payments and sign-off.
+        <p>Each ${esc(C().name)} record holds the course schedule, the required skill matrix, ${C().final.length ? "final evaluation, " : ""}${esc(C().diveTab.toLowerCase())}, remediation plan, payments and sign-off.
         It also builds a proposal with the student's name and dates that you can print or save as PDF.</p>
         <button class="btn primary" data-act="enroll">+ Enroll a student</button></div>`;
     }
-    const p = progress(s), o = owed(s);
+    const p = progress(s), o = owed(s), TABS = tabsFor(C(s));
+    if (!TABS.some(t => t[0] === view.tab)) view.tab = "details";
     const body = {
-      details: renderDetails, skills: renderSkills, final: renderFinal, dives: renderDives,
+      details: renderDetails, skills: () => renderMatrix("skills"), final: () => renderMatrix("final"), dives: renderDives,
       remed: renderRemed, pay: renderPay, ack: renderAck, proposal: () => renderProposalTab(s)
     }[view.tab]();
     const dl = C(s).schedule.map((_, i) => s.dates["d" + (i + 1)]).filter(Boolean).map(fmtDate).join(" · ");
@@ -355,7 +390,7 @@
       <span class="sub" id="rec-sub">${esc([dl || "No dates set", s.location].filter(Boolean).join(" · "))}</span></div>
       <div class="stats" id="gauges">${gaugesHtml(p, o)}</div></div>
       <div class="profile" id="profile">${profileHtml(s)}</div>
-      <nav class="tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" data-act="tab" data-tab="${k}" class="${view.tab === k ? "on" : ""}" aria-selected="${view.tab === k}">${l}</button>`).join("")}</nav>
+      <nav class="tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" data-act="tab" data-tab="${k}" class="${view.tab === k ? "on" : ""}" aria-selected="${view.tab === k}">${esc(l)}</button>`).join("")}</nav>
       <div id="tabbody">${body}</div>`;
   }
 
@@ -366,13 +401,13 @@
     return `<div class="gauge"><svg role="img" aria-label="${esc(label)} ${n} of ${of}" viewBox="0 0 100 58"><path d="${ARC}" fill="none" class="track" stroke-width="8" stroke-linecap="round"></path>${len ? `<path d="${ARC}" fill="none" class="fill ${cls || ""}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${len} 126"></path>` : ""}<text x="50" y="50" text-anchor="middle">${n}/${of}</text></svg><span>${esc(label)}</span></div>`;
   }
   function gaugesHtml(p, o) {
-    return gauge(p.m, p.nS, "Skills passed") + gauge(p.f, p.nF, "Final eval", "f2") +
+    return gauge(p.m, p.nS, "Skills passed") + (p.nF ? gauge(p.f, p.nF, "Final eval", "f2") : "") + (p.nQ ? gauge(p.q, p.nQ, "Prerequisites", "f2") : "") +
       `<div class="gauge"><b style="color:${p.r ? "var(--bad)" : "inherit"}">${p.r}</b><span>Remediation</span></div>` +
       `<div class="gauge"><b class="money">${money(o.due)}</b><span>Balance due</span></div>`;
   }
   // Course progress drawn as a dive profile: confined water, then each open water dive.
   function profileHtml(s) {
-    const n = C(s).dives, W = 900, step = (W - 60) / (n + 1);
+    const n = s.dives.length, W = 900, step = (W - 60) / (n + 1);
     const confinedDone = Object.values(s.skills || {}).some(r => r && (r.cw === "PR" || r.m));
     const stages = [{ label: "Confined", done: confinedDone, depth: 40 }].concat(
       Array.from({ length: n }, (_, i) => ({ label: "Dive " + (i + 1), done: !!(s.dives[i] && (s.dives[i].date || s.dives[i].ini)), depth: 62 + (i % 2) * 12 })));
@@ -401,46 +436,44 @@
       <div class="field"><span class="lbl">Contact</span><span>${p ? esc([p.phone, p.email].filter(Boolean).join(" · ") || "No contact info yet") : "—"}</span></div>
       </div>
       <div class="row-actions">${p ? `<button class="btn" data-act="open-person" data-id="${p.id}">Edit student info</button>` : ""}</div>
+      ${C().prereqs.length ? `<h2 class="sec">Prerequisites</h2><div class="prq">${C().prereqs.map(q =>
+        `<div class="prq-row">${check("prereq." + q.k + ".ok", q.label)}${inp("s", "prereq." + q.k + ".detail", q.detail, q.type || "text")}</div>`).join("")}</div>` : ""}
       <h2 class="sec">Schedule</h2><div class="grid">
-      ${C().schedule.map((lbl, i) => inp("s", "dates.d" + (i + 1), lbl, "date")).join("")}${inp("s", "location", C().siteLabel)}</div>
+      ${C().schedule.map((lbl, i) => inp("s", "dates.d" + (i + 1), lbl, "date")).join("")}${inp("s", "location", C().siteLabel + (P().location ? " (if not " + P().location + ")" : ""))}</div>
       <h2 class="sec">Notes</h2><div class="grid">${area("s", "notes", "Instructor notes")}</div>
-      <div class="row-actions"><button class="btn danger" data-act="del">Remove from Open Water…</button><span id="del-confirm"></span></div>`;
+      <div class="row-actions"><button class="btn danger" data-act="del">Remove from ${esc(C().name)}…</button><span id="del-confirm"></span></div>`;
   }
 
-  function renderSkills() {
-    const s = cur();
-    return `<p class="hint">NAUI specifies that applicable scuba skills are introduced in confined water and performed in open water. Tick Pass when the skill is mastered.</p>
-      <div class="key"><span class="pill IP">IP</span> Introduced / practiced <span class="pill PR">PR</span> Proficient <span class="pill M">M</span> Mastered / pass <span class="pill R">R</span> Remediation required</div>
-      <div class="tablewrap"><table class="m"><thead><tr><th>Domain</th><th>Required performance objective</th><th>Confined</th><th>Open water</th><th>Pass</th><th>Initials</th></tr></thead><tbody>
-      ${C().skills.map(([d, t], i) => {
-        const r = s.skills[i] || {};
+  const KEY_HTML = `<div class="key"><span class="pill IP">IP</span> Introduced / practiced <span class="pill PR">PR</span> Proficient <span class="pill M">M</span> Mastered / pass <span class="pill R">R</span> Remediation required</div>`;
+  function matrixHead(c) {
+    return `<th>Domain</th><th>Required performance objective</th><th>${esc(c.colLabels[0])}</th><th>${esc(c.colLabels[1])}</th>${c.cols === "three" ? "<th>Pass</th>" : ""}<th>Initials</th>`;
+  }
+  function renderMatrix(group) {
+    const s = cur(), c = C(s), list = c[group];
+    const hint = group === "final" ? "Emergency and final performance skills. Tick Pass when the skill is mastered." : c.skillHint;
+    return `<p class="hint">${esc(hint)}</p>${KEY_HTML}
+      <div class="tablewrap"><table class="m"><thead><tr>${matrixHead(c)}</tr></thead><tbody>
+      ${list.map(([d, t], i) => {
+        const r = s[group][i] || {}, b = group + "." + i;
+        const mid = c.cols === "three"
+          ? `<td class="c">${statusSel(b + ".cw", ["IP", "PR", "R"], c.colLabels[0] + ", " + t)}</td>
+          <td class="c">${statusSel(b + ".ow", ["IP", "PR", "R"], c.colLabels[1] + ", " + t)}</td>
+          <td class="c">${check(b + ".m", "M")}</td>`
+          : `<td class="c">${statusSel(b + ".cw", ["IP", "PR", "R"], c.colLabels[0] + ", " + t)}</td>
+          <td class="c">${check(b + ".m", "M")}</td>`;
         return `<tr class="${r.m ? "done" : ""}" data-row="${i}"><td class="dom">${esc(d)}</td><td class="obj">${esc(t)}</td>
-          <td class="c">${statusSel("skills." + i + ".cw", ["IP", "PR", "R"], "Confined water, " + t)}</td>
-          <td class="c">${statusSel("skills." + i + ".ow", ["IP", "PR", "R"], "Open water, " + t)}</td>
-          <td class="c">${check("skills." + i + ".m", "M")}</td>${cell("skills." + i + ".ini", "text", "ini", "Init.")}</tr>`;
-      }).join("")}</tbody></table></div>`;
-  }
-
-  function renderFinal() {
-    const s = cur();
-    return `<p class="hint">Emergency and final performance skills. Tick Pass when the skill is mastered.</p>
-      <div class="key"><span class="pill IP">IP</span> Introduced / practiced <span class="pill PR">PR</span> Proficient <span class="pill M">M</span> Mastered / pass <span class="pill R">R</span> Remediation required</div>
-      <div class="tablewrap"><table class="m"><thead><tr><th>Domain</th><th>Required performance objective</th><th>Confined</th><th>Open water</th><th>Pass</th><th>Initials</th></tr></thead><tbody>
-      ${C().final.map(([d, t], i) => {
-        const r = s.final[i] || {};
-        return `<tr class="${r.m ? "done" : ""}"><td class="dom">${esc(d)}</td><td class="obj">${esc(t)}</td>
-          <td class="c">${statusSel("final." + i + ".cw", ["IP", "PR", "R"], "Confined water, " + t)}</td>
-          <td class="c">${statusSel("final." + i + ".ow", ["IP", "PR", "R"], "Open water, " + t)}</td>
-          <td class="c">${check("final." + i + ".m", "M")}</td>${cell("final." + i + ".ini", "text", "ini", "Init.")}</tr>`;
+          ${mid}${cell(b + ".ini", "text", "ini", "Init.")}</tr>`;
       }).join("")}</tbody></table></div>`;
   }
 
   function renderDives() {
-    return `<div class="tablewrap"><table class="m"><thead><tr><th>Dive</th><th>Date</th><th>Location</th><th>Max depth</th><th>Duration</th><th>Gas / mix</th><th>Skills / notes</th><th>Initials</th></tr></thead><tbody>
-      ${Array.from({ length: C().dives }, (_, i) => i).map(i => `<tr><td class="dom">${i + 1}</td>${cell("dives." + i + ".date", "date", "", "Date")}${cell("dives." + i + ".loc", "text", "", "Site")}
+    return `<div class="tablewrap"><table class="m"><thead><tr><th>Dive</th><th>Date</th><th>Location</th><th>Max depth</th><th>Duration</th><th>Gas / mix</th><th>Skills / notes</th><th>Initials</th><th></th></tr></thead><tbody>
+      ${cur().dives.map((_, i) => i).map(i => `<tr><td class="dom">${i + 1}</td>${cell("dives." + i + ".date", "date", "", "Date")}${cell("dives." + i + ".loc", "text", "", "Site")}
         ${cell("dives." + i + ".depth", "text", "", "ft")}${cell("dives." + i + ".dur", "text", "", "min")}${cell("dives." + i + ".gas", "text", "", "Air / EAN32")}
-        ${cell("dives." + i + ".notes", "text", "", "Skills, notes")}${cell("dives." + i + ".ini", "text", "ini", "Init.")}</tr>`).join("")}
-      </tbody></table></div>`;
+        ${cell("dives." + i + ".notes", "text", "", "Skills, notes")}${cell("dives." + i + ".ini", "text", "ini", "Init.")}
+        <td>${i >= C().dives && i === cur().dives.length - 1 ? `<button class="btn small danger" data-act="rm-dive" data-i="${i}">Remove</button>` : ""}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="row-actions"><button class="btn" data-act="add-dive">+ Add dive</button></div>`;
   }
 
   function renderRemed() {
@@ -457,7 +490,7 @@
     const s = cur(), o = owed(s), pr = Number(P().price) || 0;
     return `<h2 class="sec">Deposit — ${money(deposit())} (${esc(P().depositPct)}%, non-refundable)</h2>
       <div class="grid">${check("pay.depPaid", "Deposit received")}${inp("s", "pay.depDate", "Date received", "date")}${inp("s", "pay.depMethod", "Method")}</div>
-      <h2 class="sec">Balance — ${money(pr - deposit())} (due before open water)</h2>
+      <h2 class="sec">Balance — ${money(pr - deposit())} (${esc(P().balanceDue || "due before open water")})</h2>
       <div class="grid">${check("pay.balPaid", "Balance received")}${inp("s", "pay.balDate", "Date received", "date")}${inp("s", "pay.balMethod", "Method")}</div>
       <h2 class="sec">Additional training charges</h2>
       <p class="hint">Not included in the course fee. Discuss with the student before adding a charge.</p>
@@ -553,27 +586,44 @@
       <p class="hint">These fields fill every ${esc(sc.name)} student's proposal. Changes apply to all of them.</p>
       <h2 class="sec">Cover</h2><div class="grid">
         ${inp("p", "business", "Business name", "text", "wide")}${inp("p", "docTitle", "Document title")}${inp("p", "program", "Program")}
-        ${inp("p", "format", "Format", "text", "wide")}${inp("p", "tagline", "Tagline", "text", "wide")}</div>
-      <h2 class="sec">Pricing</h2><div class="grid">${inp("p", "price", "Course fee ($)", "number")}${inp("p", "depositPct", "Deposit (%)", "number")}
-        <div class="field"><span class="lbl">Deposit amount</span><b class="money" id="dep-amt">${money(deposit())}</b></div></div>
+        ${inp("p", "format", "Format", "text", "wide")}${inp("p", "tagline", "Tagline", "text", "wide")}
+        ${inp("p", "schedule", "Schedule (shown when a student has no dates)", "text", "wide")}${inp("p", "hours", "Daily hours")}${inp("p", "location", "Location")}</div>
+      <h2 class="sec">Pricing &amp; payment</h2><div class="grid">${inp("p", "price", "Course fee ($)", "number")}${inp("p", "depositPct", "Deposit (%)", "number")}
+        <div class="field"><span class="lbl">Deposit amount</span><b class="money" id="dep-amt">${money(settingsDeposit())}</b></div>
+        ${inp("p", "feeLabel", "Course fee line in Course Investment", "text", "wide")}
+        ${inp("p", "depositPurpose", "Deposit secures…")}${inp("p", "balanceDue", "Balance is…")}
+        ${inp("p", "payment", "Payments accepted via")}${inp("p", "paymentUrl", "Payment link", "url")}</div>
       <h2 class="sec">Contact</h2><div class="grid">${inp("p", "instructor", "Instructor")}${inp("p", "phone", "Phone", "tel")}${inp("p", "email", "Email", "email")}</div>
       <h2 class="sec">Program structure</h2>
-      <div class="tablewrap"><table class="m"><thead><tr><th>Day</th><th>Focus</th><th>Primary objectives</th><th></th></tr></thead><tbody>
-        ${P.days.map((_, i) => `<tr>${pcell("days." + i + ".day", "ini")}${pcell("days." + i + ".focus")}${pcell("days." + i + ".obj")}<td><button class="btn small danger" data-act="rm-day" data-i="${i}">Remove</button></td></tr>`).join("")}
-      </tbody></table></div><div class="row-actions"><button class="btn" data-act="add-day">+ Add day</button></div>
-      <h2 class="sec">Included certifications & materials</h2>
-      <div class="tablewrap"><table class="m"><thead><tr><th>Included</th><th>Details</th><th></th></tr></thead><tbody>
-        ${P.included.map((_, i) => `<tr>${pcell("included." + i + ".item")}${pcell("included." + i + ".detail")}<td><button class="btn small danger" data-act="rm-inc" data-i="${i}">Remove</button></td></tr>`).join("")}
-      </tbody></table></div><div class="row-actions"><button class="btn" data-act="add-inc">+ Add item</button></div>
-      <h2 class="sec">Proposal text</h2><div class="grid">
+      <p class="hint">A default date fills that ${esc(sc.unit.toLowerCase())} in for each new enrollment.</p>
+      ${rowsTable(P.days, "days", sc.structCols.concat(["Default date"]), ["day", "focus", "obj", "date"], "day", sc.unit.toLowerCase())}
+      <h2 class="sec">Included certifications &amp; materials</h2>
+      ${rowsTable(P.included, "included", ["Included", "Details"], ["item", "detail"], "inc", "item")}
+      <h2 class="sec">Prerequisites</h2>
+      ${rowsTable(P.prereqs, "prereqs", ["Requirement", "Detail"], ["item", "detail"], "prq", "prerequisite")}
+      <h2 class="sec">Course investment lines</h2>
+      ${rowsTable(P.costRows, "costRows", ["Description", "Cost"], ["item", "cost"], "cost", "line")}
+      <h2 class="sec">Proposal text</h2>
+      <p class="hint">Leave a section empty to leave it out of the proposal.</p><div class="grid">
         ${area("p", "philosophy", "Our training philosophy")}${area("p", "standards", "Governing standards")}
+        ${inp("p", "logisticsTitle", "Logistics heading", "text", "wide")}${area("p", "logistics", "Logistics")}
+        ${area("p", "logisticsCallout", "Logistics — highlighted statement")}${inp("p", "logisticsLink", "Logistics link (e.g. lake tickets)", "url", "wide")}
+        ${area("p", "topics", "What you'll learn — one topic per line")}
         ${area("p", "expectationsCallout", "Performance expectations — highlighted statement")}${area("p", "expectations", "Performance expectations")}
-        ${area("p", "commitment", "Instructor commitment")}${area("p", "proficiency", "Proficiency standard")}
+        ${area("p", "commitment", "Instructor commitment")}
+        ${inp("p", "matrixTitle", "Skill matrix heading", "text", "wide")}${area("p", "matrixIntro", "Skill matrix introduction")}
+        ${area("p", "proficiency", "Proficiency standard")}
         ${area("p", "paymentNotes", "Payment policy (after the deposit sentence)")}${area("p", "acknowledgment", "Student acknowledgment")}</div>
       <div class="row-actions"><button class="btn" data-act="reset-program">Restore original proposal text…</button><span id="reset-confirm"></span></div>`;
   }
-  function pcell(path, cls) {
-    return `<td class="${cls || ""}"><input id="p-${path.replace(/\./g, "-")}" data-s="p" data-b="${path}" value="${esc(getPath(settingsProgram(), path))}" aria-label="${esc(path)}"></td>`;
+  // An editable list in settings (rows of inputs, a Remove button per row, and an Add button).
+  function rowsTable(list, base, heads, keys, act, noun) {
+    return `<div class="tablewrap"><table class="m"><thead><tr>${heads.map(h => `<th>${esc(h)}</th>`).join("")}<th></th></tr></thead><tbody>
+      ${(list || []).map((_, i) => `<tr>${keys.map(k => pcell(base + "." + i + "." + k, k === "day" ? "ini" : "", k === "date" ? "date" : "text")).join("")}<td><button class="btn small danger" data-act="rm-row" data-list="${base}" data-i="${i}">Remove</button></td></tr>`).join("")}
+      </tbody></table></div><div class="row-actions"><button class="btn" data-act="add-row" data-list="${base}">+ Add ${esc(noun)}</button></div>`;
+  }
+  function pcell(path, cls, type) {
+    return `<td class="${cls || ""}"><input id="p-${path.replace(/\./g, "-")}" type="${type || "text"}" data-s="p" data-b="${path}" value="${esc(getPath(settingsProgram(), path))}" aria-label="${esc(path)}"></td>`;
   }
 
   // ---------- proposal document ----------
@@ -583,14 +633,31 @@
       ${proposalHtml(s)}`;
   }
   function mark(v) { return v ? esc(v) : "☐"; }
+  function safeUrl(u) { return /^https?:\/\//i.test(String(u || "")) ? String(u) : ""; }
+  function linkOrText(text, url) { const u = safeUrl(url); return u ? `<a href="${esc(u)}">${esc(text)}</a>` : esc(text); }
+  function para(t) { return t ? `<p>${esc(t)}</p>` : ""; }
+  function matrixDoc(c, list, rows) {
+    return `<div class="tablewrap"><table><thead><tr>${matrixHead(c)}</tr></thead><tbody>
+      ${list.map(([d, t], i) => {
+        const r = rows[i] || {};
+        const mid = c.cols === "three" ? `<td class="mk">${mark(r.cw)}</td><td class="mk">${mark(r.ow)}</td><td class="mk">${r.m ? "M ☑" : "☐"}</td>` : `<td class="mk">${mark(r.cw)}</td><td class="mk">${r.m ? "M ☑" : "☐"}</td>`;
+        return `<tr><td>${esc(d)}</td><td>${esc(t)}</td>${mid}<td class="mk">${esc(r.ini || "")}</td></tr>`;
+      }).join("")}</tbody></table></div>`;
+  }
   function proposalHtml(s) {
-    const P = P_(s);
+    const P = P_(s), c = C(s);
     const contact = `${esc(P.instructor)} | ${esc(P.phone)} | ${esc(P.email)}`;
     const head = (t) => `<div class="runhead"><span>${esc(P.business)}</span><span>${esc(t)}</span></div>`;
-    const dlist = C(s).schedule.map((_, i) => s.dates["d" + (i + 1)]);
+    const dlist = c.schedule.map((_, i) => s.dates["d" + (i + 1)]);
     const dates = dlist.filter(Boolean).map(fmtDate).join(" · ");
-    const key = `<p class="key">Evaluation key: IP = Introduced/Practiced · PR = Proficient · M = Mastered/Pass · R = Remediation Required</p>`;
+    const when = dates ? dates + (P.hours ? " | " + P.hours : "") : "";
+    const loc = s.location || P.location;
+    const key = `<p class="key">Evaluation key: ${esc(c.key)}</p>`;
     const o = owed(s);
+    const showDives = c.alwaysRecords || s.dives.some(d => Object.values(d).some(Boolean));
+    const showRemed = c.alwaysRecords || s.remed.length;
+    const topics = String(P.topics || "").split("\n").map(x => x.trim()).filter(Boolean);
+    const prereqs = P.prereqs || [], costRows = P.costRows || [];
     return `<article class="doc">
       ${head(P.docTitle)}
       <div class="cover"><h1>${esc(P.business)}</h1><div class="sub">${esc(P.docTitle)}</div><p class="tag">${esc(P.tagline)}</p></div>
@@ -598,57 +665,60 @@
         ${nameOf(s) ? `<dt>Prepared for</dt><dd>${esc(nameOf(s))}</dd>` : ""}
         <dt>Program</dt><dd>${esc(P.program)}</dd>
         <dt>Format</dt><dd>${esc(P.format)}</dd>
-        ${dates ? `<dt>Training dates</dt><dd>${esc(dates)}</dd>` : ""}
-        ${s.location ? `<dt>Open water site</dt><dd>${esc(s.location)}</dd>` : ""}
+        ${when ? `<dt>${P.hours ? "Dates &amp; times" : "Training dates"}</dt><dd>${esc(when)}</dd>` : (P.schedule ? `<dt>Schedule</dt><dd>${esc(P.schedule)}${P.hours ? " | " + esc(P.hours) : ""}</dd>` : "")}
+        ${loc ? `<dt>${esc(c.siteLabel)}</dt><dd>${esc(loc)}</dd>` : ""}
         <dt>Investment</dt><dd>${money(P.price)}</dd>
+        ${P.payment ? `<dt>Payment</dt><dd>${linkOrText(P.payment, P.paymentUrl)}</dd>` : ""}
         <dt>Contact</dt><dd>${contact}</dd>
       </dl>
-      <h2>Our Training Philosophy</h2><p>${esc(P.philosophy)}</p>
-      <h2>Governing Standards</h2><p>${esc(P.standards)}</p>
+      ${P.philosophy ? `<h2>Our Training Philosophy</h2>${para(P.philosophy)}` : ""}
+      ${P.standards ? `<h2>Governing Standards</h2>${para(P.standards)}` : ""}
+      ${P.logistics || P.logisticsCallout ? `<h2>${esc(P.logisticsTitle || "Location & Logistics")}</h2>${para(P.logistics)}
+        ${safeUrl(P.logisticsLink) ? `<p><b>Tickets / info:</b> ${linkOrText(P.logisticsLink.replace(/^https?:\/\//i, "").replace(/\/$/, ""), P.logisticsLink)}</p>` : ""}
+        ${P.logisticsCallout ? `<p class="callout">${esc(P.logisticsCallout)}</p>` : ""}` : ""}
       <h2>Program Structure</h2>
-      <div class="tablewrap"><table><thead><tr><th>Day</th><th>Focus</th><th>Primary objectives</th></tr></thead><tbody>
+      <div class="tablewrap"><table><thead><tr>${c.structCols.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>
         ${P.days.map((d, i) => { const dt = dlist[i]; return `<tr><td>${esc(d.day)}${dt ? "<br><small>" + esc(fmtDate(dt)) + "</small>" : ""}</td><td>${esc(d.focus)}</td><td>${esc(d.obj)}</td></tr>`; }).join("")}
       </tbody></table></div>
       <h2>Included Certifications &amp; Materials</h2>
       <div class="tablewrap"><table><thead><tr><th>Included</th><th>Details</th></tr></thead><tbody>
         ${P.included.map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`).join("")}</tbody></table></div>
-      <h2>Performance Expectations</h2><p class="callout">${esc(P.expectationsCallout)}</p><p>${esc(P.expectations)}</p>
-      <h2>Instructor Commitment</h2><p>${esc(P.commitment)}</p>
+      ${prereqs.length ? `<h2>Prerequisites</h2>
+      <div class="tablewrap"><table><thead><tr><th>Requirement</th><th>Detail</th></tr></thead><tbody>
+        ${prereqs.map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${topics.length ? `<h2>What You'll Learn — Academic Topics</h2><ul>${topics.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+      <h2>Performance Expectations</h2>${P.expectationsCallout ? `<p class="callout">${esc(P.expectationsCallout)}</p>` : ""}${para(P.expectations)}
+      ${P.commitment ? `<h2>Instructor Commitment</h2>${para(P.commitment)}` : ""}
 
       <div class="pb"></div>${head("Required Skill Matrix")}
-      <h2>Open Water Certification — Required Skill Matrix</h2>
-      <p>This matrix is the student's performance checklist. NAUI specifies that applicable scuba skills are introduced in confined water and performed in open water.</p>${key}
-      <div class="tablewrap"><table><thead><tr><th>Domain</th><th>Required performance objective</th><th>Confined</th><th>Open water</th><th>Pass</th><th>Initials</th></tr></thead><tbody>
-        ${C(s).skills.map(([d, t], i) => { const r = s.skills[i] || {}; return `<tr><td>${esc(d)}</td><td>${esc(t)}</td><td class="mk">${mark(r.cw)}</td><td class="mk">${mark(r.ow)}</td><td class="mk">${r.m ? "M ☑" : "☐"}</td><td class="mk">${esc(r.ini || "")}</td></tr>`; }).join("")}
-      </tbody></table></div>
+      <h2>${esc(P.matrixTitle || c.name + " — Required Skill Matrix")}</h2>${para(P.matrixIntro)}${key}
+      ${matrixDoc(c, c.skills, s.skills)}
 
-      <div class="pb"></div>${head("Emergency & Final Performance")}
-      <h2>Emergency &amp; Final Performance Matrix</h2>${key}
-      <div class="tablewrap"><table><thead><tr><th>Domain</th><th>Required performance objective</th><th>Confined</th><th>Open water</th><th>Pass</th><th>Initials</th></tr></thead><tbody>
-        ${C(s).final.map(([d, t], i) => { const r = s.final[i] || {}; return `<tr><td>${esc(d)}</td><td>${esc(t)}</td><td class="mk">${mark(r.cw)}</td><td class="mk">${mark(r.ow)}</td><td class="mk">${r.m ? "M ☑" : "☐"}</td><td class="mk">${esc(r.ini || "")}</td></tr>`; }).join("")}
-      </tbody></table></div>
-      <h2>Dive-by-Dive Record</h2>
+      ${c.final.length ? `<div class="pb"></div>${head(c.finalTitle)}
+      <h2>${esc(c.finalTitle)} Matrix</h2>${key}${matrixDoc(c, c.final, s.final)}` : ""}
+      ${showDives ? `<h2>${esc(c.diveTitle)}</h2>
       <div class="tablewrap"><table><thead><tr><th>Dive</th><th>Date</th><th>Location</th><th>Max depth</th><th>Duration</th><th>Gas / mix</th><th>Skills / notes</th><th>Initials</th></tr></thead><tbody>
         ${s.dives.map((d, i) => `<tr><td>${i + 1}</td><td>${esc(fmtDate(d.date))}</td><td>${esc(d.loc)}</td><td>${esc(d.depth)}</td><td>${esc(d.dur)}</td><td>${esc(d.gas)}</td><td>${esc(d.notes)}</td><td class="mk">${esc(d.ini)}</td></tr>`).join("")}
-      </tbody></table></div>
-      <h2>Proficiency Standard</h2><p>${esc(P.proficiency)}</p>
-      <h2>Remediation / Additional Training Plan</h2>
+      </tbody></table></div>` : ""}
+      ${P.proficiency ? `<h2>Proficiency Standard</h2>${para(P.proficiency)}` : ""}
+      ${showRemed ? `<h2>Remediation / Additional Training Plan</h2>
       <p>If a required skill is not mastered, document the issue and establish a clear corrective plan below.</p>
       <div class="tablewrap"><table><thead><tr><th>Skill / issue</th><th>Contributing factor</th><th>Training / corrective action</th><th>Re-evaluation</th><th>Initials</th></tr></thead><tbody>
         ${(s.remed.length ? s.remed : [{}, {}, {}]).map(r => `<tr><td>${esc(r.skill || "")}&nbsp;</td><td>${esc(r.factor || "")}</td><td>${esc(r.action || "")}</td><td>${esc(fmtDate(r.reeval || ""))}</td><td class="mk">${esc(r.ini || "")}</td></tr>`).join("")}
-      </tbody></table></div>
+      </tbody></table></div>` : ""}
 
       <div class="pb"></div>${head("Course Investment")}
       <h2>Course Investment</h2>
       <div class="tablewrap"><table><thead><tr><th>Description</th><th>Cost</th></tr></thead><tbody>
-        <tr><td>${esc(P.program.replace(/^NAUI\s+/, ""))} Program</td><td class="money">${money(P.price)}</td></tr>
-        ${P.included.slice(2).map(x => `<tr><td>${esc(x.item)}</td><td>Included</td></tr>`).join("")}
+        <tr><td>${esc(P.feeLabel || P.program)}</td><td class="money">${money(P.price)}</td></tr>
+        ${costRows.map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.cost)}</td></tr>`).join("")}
         ${s.pay.extras.filter(x => x.desc || x.amt).map(x => `<tr><td>Additional training: ${esc(x.desc)}</td><td class="money">${money(x.amt)}</td></tr>`).join("")}
         <tr><td><b>TOTAL COURSE FEE</b></td><td class="money"><b>${money(o.total)}</b></td></tr>
       </tbody></table></div>
       <h2>Payment Policy</h2>
-      <p>A ${esc(P.depositPct)}% non-refundable deposit of ${money(deposit(s))} is required to secure training dates. ${esc(P.paymentNotes)}</p>
-      <h2>Student Acknowledgment</h2><p>${esc(P.acknowledgment)}</p>
+      <p>A ${esc(P.depositPct)}% non-refundable deposit of ${money(deposit(s))} is required to secure ${esc(P.depositPurpose || "training dates")}. ${esc(P.paymentNotes)}</p>
+      ${P.payment ? `<p><b>Payments accepted via ${linkOrText(P.payment, P.paymentUrl)}</b></p>` : ""}
+      <h2>Student Acknowledgment</h2>${para(P.acknowledgment)}
       <div class="sig"><div><b>${esc(s.ack.studentName || nameOf(s))}&nbsp;</b>Student name</div><div><b>&nbsp;</b>Student signature</div><div><b>${esc(fmtDate(s.ack.studentDate))}&nbsp;</b>Date</div></div>
       <div class="sig"><div><b>${esc(P.instructor)}</b>Instructor name</div><div><b>&nbsp;</b>Instructor signature</div><div><b>${esc(fmtDate(s.ack.instructorDate))}&nbsp;</b>Date</div></div>
       <div class="foot">${contact}</div>
@@ -739,16 +809,20 @@
       }
       case "pick": view.sel = b.dataset.id; render(); break;
       case "tab": view.tab = b.dataset.tab; render(); break;
-      case "del": $("#del-confirm").innerHTML = `Remove ${esc(nameOf(s) || "this student")} from Open Water and delete this course record? Their student info stays. <button class="btn small danger" data-act="del-yes">Delete</button> <button class="btn small" data-act="tab" data-tab="details">Keep</button>`; break;
+      case "del": $("#del-confirm").innerHTML = `Remove ${esc(nameOf(s) || "this student")} from ${esc(C(s).name)} and delete this course record? Their student info stays. <button class="btn small danger" data-act="del-yes">Delete</button> <button class="btn small" data-act="tab" data-tab="details">Keep</button>`; break;
       case "del-yes": state.enrollments = state.enrollments.filter(x => x.id !== s.id); view.sel = firstId(owList()); save(); render(); toast("Course record deleted"); break;
       case "add-remed": s.remed.push({ skill: "", factor: "", action: "", reeval: "", ini: "" }); save(); render(); break;
       case "rm-remed": s.remed.splice(i, 1); save(); render(); break;
       case "add-extra": s.pay.extras.push({ desc: "", amt: "" }); save(); render(); break;
       case "rm-extra": s.pay.extras.splice(i, 1); save(); render(); break;
-      case "add-day": P.days.push({ day: String(P.days.length + 1), focus: "", obj: "" }); save(); render(); break;
-      case "rm-day": P.days.splice(i, 1); save(); render(); break;
-      case "add-inc": P.included.push({ item: "", detail: "" }); save(); render(); break;
-      case "rm-inc": P.included.splice(i, 1); save(); render(); break;
+      case "add-dive": s.dives.push({ date: "", loc: "", depth: "", dur: "", gas: "", notes: "", ini: "" }); save(); render(); break;
+      case "rm-dive": s.dives.splice(i, 1); save(); render(); break;
+      case "add-row": {
+        const L = b.dataset.list; if (!Array.isArray(P[L])) P[L] = [];
+        P[L].push(L === "days" ? { day: String(P.days.length + 1), focus: "", obj: "", date: "" } : L === "costRows" ? { item: "", cost: "Included" } : { item: "", detail: "" });
+        save(); render(); break;
+      }
+      case "rm-row": if (Array.isArray(P[b.dataset.list])) { P[b.dataset.list].splice(i, 1); save(); render(); } break;
       case "reset-program": $("#reset-confirm").innerHTML = `Replace all program settings with the original proposal? <button class="btn small danger" data-act="reset-yes">Restore</button>`; break;
       case "reset-yes": { const c = COURSES[view.settingsCourse] || COURSES["open-water"]; if (c.id === "open-water") state.program = clone(DEFAULT_PROGRAM); else state.programs[c.id] = clone(c.defaults || {}); save(); render(); } toast("Original proposal text restored"); break;
       case "print": window.print(); break;
@@ -784,7 +858,7 @@
 
   // Shared helpers for add-ons loaded after this file (invoice.js, extra courses).
   window.LD = Object.assign(window.LD || {}, {
-    COURSES, registerCourse: (def) => { registerCourse(def); render(); },
+    COURSES, registerCourse: (def) => { registerCourse(def); adoptCourse(def.id); render(); },
     get state() { return state; }, save, render, toast, esc, money, fmtDate, billing, progress, owed, nameOf, personById
   });
 
