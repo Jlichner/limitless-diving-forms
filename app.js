@@ -323,16 +323,30 @@
   // ---------- render ----------
   function renderNav() {
     const nav = document.getElementById("nav-modes"); if (!nav) return;
-    const items = [["calendar", "Calendar"], ["students", "Students"]].concat(COURSE_ORDER.map(id => [id, COURSES[id].name]), [["invoices", "Invoices"], ["program", "Settings"]]);
-    nav.innerHTML = items.map(([m, l]) => `<button class="navbtn${view.mode === m ? " active" : ""}" data-mode="${m}"${view.mode === m ? ' aria-current="page"' : ""}>${esc(l)}</button>`).join("");
+    // The left navigation column. Student account sits on top; the rest is grouped.
+    const groups = [
+      [null, [["account", "Student account"]]],
+      ["Classes", [["calendar", "Calendar"]]],
+      ["Records", [["students", "Students"]].concat(COURSE_ORDER.map(id => [id, COURSES[id].name]))],
+      ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
+    ];
+    const btn = ([m, l]) => `<button class="navbtn${m === "account" ? " account" : ""}${view.mode === m ? " active" : ""}" data-mode="${m}"${view.mode === m ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
+    nav.innerHTML = groups.map(([g, items]) => (g ? `<span class="nav-group">${esc(g)}</span>` : "") + items.map(btn).join("")).join("");
   }
   function render() {
     renderNav();
     const main = $("#main");
     if (view.mode === "calendar") {
       // calendar.js draws the landing page; it loads after this file and calls render() again.
-      main.className = "shell";
+      main.className = "shell single";
       main.innerHTML = window.LDCalendar ? window.LDCalendar.render() : "";
+      return;
+    }
+    if (view.mode === "account") {
+      // The student account page is added by its own script (window.LDAccount); until then, a placeholder.
+      main.className = "shell full";
+      main.innerHTML = window.LDAccount ? window.LDAccount.render() : `<section class="panel"><div class="empty"><h2>Student accounts are coming soon</h2>
+        <p>Students will be able to create their own account here and keep their name, address, phone, emergency contact and certifications up to date.</p></div></section>`;
       return;
     }
     if (view.mode === "invoices" && window.LDInvoices) {

@@ -73,8 +73,10 @@
   function render() {
     data();
     if (!v.ym) v.ym = G().ym(G().today());
-    const body = v.publish ? renderPublish() : cur() ? renderClass(cur()) : renderMonth();
-    return `<aside class="roster no-print" id="cal-list">${renderList()}</aside><section class="panel" id="cal-panel">${body}</section>`;
+    // One wide panel: the month with upcoming classes below it, or a class, or the publish page.
+    const back = `<div class="row-actions" style="margin:0 0 10px"><button class="btn small" data-cact="back">‹ Calendar</button></div>`;
+    const body = v.publish ? back + renderPublish() : cur() ? renderClass(cur()) : renderMonth();
+    return `<section class="panel" id="cal-panel">${body}</section>`;
   }
 
   function renderList() {
@@ -88,9 +90,7 @@
         <span class="meta">${n} enrolled${left === null ? "" : " · " + (left ? left + " open" : "full")}
           <span class="cal-status${k.published ? " on" : ""}">${k.published ? "Published" : "Draft"}</span></span></button></li>`;
     };
-    return `<button class="btn primary" data-cact="new">+ New class</button>
-      <button class="btn${v.publish ? " active" : ""}" data-cact="publish">Publish calendar…</button>
-      <h2 class="cal-h">Upcoming</h2>
+    return `<h2 class="sec">Upcoming classes</h2>
       <ul>${up.map(item).join("") || `<li class="meta" style="padding:8px 10px">No upcoming classes.</li>`}</ul>
       ${past.length ? `<button class="btn small" data-cact="past" aria-expanded="${v.past}">${v.past ? "Hide" : "Show"} past classes (${past.length})</button>
         ${v.past ? `<ul>${past.map(item).join("")}</ul>` : ""}` : ""}`;
@@ -109,13 +109,16 @@
     });
     const used = L().COURSE_ORDER.filter(id => data().classes.some(k => k.course === id));
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Class calendar</span><h1>${esc(G().monthName(v.ym))}</h1></div>
+        <div class="cal-tools no-print"><button class="btn primary" data-cact="new">+ New class</button>
+        <button class="btn" data-cact="publish">Publish calendar…</button></div>
         <div class="cal-nav"><button class="btn" data-cact="month" data-n="-1" aria-label="Previous month">‹</button>
         <button class="btn" data-cact="month" data-n="0">Today</button>
         <button class="btn" data-cact="month" data-n="1" aria-label="Next month">›</button></div></div>
       ${G().month(v.ym, events, { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` })}
       <div class="cal-legend">${used.map(id => `<span><i class="cal-dot ${colorOf({ course: id })}" aria-hidden="true"></i>${esc(L().COURSES[id].name)}</span>`).join("")}
         ${data().classes.some(k => !k.published) ? `<span><i class="cal-dot draft" aria-hidden="true"></i>Draft (not published)</span>` : ""}</div>
-      <p class="hint" style="margin-top:12px">Click a day to add a class on it, or a class to edit it and enroll students. Published classes appear on the public calendar after you publish.</p>`;
+      <p class="hint" style="margin-top:12px">Click a day to add a class on it, or a class to edit it and enroll students. Published classes appear on the public calendar after you publish.</p>
+      <div class="roster cal-upcoming" id="cal-list">${renderList()}</div>`;
   }
 
   function f(path, label, type, extra) {
@@ -255,7 +258,7 @@
         break;
       }
       case "pick": open(b.dataset.id); L().go("calendar"); break;
-      case "back": v.sel = null; rerender(); break;
+      case "back": v.sel = null; v.publish = false; rerender(); break;
       case "publish": v.publish = !v.publish; if (v.publish) v.sel = null; rerender(); break;
       case "past": v.past = !v.past; refresh(); break;
       case "month": v.ym = Number(b.dataset.n) ? G().addMonths(v.ym, Number(b.dataset.n)) : G().ym(G().today()); rerender(); break;
