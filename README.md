@@ -21,9 +21,41 @@ A web app for Limitless Diving & Technical Training's courses: Open Water Diver 
 - **Invoices:** build invoices in the J Lichner Dive Invoice layout. Start blank or from a student's record (name, contact, course fee, extra charges and payments received), edit every field, add saved items like TDI eLearning, mark paid, and print or save as PDF. **Invoice settings** holds the header, numbering, payment terms and saved items.
 - **Program settings:** change the price, deposit %, contact details, program structure and all of the proposal text.
 
+## Student accounts
+
+Students can create their own account at `account.html` (the **Student account** button in the app links to it). On their account page they keep their **name, address, phone number, emergency contact (with phone) and current certifications** up to date, see the training progress you share with them, and see upcoming classes, with the ones they're enrolled in marked.
+
+In the app, the **Student account** page is where you, the instructor, sign in to:
+
+- see every student account and **link** it to a student in your Students list (or add them as a new student). Linking copies their details in.
+- **Share progress**: each linked student sees their course dates, skills mastered, dives logged and balance due. Medical notes, your notes and other students are never sent.
+
+**Who can see what.** Row-level security in the database (`supabase/schema.sql`) lets each student read and change only their own record and read only their own progress. Only instructors can see every account, share progress and change the class calendar. Nobody can make themselves an instructor from the website.
+
+### Turning on student accounts (one time, about 15 minutes)
+
+1. **Create a Supabase project.** Go to [supabase.com/dashboard](https://supabase.com/dashboard), sign in (GitHub sign-in is fine), and click **New project**. Name it `limitless-diving`, choose a database password (save it somewhere safe), pick the region closest to you, and click **Create**. The free plan is enough.
+2. **Create the tables.** In the project, open **SQL Editor** in the left menu, click **New query**, paste everything from [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. You should see "Success".
+3. **Point sign-in emails at your site.** Open **Authentication → URL Configuration**. Set **Site URL** to `https://jlichner.github.io/limitless-diving-forms/account.html` and add the same address under **Redirect URLs**. This is where the "confirm your email" and "reset password" links send students.
+4. **Connect the website.** Open **Project Settings → API Keys** and copy the **Publishable key**, then **Project Settings → Data API** and copy the **Project URL**. In this repository, edit [`supabase-config.js`](supabase-config.js) on GitHub (pencil icon), paste both between the quotes, and commit. These two values are meant to be public; the security rules protect the data. Never paste the **secret** (service role) key anywhere in this site.
+5. **Make yourself the instructor.** Open `account.html` on your site and create an account with your own email (confirm it from your inbox). Then in the **SQL Editor**, run (with your email):
+
+   ```sql
+   insert into public.instructors (user_id)
+   select id from auth.users where email = 'you@example.com';
+   ```
+
+6. In the app, open **Student account** and sign in with that account. Send students the link shown there.
+
+Supabase sends the sign-up and password emails itself. Its built-in email is limited to a few emails an hour, which is fine to start. If many students sign up at once, add your own email sender under **Authentication → Emails → SMTP Settings**.
+
+### The class calendar, online
+
+Once you're signed in as the instructor, **Publish calendar…** shows **Publish online now**. It updates the public page right away, with no `classes.json` to upload. The public page reads the online calendar once you've published there, and uses `classes.json` until then.
+
 ## Where data is stored
 
-Everything is saved in the browser you use (localStorage). Nothing is sent to a server. To back up or move your data to another computer, use **Export backup** and **Import**.
+Your records (students, courses, invoices, classes) are saved in the browser you use (localStorage). Nothing is sent to a server, except what students enter in their own accounts and what you choose to share or publish online (see Student accounts above). To back up or move your data to another computer, use **Export backup** and **Import**.
 
 ## Publishing classes
 
@@ -66,7 +98,7 @@ Optional fields (defaults in `registerCourse`): `cols` (`"three"` for Confined /
 
 ## Data shape (localStorage key `limitless-ow-v1`)
 
-- `students`: the shared student list (`id, name, email, phone, dob, address, emergencyName, emergencyPhone, emergencyRel, medical, certAgency, certLevel, certNumber, notes`).
+- `students`: the shared student list (`id, name, email, phone, dob, address, emergencyName, emergencyPhone, emergencyRel, medical, certAgency, certLevel, certNumber, notes, accountId`). `accountId` links a student to their online account.
 - `enrollments`: one per student per course (`id, studentId, course, dates, location, notes, skills, final, dives, remed, pay, ack`).
 - `program`: Open Water settings. `programs[courseId]`: settings for the other courses.
 - `classes`: calendar classes (`id, course, title, dates[], time, location, price, seats, notes, published`). An enrollment's `classId` links it to its class.

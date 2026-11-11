@@ -192,7 +192,8 @@
       <p class="hint">Shown on the public page. People use the email and phone to ask about a class.</p>
       <div class="grid">${sf("heading", "Heading", "text", "wide")}${sf("intro", "Introduction", "area", "wide")}
         ${sf("instructor", "Instructor")}${sf("email", "Email", "email")}${sf("phone", "Phone", "tel")}</div>
-      <h2 class="sec">2. Download the calendar file</h2>
+      ${onlineBox()}
+      <h2 class="sec">${online() ? "Or, without an online account: download the file" : "2. Download the calendar file"}</h2>
       <div class="row-actions"><button class="btn primary" data-cact="download">Download classes.json</button></div>
       <h2 class="sec">3. Upload it to the website</h2>
       <ol class="cal-steps">
@@ -201,6 +202,37 @@
         <li>In about a minute it's live at <a href="${PUBLIC_URL}" target="_blank" rel="noopener">${esc(PUBLIC_URL.replace("https://", ""))}</a>. Share that link with students.</li>
       </ol>
       <p class="hint">The site needs GitHub Pages turned on once (see the README). Republish whenever you add a class, change one, or enroll students, so the open seats stay current.</p>`;
+  }
+
+  // ---------- publishing online (Supabase), when student accounts are set up ----------
+  const online = () => !!(window.LDCloud && window.LDCloud.instructor);
+  function onlineBox() {
+    const C = window.LDCloud, { esc } = L();
+    if (online()) {
+      return `<h2 class="sec">2. Publish online</h2>
+        <p class="hint">Updates the public calendar right away. No file to upload.${S().publishedOnline ? " Last published " + esc(new Date(S().publishedOnline).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })) + "." : ""}</p>
+        <div class="row-actions"><button class="btn primary" data-cact="publish-online"${v.publishing ? " disabled" : ""}>${v.publishing ? "Publishing…" : "Publish online now"}</button></div>`;
+    }
+    if (C && C.configured) return `<p class="hint">Tip: sign in on the <button class="linkbtn" data-mode="account">Student account</button> page as the instructor to publish with one click instead.</p>`;
+    return "";
+  }
+  async function publishOnline() {
+    const sb = window.LDCloud.client, d = publicData();
+    const rows = d.classes.map(k => ({
+      id: k.id, course: k.course, course_name: k.courseName, title: k.title, color: k.color, dates: k.dates,
+      time: k.time, location: k.location, price: k.price, seats: k.seats, seats_left: k.seatsLeft, notes: k.notes,
+      updated_at: d.updated
+    }));
+    const set = await sb.from("calendar_settings").upsert({ id: 1, heading: d.heading, intro: d.intro,
+      instructor: d.contact.instructor, phone: d.contact.phone, email: d.contact.email, updated_at: d.updated });
+    if (set.error) throw set.error;
+    const old = await sb.from("classes").select("id");
+    if (old.error) throw old.error;
+    const keep = new Set(rows.map(r => r.id)), stale = (old.data || []).map(r => r.id).filter(id => !keep.has(id));
+    if (rows.length) { const up = await sb.from("classes").upsert(rows); if (up.error) throw up.error; }
+    if (stale.length) { const del = await sb.from("classes").delete().in("id", stale); if (del.error) throw del.error; }
+    S().publishedOnline = d.updated; L().save();
+    return rows.length;
   }
 
   // ---------- updates without a full redraw (keeps focus while typing) ----------
@@ -247,7 +279,7 @@
     refresh();
   });
 
-  document.addEventListener("click", (e) => {
+  document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-cact]"); if (!b) return;
     const k = cur(), i = Number(b.dataset.i);
     switch (b.dataset.cact) {
@@ -301,6 +333,13 @@
         break;
       }
       case "download": download(); break;
+      case "publish-online": {
+        v.publishing = true; rerender();
+        try { const n = await publishOnline(); L().toast("Published " + n + " class" + (n === 1 ? "" : "es") + ". The public calendar is up to date."); }
+        catch (err) { L().toast("Not published: " + window.LDCloud.explain(err)); }
+        v.publishing = false; rerender();
+        break;
+      }
     }
   });
 

@@ -1,5 +1,5 @@
-/* Limitless Diving — public class calendar. Reads classes.json, which the instructor app's
-   "Publish calendar" writes. Shows a month calendar and a card for each upcoming class. */
+/* Limitless Diving — public class calendar. Reads the classes the instructor app's "Publish calendar"
+   puts online (Supabase), or classes.json. Shows a month calendar and a card for each upcoming class. */
 (function () {
   "use strict";
 
@@ -59,15 +59,42 @@
     const n = Number(b.dataset.m); ym = n ? G.addMonths(ym, n) : G.ym(G.today()); render();
   });
 
-  fetch("classes.json", { cache: "no-store" })
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  // Classes come from the online database when student accounts are set up (supabase-config.js) and the
+  // instructor has published there; otherwise from classes.json.
+  async function fromSupabase() {
+    const cfg = window.LD_SUPABASE || {}, url = String(cfg.url || "").trim().replace(/\/+$/, ""), key = String(cfg.key || "").trim();
+    if (!/^https:\/\/[^\s/]+$/.test(url) || key.length < 20) return null;
+    const get = (path) => fetch(url + "/rest/v1/" + path, { headers: { apikey: key }, cache: "no-store" })
+      .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    const [settings, rows] = await Promise.all([get("calendar_settings?id=eq.1&select=*"), get("classes?select=*")]);
+    const s = settings && settings[0];
+    if (!s) return null;  // never published online: use classes.json
+    return {
+      updated: s.updated_at, heading: s.heading, intro: s.intro,
+      contact: { instructor: s.instructor, phone: s.phone, email: s.email },
+      classes: (rows || []).map(k => ({
+        id: k.id, course: k.course, courseName: k.course_name, title: k.title, color: k.color, dates: k.dates,
+        time: k.time, location: k.location, price: k.price == null ? null : Number(k.price),
+        seats: k.seats, seatsLeft: k.seats_left, notes: k.notes
+      }))
+    };
+  }
+  function fromFile() {
+    return fetch("classes.json", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  }
+
+  const acct = document.getElementById("pubnav");  // shown once student accounts are set up
+  if (acct && window.LD_SUPABASE && String(window.LD_SUPABASE.url || "").trim()) acct.hidden = false;
+
+  fromSupabase().catch(() => null).then(d => d || fromFile())
     .then(d => {
       const t = G.today();
       data = d && typeof d === "object" ? d : {};
       // Hide classes that have ended since the file was published.
       data.classes = (Array.isArray(data.classes) ? data.classes : [])
         .map(k => Object.assign({}, k, { dates: (Array.isArray(k.dates) ? k.dates : []).filter(x => G.parse(x)).sort() }))
-        .filter(k => !k.dates.length || G.lastDate(k.dates) >= t);
+        .filter(k => !k.dates.length || G.lastDate(k.dates) >= t)
+        .sort((a, b) => (G.firstDate(a.dates) || "9999").localeCompare(G.firstDate(b.dates) || "9999"));
       // Open on the month of the next class.
       const first = data.classes.map(k => G.firstDate(k.dates)).filter(Boolean).sort()[0];
       if (first && first > t) ym = G.ym(first);

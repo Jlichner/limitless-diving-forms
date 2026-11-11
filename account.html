@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Limitless Diving Account</title>
+<meta name="description" content="Your Limitless Diving student account: contact details, emergency contact, certifications and training progress.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="calendar.css">
+<link rel="stylesheet" href="account.css">
+</head>
+<body>
+<header class="topbar">
+  <svg class="topo" aria-hidden="true" viewBox="0 0 1440 80" preserveAspectRatio="xMidYMid slice">
+    <defs><path id="contour" vector-effect="non-scaling-stroke" d="M -120 0 C -110 -70 -30 -95 40 -80 C 110 -65 140 -10 120 40 C 100 95 20 110 -40 90 C -100 70 -128 40 -120 0 Z"></path></defs>
+    <g fill="none" stroke-width="1">
+      <g transform="translate(1180 40)"><use href="#contour" transform="scale(1.6)"></use><use href="#contour" transform="scale(1.25)"></use><use href="#contour" transform="scale(0.9)"></use><use href="#contour" transform="scale(0.55)"></use></g>
+      <g transform="translate(560 70) rotate(-12)"><use href="#contour" transform="scale(1.4 0.7)"></use><use href="#contour" transform="scale(1 0.5)"></use><use href="#contour" transform="scale(0.6 0.3)"></use></g>
+      <g transform="translate(120 10) rotate(20)"><use href="#contour" transform="scale(0.9 0.6)"></use><use href="#contour" transform="scale(0.55 0.35)"></use></g>
+    </g>
+  </svg>
+  <div class="brand">
+    <svg class="rose" role="img" aria-label="Limitless Diving compass rose" viewBox="0 0 200 200">
+      <defs>
+        <g id="pt-major"><polygon points="100,6 90,100 100,100" class="r-dark"></polygon><polygon points="100,6 110,100 100,100" class="r-light"></polygon></g>
+        <polygon id="pt-minor" points="100,38 94,100 106,100" class="r-mid"></polygon>
+      </defs>
+      <circle cx="100" cy="100" r="92" fill="none" class="r-ring" stroke-width="4"></circle>
+      <circle cx="100" cy="100" r="76" fill="none" class="r-ring" stroke-width="2" stroke-dasharray="2 9"></circle>
+      <use href="#pt-minor" transform="rotate(45 100 100)"></use><use href="#pt-minor" transform="rotate(135 100 100)"></use>
+      <use href="#pt-minor" transform="rotate(225 100 100)"></use><use href="#pt-minor" transform="rotate(315 100 100)"></use>
+      <use href="#pt-major"></use><use href="#pt-major" transform="rotate(90 100 100)"></use>
+      <use href="#pt-major" transform="rotate(180 100 100)"></use><use href="#pt-major" transform="rotate(270 100 100)"></use>
+      <circle cx="100" cy="100" r="9" class="r-hub" stroke-width="3"></circle>
+    </svg>
+    <div class="brand-text"><b>Limitless Diving</b><span>Student account</span></div>
+  </div>
+  <svg class="flag" role="img" aria-label="Diver down flag" viewBox="0 0 48 32"><rect width="48" height="32" fill="#D7263D"></rect><polygon points="0,0 9,0 48,26 48,32 39,32 0,6" fill="#FFFFFF"></polygon></svg>
+</header>
+<svg class="wave" aria-hidden="true" viewBox="0 0 1440 18" preserveAspectRatio="none"><path d="M0 0 H1440 V6 C1380 14 1320 14 1260 6 C1200 -2 1140 -2 1080 6 C1020 14 960 14 900 6 C840 -2 780 -2 720 6 C660 14 600 14 540 6 C480 -2 420 -2 360 6 C300 14 240 14 180 6 C120 -2 60 -2 0 6 Z"></path></svg>
+<nav class="pubnav" aria-label="Main"><a href="classes.html">Class calendar</a><a href="account.html" class="on" aria-current="page">My account</a></nav>
+<main id="acct" class="acct"><div class="msg">Loading your account…</div></main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.99.3/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script src="cloud.js"></script>
+<script src="calendar-grid.js"></script>
+<script src="account.js"></script>
+</body>
+</html>
