@@ -178,6 +178,10 @@ select.st[data-v="R"]  { background: var(--bad-bg); color: var(--bad); }
 
 .chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .chk input { width: 18px; height: 18px; accent-color: var(--ok); }
+.prq { display: flex; flex-direction: column; gap: 10px; }
+.prq-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px 16px; align-items: end; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.prq-row .chk { align-self: center; }
+@media (max-width: 640px) { .prq-row { grid-template-columns: minmax(0, 1fr); } }
 
 .key { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px; }
 .pill { font-family: var(--font-mono); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
