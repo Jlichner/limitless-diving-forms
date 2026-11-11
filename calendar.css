@@ -85,3 +85,13 @@
 .pub-foot { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
 .pub-foot a { color: var(--accent); }
 .pub .msg { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 32px 18px; text-align: center; color: var(--muted); }
+
+/* Calendar page: one wide panel; New class and Publish sit in its toolbar, upcoming classes below the month. */
+.shell.single { grid-template-columns: minmax(0, 1fr); }
+.cal-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-tools .btn, .cal-nav .btn { min-height: 36px; }
+.cal-upcoming { margin-top: 8px; }
+.cal-upcoming ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.cal-upcoming li button { border: 1px solid var(--line); background: var(--surface-2); height: 100%; }
+.cal-upcoming li button:hover { border-color: var(--accent); }
+.cal-upcoming > .btn { align-self: flex-start; }
