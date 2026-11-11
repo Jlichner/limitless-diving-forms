@@ -12,6 +12,7 @@ A web app for Limitless Diving & Technical Training's Open Water Diver + Nitrox 
 - **Payment:** deposit and balance tracking, extra training charges, and the balance due.
 - **Sign-off:** the student acknowledgment, with signature dates.
 - **Proposal:** a print-ready proposal for each student, filled in with their name, dates, matrix results and fees. Use **Print / save as PDF**.
+- **Invoices:** build invoices in the J Lichner Dive Invoice layout. Start blank or from a student's record (name, contact, course fee, extra charges and payments received), edit every field, add saved items like TDI eLearning, mark paid, and print or save as PDF. **Invoice settings** holds the header, numbering, payment terms and saved items.
 - **Program settings:** change the price, deposit %, contact details, program structure and all of the proposal text.
 
 ## Where data is stored

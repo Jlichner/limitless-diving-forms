@@ -9,12 +9,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="invoice.css">
 </head>
 <body>
 <header class="topbar">
   <div class="brand"><b>Limitless Diving</b><span>Open Water Diver + Nitrox</span></div>
   <nav class="nav" aria-label="Main">
     <button class="btn" data-mode="students">Students</button>
+    <button class="btn" data-mode="invoices">Invoices</button>
     <button class="btn" data-mode="program">Program settings</button>
     <button class="btn" data-act="export">Export backup</button>
     <button class="btn" data-act="import">Import</button>
@@ -24,5 +26,6 @@
 <main id="main" class="shell"></main>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
+<script src="invoice.js"></script>
 </body>
 </html>
