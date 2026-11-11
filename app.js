@@ -143,7 +143,7 @@
 
   // ---------- state ----------
   let state = load();
-  let view = { mode: "students", sel: firstId(courseList("open-water")), psel: firstId(state.students), tab: "details", q: "", pq: "", enrolling: false };
+  let view = { mode: "calendar", sel: firstId(courseList("open-water")), psel: firstId(state.students), tab: "details", q: "", pq: "", enrolling: false };
 
   function newId(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function firstId(list) { return list[0] ? list[0].id : null; }
@@ -165,7 +165,7 @@
     const dates = {}; c.schedule.forEach((_, i) => { dates["d" + (i + 1)] = (days[i] && days[i].date) || ""; });
     const prereq = {}; c.prereqs.forEach(q => { prereq[q.k] = { ok: false, detail: "" }; });
     return {
-      id: newId("e"), studentId: studentId || null, course: c.id,
+      id: newId("e"), studentId: studentId || null, course: c.id, classId: "",
       created: new Date().toISOString(), location: "", notes: "",
       dates, prereq,
       skills: {}, final: {},
@@ -323,12 +323,18 @@
   // ---------- render ----------
   function renderNav() {
     const nav = document.getElementById("nav-modes"); if (!nav) return;
-    const items = [["students", "Students"]].concat(COURSE_ORDER.map(id => [id, COURSES[id].name]), [["invoices", "Invoices"], ["program", "Settings"]]);
+    const items = [["calendar", "Calendar"], ["students", "Students"]].concat(COURSE_ORDER.map(id => [id, COURSES[id].name]), [["invoices", "Invoices"], ["program", "Settings"]]);
     nav.innerHTML = items.map(([m, l]) => `<button class="navbtn${view.mode === m ? " active" : ""}" data-mode="${m}"${view.mode === m ? ' aria-current="page"' : ""}>${esc(l)}</button>`).join("");
   }
   function render() {
     renderNav();
     const main = $("#main");
+    if (view.mode === "calendar") {
+      // calendar.js draws the landing page; it loads after this file and calls render() again.
+      main.className = "shell";
+      main.innerHTML = window.LDCalendar ? window.LDCalendar.render() : "";
+      return;
+    }
     if (view.mode === "invoices" && window.LDInvoices) {
       main.className = "shell";
       main.innerHTML = window.LDInvoices.render();
@@ -438,10 +444,40 @@
       <div class="row-actions">${p ? `<button class="btn" data-act="open-person" data-id="${p.id}">Edit student info</button>` : ""}</div>
       ${C().prereqs.length ? `<h2 class="sec">Prerequisites</h2><div class="prq">${C().prereqs.map(q =>
         `<div class="prq-row">${check("prereq." + q.k + ".ok", q.label)}${inp("s", "prereq." + q.k + ".detail", q.detail, q.type || "text")}</div>`).join("")}</div>` : ""}
-      <h2 class="sec">Schedule</h2><div class="grid">
+      <h2 class="sec">Schedule</h2>${classLine(s)}<div class="grid">
       ${C().schedule.map((lbl, i) => inp("s", "dates.d" + (i + 1), lbl, "date")).join("")}${inp("s", "location", C().siteLabel + (P().location ? " (if not " + P().location + ")" : ""))}</div>
       <h2 class="sec">Notes</h2><div class="grid">${area("s", "notes", "Instructor notes")}</div>
       <div class="row-actions"><button class="btn danger" data-act="del">Remove from ${esc(C().name)}…</button><span id="del-confirm"></span></div>`;
+  }
+
+  // The calendar class this course record belongs to (set when the student is enrolled from the calendar).
+  function classLine(s) {
+    const k = s.classId && Array.isArray(state.classes) && state.classes.find(x => x.id === s.classId);
+    if (!k) return "";
+    const ds = (k.dates || []).filter(Boolean);
+    return `<p class="hint">Class: <b>${esc(k.title || C().fullName || C().name)}</b>${ds.length ? " · " + esc(fmtDate(ds[0])) + (ds.length > 1 ? " – " + esc(fmtDate(ds[ds.length - 1])) : "") : ""}
+      <button class="btn small" data-cact="pick" data-id="${k.id}">Open in calendar</button></p>`;
+  }
+  // Enroll a student in a calendar class: reuse their record for that course if it has no class yet, otherwise start one.
+  // The class's dates and location fill the record's schedule.
+  function enrollInClass(studentId, k) {
+    const c = COURSES[k.course]; if (!c) return null;
+    let e = state.enrollments.find(x => x.studentId === studentId && x.course === k.course && !x.classId);
+    if (!e) { e = blankEnrollment(studentId, k.course); state.enrollments.push(e); }
+    e.classId = k.id;
+    c.schedule.forEach((_, i) => { if (k.dates && k.dates[i]) e.dates["d" + (i + 1)] = k.dates[i]; });
+    if (k.location && !e.location) e.location = k.location;
+    save();
+    return e;
+  }
+  function addStudent() { const n = blankPerson(); state.students.push(n); save(); return n; }
+  function go(mode, opts) {
+    view.mode = mode; view.enrolling = false;
+    if (opts && opts.psel) view.psel = opts.psel;
+    if (opts && opts.sel) { view.sel = opts.sel; view.tab = "details"; }
+    if (isCourse(view.mode) && !cur()) view.sel = firstId(courseList(view.mode));
+    render();
+    if (opts && opts.focus) { const f = document.getElementById(opts.focus); if (f) f.focus(); }
   }
 
   const KEY_HTML = `<div class="key"><span class="pill IP">IP</span> Introduced / practiced <span class="pill PR">PR</span> Proficient <span class="pill M">M</span> Mastered / pass <span class="pill R">R</span> Remediation required</div>`;
@@ -848,7 +884,7 @@
         const d = JSON.parse(r.result);
         if (!d || !Array.isArray(d.students)) throw new Error("bad");
         localStorage.setItem(STORE_KEY, JSON.stringify(d));
-        state = load(); view.sel = firstId(owList()); view.psel = firstId(state.students); view.mode = "students"; view.enrolling = false; render();
+        state = load(); view.sel = firstId(owList()); view.psel = firstId(state.students); view.mode = "calendar"; view.enrolling = false; render();
         toast("Imported " + state.students.length + " students");
       } catch (err) { toast("That file isn't a backup from this app."); }
       e.target.value = "";
@@ -859,6 +895,7 @@
   // Shared helpers for add-ons loaded after this file (invoice.js, extra courses).
   window.LD = Object.assign(window.LD || {}, {
     COURSES, registerCourse: (def) => { registerCourse(def); adoptCourse(def.id); render(); },
+    COURSE_ORDER, program: (id) => P({ course: id }), enrollInClass, addStudent, go,
     get state() { return state; }, save, render, toast, esc, money, fmtDate, billing, progress, owed, nameOf, personById
   });
 
