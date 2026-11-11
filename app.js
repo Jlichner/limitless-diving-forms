@@ -150,9 +150,9 @@
   function deposit() { return Math.round((Number(state.program.price) || 0) * (Number(state.program.depositPct) || 0)) / 100; }
   function progress(s) {
     const m = SKILLS.filter((_, i) => s.skills[i] && s.skills[i].m).length;
-    const f = FINAL.filter((_, i) => s.final[i] && s.final[i].st === "M").length;
+    const f = FINAL.filter((_, i) => s.final[i] && s.final[i].m).length;
     const r = SKILLS.filter((_, i) => s.skills[i] && (s.skills[i].cw === "R" || s.skills[i].ow === "R")).length
-            + FINAL.filter((_, i) => s.final[i] && s.final[i].st === "R").length;
+            + FINAL.filter((_, i) => s.final[i] && (s.final[i].cw === "R" || s.final[i].ow === "R")).length;
     return { m, f, r, pct: Math.round(((m + f) / (SKILLS.length + FINAL.length)) * 100) };
   }
   function owed(s) {
@@ -275,14 +275,15 @@
 
   function renderFinal() {
     const s = cur();
-    return `<p class="hint">Emergency and final performance skills, evaluated in open water.</p>
+    return `<p class="hint">Emergency and final performance skills. Tick Pass when the skill is mastered.</p>
       <div class="key"><span class="pill IP">IP</span> Introduced / practiced <span class="pill PR">PR</span> Proficient <span class="pill M">M</span> Mastered / pass <span class="pill R">R</span> Remediation required</div>
-      <div class="tablewrap"><table class="m"><thead><tr><th>Domain</th><th>Required performance objective</th><th>Status</th><th>Date</th><th>Initials</th></tr></thead><tbody>
+      <div class="tablewrap"><table class="m"><thead><tr><th>Domain</th><th>Required performance objective</th><th>Confined</th><th>Open water</th><th>Pass</th><th>Initials</th></tr></thead><tbody>
       ${FINAL.map(([d, t], i) => {
         const r = s.final[i] || {};
-        return `<tr class="${r.st === "M" ? "done" : ""}"><td class="dom">${esc(d)}</td><td class="obj">${esc(t)}</td>
-          <td class="c">${statusSel("final." + i + ".st", ["IP", "PR", "M", "R"], t)}</td>
-          ${cell("final." + i + ".date", "date", "", "Date")}${cell("final." + i + ".ini", "text", "ini", "Init.")}</tr>`;
+        return `<tr class="${r.m ? "done" : ""}"><td class="dom">${esc(d)}</td><td class="obj">${esc(t)}</td>
+          <td class="c">${statusSel("final." + i + ".cw", ["IP", "PR", "R"], "Confined water, " + t)}</td>
+          <td class="c">${statusSel("final." + i + ".ow", ["IP", "PR", "R"], "Open water, " + t)}</td>
+          <td class="c">${check("final." + i + ".m", "M")}</td>${cell("final." + i + ".ini", "text", "ini", "Init.")}</tr>`;
       }).join("")}</tbody></table></div>`;
   }
 
@@ -410,8 +411,8 @@
 
       <div class="pb"></div>${head("Emergency & Final Performance")}
       <h2>Emergency &amp; Final Performance Matrix</h2>${key}
-      <div class="tablewrap"><table><thead><tr><th>Domain</th><th>Required performance objective</th><th>Status</th><th>Date</th><th>Initials</th></tr></thead><tbody>
-        ${FINAL.map(([d, t], i) => { const r = s.final[i] || {}; return `<tr><td>${esc(d)}</td><td>${esc(t)}</td><td class="mk">${mark(r.st)}</td><td>${esc(fmtDate(r.date))}</td><td class="mk">${esc(r.ini || "")}</td></tr>`; }).join("")}
+      <div class="tablewrap"><table><thead><tr><th>Domain</th><th>Required performance objective</th><th>Confined</th><th>Open water</th><th>Pass</th><th>Initials</th></tr></thead><tbody>
+        ${FINAL.map(([d, t], i) => { const r = s.final[i] || {}; return `<tr><td>${esc(d)}</td><td>${esc(t)}</td><td class="mk">${mark(r.cw)}</td><td class="mk">${mark(r.ow)}</td><td class="mk">${r.m ? "M ☑" : "☐"}</td><td class="mk">${esc(r.ini || "")}</td></tr>`; }).join("")}
       </tbody></table></div>
       <h2>Dive-by-Dive Record</h2>
       <div class="tablewrap"><table><thead><tr><th>Dive</th><th>Date</th><th>Location</th><th>Max depth</th><th>Duration</th><th>Gas / mix</th><th>Skills / notes</th><th>Initials</th></tr></thead><tbody>
@@ -466,8 +467,7 @@
     setPath(src, el.dataset.b, v);
     if (el.classList.contains("st")) el.dataset.v = v;
     const tr = el.closest("tr");
-    if (tr && /^skills\.\d+\.m$/.test(el.dataset.b)) tr.classList.toggle("done", !!v);
-    if (tr && /^final\.\d+\.st$/.test(el.dataset.b)) tr.classList.toggle("done", v === "M");
+    if (tr && /^(skills|final)\.\d+\.m$/.test(el.dataset.b)) tr.classList.toggle("done", !!v);
     if (el.dataset.s === "p") { const d = document.getElementById("dep-amt"); if (d) d.textContent = money(deposit()); }
     save(); refreshSummary();
   });
