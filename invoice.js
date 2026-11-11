@@ -57,6 +57,7 @@
     inv.studentId = s.id;
     inv.billName = s.name || "";
     inv.billContact = [s.email, s.phone].filter(Boolean).join(" / ");
+    inv.billAddr = s.address || inv.billAddr || "";
     const b = L().billing(s);
     inv.items = b.items.length ? b.items : [{ desc: "", amt: "" }];
     inv.payments = b.payments;
