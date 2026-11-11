@@ -154,7 +154,8 @@
       id: newId("s"), created: new Date().toISOString(),
       name: "", email: "", phone: "", dob: "", address: "",
       emergencyName: "", emergencyPhone: "", emergencyRel: "",
-      medical: "", certAgency: "", certLevel: "", certNumber: "", notes: ""
+      medical: "", certAgency: "", certLevel: "", certNumber: "", notes: "",
+      accountId: ""   // the student's online account (student-accounts.js), once linked
     };
   }
 
@@ -589,6 +590,7 @@
     const enr = state.enrollments.filter(e => e.studentId === p.id);
     const notIn = COURSE_ORDER.filter(id => !enr.some(e => e.course === id));
     return `${WATERMARK}<div class="rec-head"><h1 id="person-name">${esc(p.name || "Unnamed student")}</h1></div>
+      ${window.LDAccount ? window.LDAccount.personNote(p) : ""}
       <h2 class="sec">Contact</h2><div class="grid">
         ${inp("d", "name", "Full name")}${inp("d", "dob", "Date of birth", "date")}${inp("d", "email", "Email", "email")}${inp("d", "phone", "Phone", "tel")}
         ${inp("d", "address", "Mailing address", "text", "wide")}</div>
