@@ -1,0 +1,52 @@
+/* Invoices page and the printable invoice (layout follows the J Lichner Dive Invoice template). */
+.roster select { width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.roster .inv-status { align-self: flex-start; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 1px 8px; border-radius: 99px; background: var(--ip-bg); color: var(--ip); }
+.roster .inv-status.paid { background: var(--ok-bg); color: var(--ok); }
+.inv-fill { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 14px; }
+.inv-fill label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.inv-fill select, .row-actions select { padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); max-width: 100%; }
+#inv-panel table.m td.amt { width: 140px; }
+#inv-panel table.m td.amt input { font-family: var(--font-mono); text-align: right; }
+#inv-panel table.m td.x { width: 1%; }
+#inv-panel table.m td input { min-width: 0; }
+
+.invdoc {
+  --inv-navy: #1f3a5f; --inv-ink: #222222; --inv-muted: #666666; --inv-band: #f2f2f2;
+  background: #ffffff; color: var(--inv-ink); border: 1px solid var(--line); border-radius: 4px;
+  padding: 44px clamp(18px, 6vw, 60px) 52px; max-width: 860px;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  font: 14px/1.45 Georgia, "Times New Roman", Times, serif;
+}
+.invdoc .ph { color: #8a8a8a; }
+.invdoc .ih { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--inv-ink); margin-bottom: 16px; }
+.invdoc .ib { font-weight: 700; font-size: 22px; color: var(--inv-navy); text-transform: uppercase; }
+.invdoc .isub { font-size: 12px; color: var(--inv-muted); }
+.invdoc .it { font-weight: 700; font-size: 28px; color: var(--inv-navy); letter-spacing: .02em; }
+.invdoc .imeta { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 26px; }
+.invdoc .ilbl { font-size: 11px; font-weight: 700; color: var(--inv-navy); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+.invdoc .iaddr { color: var(--inv-muted); white-space: pre-line; }
+.invdoc .ir { text-align: right; }
+.invdoc .ir b { color: var(--inv-navy); }
+.invdoc table.itab { width: 100%; border-collapse: collapse; border: 1px solid var(--inv-ink); font-size: 13px; }
+.invdoc .itab th { background: var(--inv-navy); color: #fff; text-transform: uppercase; font-size: 11px; letter-spacing: .03em; text-align: left; padding: 8px 8px; }
+.invdoc .itab td { padding: 7px 8px; border-top: 1px solid var(--inv-ink); }
+.invdoc .itab td + td, .invdoc .itab th + th { border-left: 1px solid var(--inv-ink); width: 26%; }
+.invdoc .itab tbody tr:nth-child(even) td { background: var(--inv-band); }
+.invdoc .itab .r { text-align: right; font-variant-numeric: tabular-nums; }
+.invdoc .itab tbody tr.sub td, .invdoc .itab tbody tr.pay td { background: #fff; color: var(--inv-muted); }
+.invdoc .itab tbody tr.tot td { background: #fff; font-weight: 700; color: var(--inv-navy); font-size: 15px; padding: 10px 8px; border-top: 1.5px solid var(--inv-navy); }
+.invdoc .istamp { display: inline-block; margin-top: 16px; border: 2px solid #217a45; color: #217a45; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 4px 12px; border-radius: 4px; font-size: 13px; }
+.invdoc .inote { margin: 18px 0 0; white-space: pre-line; }
+.invdoc .iterms { margin-top: 26px; }
+.invdoc .ilbl2 { font-weight: 700; color: var(--inv-navy); font-size: 13px; margin-bottom: 2px; }
+.invdoc .iterms p { margin: 0; font-size: 12px; color: var(--inv-muted); }
+.invdoc .ithanks { margin: 22px 0 0; font-style: italic; color: var(--inv-navy); font-size: 13px; }
+
+@media (max-width: 520px) {
+  .invdoc .ih { flex-direction: column; }
+  .invdoc .ir { text-align: left; }
+}
+@media print {
+  .invdoc { border: 0; padding: 0; max-width: none; font-size: 11.5pt; }
+  .invdoc .itab tr { break-inside: avoid; }
+}

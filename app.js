@@ -163,6 +163,17 @@
     if (s.pay.balPaid) paid += (Number(state.program.price) || 0) - deposit();
     return { extras, total, paid, due: total - paid };
   }
+  // What a student's invoice starts with: their fees as line items, and payments already received.
+  function billing(s) {
+    const pr = Number(state.program.price) || 0;
+    const items = [{ desc: state.program.program + " — course fee", amt: pr }]
+      .concat((s.pay.extras || []).filter(x => x.desc || x.amt).map(x => ({ desc: "Additional training: " + (x.desc || ""), amt: Number(x.amt) || 0 })));
+    const payments = [];
+    const on = (d) => d ? " (" + fmtDate(d) + ")" : "";
+    if (s.pay.depPaid) payments.push({ desc: "Deposit received" + on(s.pay.depDate), amt: deposit() });
+    if (s.pay.balPaid) payments.push({ desc: "Balance received" + on(s.pay.balDate), amt: pr - deposit() });
+    return { items, payments };
+  }
   let toastTimer;
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200); }
 
@@ -197,6 +208,11 @@
   function render() {
     document.querySelectorAll(".nav .btn[data-mode]").forEach(b => b.classList.toggle("active", b.dataset.mode === view.mode));
     const main = $("#main");
+    if (view.mode === "invoices" && window.LDInvoices) {
+      main.className = "shell";
+      main.innerHTML = window.LDInvoices.render();
+      return;
+    }
     if (view.mode === "program") {
       main.className = "shell full";
       main.innerHTML = `<section class="panel">${renderProgram()}</section>`;
@@ -522,6 +538,9 @@
     };
     r.readAsText(e.target.files[0]);
   });
+
+  // Shared helpers for invoice.js
+  window.LD = { get state() { return state; }, save, render, toast, esc, money, fmtDate, billing };
 
   render();
 })();
