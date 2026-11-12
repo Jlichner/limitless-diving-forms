@@ -60,8 +60,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   position: relative; overflow: hidden;
   background: linear-gradient(180deg, var(--head-1) 0%, var(--head-2) 55%, var(--head-3) 100%); color: var(--deep-ink);
   padding-block: clamp(22px, 4vw, 40px);
-  padding-left: max(64px, env(safe-area-inset-left, 0px));
-  padding-right: max(64px, env(safe-area-inset-right, 0px));
+  padding-left: max(clamp(64px, 8vw, 100px), env(safe-area-inset-left, 0px));
+  padding-right: max(clamp(64px, 8vw, 100px), env(safe-area-inset-right, 0px));
   display: flex; align-items: center; justify-content: center;
 }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--head-1); }
@@ -104,7 +104,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   .nav-group { display: none; }
   .navbtn { white-space: nowrap; width: auto; }
 }
-.flag { position: absolute !important; right: max(16px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: 36px; height: 24px; border-radius: 2px; }
+.flag { position: absolute !important; right: max(16px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: clamp(44px, 6vw, 63px); height: auto; aspect-ratio: 3 / 2; border-radius: 3px; }
 
 .btn {
   border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius);
