@@ -250,9 +250,10 @@ span.cal-ev:hover { filter: none; }
 
 /* Diving Physics – Made Simple (diving-physics.js) */
 #physics { display: grid; gap: 18px; }
-.pm-toc { display: grid; gap: 6px; }
-.pm-toc ol { margin: 0; padding-left: 22px; columns: 2 260px; column-gap: 28px; }
-.pm-toc li { margin: 2px 0; }
+.pm-big { display: grid; gap: 8px; }
+.pm-big p { margin: 0; max-width: 72ch; font-size: 17px; }
+.pm-toc-list { margin: 0; padding-left: 22px; columns: 2 260px; column-gap: 28px; }
+.pm-toc-list li { margin: 2px 0; }
 .pm-score { font-weight: 600; color: var(--accent); }
 .pm-score:empty { display: none; }
 .pm-part { scroll-margin-top: 16px; }
@@ -282,3 +283,36 @@ span.cal-ev:hover { filter: none; }
 .pm-sim-view dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; }
 .pm-sim-view dt { font-weight: 600; } .pm-sim-view dd { margin: 0; font-family: var(--font-mono); }
 .pm-sim .hint { color: #fff; margin: 10px 0 0; }
+
+/* Law colours, as on the printed handout: Boyle blue, Dalton teal, Henry amber */
+.pm-boyle { --law: var(--pr); --law-bg: var(--pr-bg); }
+.pm-dalton { --law: var(--accent); --law-bg: var(--accent-soft); }
+.pm-henry { --law: var(--ip); --law-bg: var(--ip-bg); }
+.pm-law { border-top: 6px solid var(--law); }
+.pm-law .pm-num { background: var(--law); color: var(--surface); }
+.pm-law h2 { color: var(--law); }
+.pm-law .pm-rule { background: var(--law-bg); border-left-color: var(--law); }
+.pm-toc-list li[class] a, .pm-connect li[class] b { color: var(--law); }
+.pm-ata-list { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 10px 0; }
+.pm-ata-list li { padding: 6px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); }
+.pm-fig { margin: 16px 0; }
+.pm-fig svg { display: block; width: 100%; max-width: 640px; height: auto; color: var(--ink); }
+.pm-fig figcaption { color: var(--muted); font-size: 15px; max-width: 72ch; margin-top: 6px; }
+.pm-svg-big { font-family: var(--font-display); font-weight: 700; font-size: 26px; fill: var(--ink); }
+.pm-svg-txt { font-family: var(--font-body); font-size: 19px; fill: var(--muted); }
+.pm-svg-b { font-weight: 700; fill: var(--ink); }
+.pm-breath { fill: var(--surface-2); stroke: var(--accent); stroke-width: 2.5; }
+.pm-o2, .pm-key-o2 { fill: #d7263d; background: #d7263d; }
+.pm-n2, .pm-key-n2 { fill: #5b7f8c; background: #5b7f8c; }
+.pm-key { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; margin: 0 4px 0 8px; }
+.pm-key:first-child { margin-left: 0; }
+.pm-bottle { fill: var(--surface-2); stroke: var(--ink); stroke-width: 2.5; }
+.pm-soda { fill: #8a4b1c; opacity: .85; }
+.pm-cap { fill: #d7263d; }
+.pm-dissolved { fill: #f3d2a6; }
+.pm-fizz { fill: #ffffff; stroke: #8a4b1c; stroke-width: 1.2; }
+.pm-connect ol { margin: 6px 0 0; padding-left: 22px; max-width: 72ch; }
+.pm-connect li { margin: 6px 0; }
+.pm-land { margin: 16px 0 0; padding: 14px 18px; border-left: 5px solid var(--shallows); background: var(--accent-soft); border-radius: 8px; font-family: var(--font-display); font-size: clamp(18px, 3vw, 22px); font-weight: 600; line-height: 1.4; }
+.pm-which .pm-quiz { margin-top: 10px; }
+.pm-more-h { margin: 10px 0 -6px; font-size: clamp(22px, 3.6vw, 28px); }
