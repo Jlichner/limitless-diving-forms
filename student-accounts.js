@@ -10,7 +10,7 @@
 
   const L = () => window.LD;
   const C = () => window.LDCloud || { configured: false };
-  const v = { accounts: null, staff: null, loading: false, error: "", busy: false, note: "", noteKind: "", dsel: null, dq: "" };
+  const v = { accounts: null, staff: null, loading: false, error: "", busy: false, note: "", noteKind: "", dsel: null, dq: "", dlevel: "", members: null, membersOld: false };
   const roleName = (r) => (window.LDCloud && window.LDCloud.ROLE_NAMES[r]) || "Student";
 
   function accountPageUrl() { return new URL("account.html", location.href).href; }
@@ -84,16 +84,20 @@
   async function loadAccounts() {
     if (!C().can("divemaster")) return;
     v.loading = true; v.error = ""; rerender();
-    const [a, st] = await Promise.all([
+    const [a, st, m] = await Promise.all([
       C().client.rpc("student_accounts"),
-      C().can("admin") ? C().client.rpc("staff_members") : Promise.resolve({ data: null })
+      C().can("admin") ? C().client.rpc("staff_members") : Promise.resolve({ data: null }),
+      C().client.rpc("member_directory")
     ]);
     v.loading = false;
     if (a.error) v.error = "Couldn't load the accounts: " + C().explain(a.error);
     else v.accounts = a.data || [];
+    // Everyone of every level for Records → Students. Until schema.sql is re-run, fall back to students only.
+    v.membersOld = !!m.error;
+    v.members = m.error ? (v.accounts || []).map(x => Object.assign({ role: "student" }, x)) : (m.data || []);
     // Profile photos are private: get a short-lived link for each one.
     v.photos = {};
-    const paths = (v.accounts || []).map(x => x.photo_path).filter(Boolean);
+    const paths = [...new Set((v.accounts || []).concat(v.members || []).map(x => x.photo_path).filter(Boolean))];
     if (paths.length) {
       const { data } = await C().client.storage.from("avatars").createSignedUrls(paths, 3600);
       (data || []).forEach(r => { if (r.signedUrl) v.photos[r.path] = r.signedUrl; });
@@ -213,28 +217,29 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
   function directoryOn() { return !!(C().configured && C().available); }
   function hay(acc) {
     return [acc.full_name, acc.email, acc.phone, String(acc.phone || "").replace(/\D/g, ""), acc.address, acc.emergency_name,
-      certsOf(acc).map(certText).join(" "), (linkedPerson(acc) || {}).name].join(" ").toLowerCase();
+      certsOf(acc).map(certText).join(" "), (linkedPerson(acc) || {}).name, roleName(acc.role)].join(" ").toLowerCase();
   }
   function dirMatches() {
     const words = v.dq.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return (v.accounts || []).filter(a => words.every(w => hay(a).includes(w)))
+    return (v.members || []).filter(a => (!v.dlevel || (a.role || "student") === v.dlevel) && words.every(w => hay(a).includes(w)))
       .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || ""));
   }
   function dirList() {
     const { esc } = L(), list = dirMatches();
-    if (v.loading && !v.accounts) return `<li class="meta" style="padding:8px 10px">Loading students…</li>`;
-    if (!list.length) return `<li class="meta" style="padding:8px 10px">${(v.accounts || []).length ? "No matches." : "No students have registered yet."}</li>`;
+    if (v.loading && !v.members) return `<li class="meta" style="padding:8px 10px">Loading…</li>`;
+    if (!list.length) return `<li class="meta" style="padding:8px 10px">${(v.members || []).length ? "No matches." : "No one has registered yet."}</li>`;
     return list.map(a => `<li><button data-sa="dpick" data-acc="${esc(a.id)}" class="dir-item${a.id === v.dsel ? " sel" : ""}"${a.id === v.dsel ? ' aria-current="true"' : ""}>
         ${avatar(a, "photo-xs")}<span class="dir-txt"><span class="nm">${esc(a.full_name || "No name yet")}</span>
-        <span class="meta">${esc(a.phone || a.email || "")}</span></span></button></li>`).join("");
+        <span class="meta">${esc(a.phone || a.email || "")}</span></span>${(a.role || "student") !== "student" ? `<span class="sa-badge lvl">${esc(roleName(a.role))}</span>` : ""}</button></li>`).join("");
   }
+  function countText() { return dirMatches().length + " of " + (v.members || []).length + " registered"; }
   function telLink(n) { const d = String(n || "").replace(/[^\d+]/g, ""); return d.length >= 7 ? `<a href="tel:${L().esc(d)}">${L().esc(n)}</a>` : L().esc(n || ""); }
   function dirDetail(acc) {
     const { esc, fmtDate } = L(), p = linkedPerson(acc), certs = certsOf(acc);
     const row = (label, html) => html ? `<dt>${label}</dt><dd>${html}</dd>` : "";
     const map = acc.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(acc.address)}" target="_blank" rel="noopener">${esc(acc.address)}</a>` : "";
     const enrolled = p ? L().state.enrollments.filter(e => e.studentId === p.id && L().COURSES[e.course]) : [];
-    return `<div class="rec-head"><div class="who dir-head">${avatar(acc, "photo-md")}<div><span class="eyebrow">Registered student</span>
+    return `<div class="rec-head"><div class="who dir-head">${avatar(acc, "photo-md")}<div><span class="eyebrow">${(acc.role || "student") === "student" ? "Registered student" : esc(roleName(acc.role))}</span>
         <h1>${esc(acc.full_name || "No name yet")}</h1>
         <span class="sub">${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span> `}${acc.updated_at ? "Updated " + esc(fmtDate(String(acc.updated_at).slice(0, 10))) : ""}</span></div></div></div>
       <div class="dir-actions">${acc.phone ? `<a class="btn primary" href="tel:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Call</a><a class="btn" href="sms:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Text</a>` : ""}
@@ -253,13 +258,16 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
   }
   function renderDirectory(switchHtml) {
     const { esc } = L();
-    if (!v.accounts && !v.loading && !v.error) setTimeout(loadAccounts, 0);
-    const list = v.accounts || [];
+    if (!v.members && !v.loading && !v.error) setTimeout(loadAccounts, 0);
+    const list = v.members || [];
+    const lv = (r, l) => `<option value="${r}"${v.dlevel === r ? " selected" : ""}>${l}</option>`;
     if (!list.some(a => a.id === v.dsel)) v.dsel = (dirMatches()[0] || {}).id || null;
     const acc = list.find(a => a.id === v.dsel);
     return `<aside class="roster no-print" id="dir-panel">${switchHtml || ""}
         <input type="search" id="dir-q" placeholder="Search name, phone, email, city, cert" value="${esc(v.dq)}" aria-label="Search registered students" autocomplete="off">
-        <span class="meta dir-count" id="dir-count">${list.length ? dirMatches().length + " of " + list.length + " registered" : ""}</span>
+        <select id="dir-level" aria-label="Show level">${lv("", "All levels")}${lv("student", "Students")}${lv("divemaster", "Dive Masters")}${lv("instructor", "Instructors")}${lv("admin", "Admins")}</select>
+        <span class="meta dir-count" id="dir-count">${list.length ? countText() : ""}</span>
+        ${v.membersOld ? `<p class="hint" style="margin:0">Showing students only. Run the latest <code>supabase/schema.sql</code> to include staff.</p>` : ""}
         <ul id="dir-list">${dirList()}</ul>
         <button class="btn small" data-sa="refresh">Refresh list</button></aside>
       <section class="panel" id="record">${v.error ? `<p class="acct-note bad" role="alert">${esc(v.error)}</p>` : ""}
@@ -321,12 +329,12 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
   });
   document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-sa]"); if (!b) return;
-    const acc = (v.accounts || []).find(a => a.id === b.dataset.acc);
+    const acc = (v.accounts || []).find(a => a.id === b.dataset.acc) || (v.members || []).find(a => a.id === b.dataset.acc);
     switch (b.dataset.sa) {
       case "copy":
         try { await navigator.clipboard.writeText(accountPageUrl()); L().toast("Link copied"); } catch (err) { L().toast("Couldn't copy. Select the link and copy it."); }
         break;
-      case "signout": await C().signOut(); v.accounts = null; v.staff = null; setNote(""); rerender(); break;
+      case "signout": await C().signOut(); v.accounts = null; v.staff = null; v.members = null; setNote(""); rerender(); break;
       case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast("Still a student account. Ask an Admin for a staff role."); } break;
       case "refresh": setNote(""); loadAccounts(); break;
       case "dpick": v.dsel = b.dataset.acc; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
@@ -374,7 +382,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
 
   if (window.LDCloud && window.LDCloud.available) {
     window.LDCloud.onChange((event) => {
-      if (!C().user) { v.accounts = null; v.staff = null; }
+      if (!C().user) { v.accounts = null; v.staff = null; v.members = null; }
       headerButton();
       if (C().can("divemaster") && !v.accounts && !v.loading) loadAccounts();
       // Redraw for sign-in changes (not hourly token refreshes, which would interrupt typing).
@@ -384,10 +392,10 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
 
   // Live search: redraw only the list so typing isn't interrupted.
   document.addEventListener("input", (e) => {
-    if (e.target.id !== "dir-q") return;
-    v.dq = e.target.value;
+    if (e.target.id !== "dir-q" && e.target.id !== "dir-level") return;
+    if (e.target.id === "dir-q") v.dq = e.target.value; else v.dlevel = e.target.value;
     const ul = document.getElementById("dir-list"); if (ul) ul.innerHTML = dirList();
-    const n = document.getElementById("dir-count"); if (n && v.accounts) n.textContent = dirMatches().length + " of " + v.accounts.length + " registered";
+    const n = document.getElementById("dir-count"); if (n && v.members) n.textContent = countText();
   });
 
   window.LDAccount = { render, personNote, summary, directoryOn, renderDirectory };

@@ -175,6 +175,36 @@ $$;
 revoke all on function public.student_accounts() from public, anon;
 grant execute on function public.student_accounts() to authenticated;
 
+-- Everyone with an account, students and staff, with their level: the Records → Students list.
+-- Dive Masters and up only. Added 2026-11-12; safe to run again.
+drop function if exists public.member_directory();
+create or replace function public.member_directory()
+returns table (
+  id uuid, email text, full_name text, address text, phone text,
+  emergency_name text, emergency_relationship text, emergency_phone text,
+  certifications jsonb, created_at timestamptz, updated_at timestamptz, email_confirmed boolean,
+  photo_path text, role text
+)
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if not public.has_role('divemaster') then
+    raise exception 'Only staff can list accounts' using errcode = '42501';
+  end if;
+  return query
+    select u.id, u.email::text, coalesce(p.full_name, ''), coalesce(p.address, ''), coalesce(p.phone, ''),
+           coalesce(p.emergency_name, ''), coalesce(p.emergency_relationship, ''), coalesce(p.emergency_phone, ''),
+           coalesce(p.certifications, '[]'::jsonb), coalesce(p.created_at, u.created_at), coalesce(p.updated_at, u.created_at),
+           u.email_confirmed_at is not null, p.photo_path, coalesce(r.role, 'student')
+    from auth.users u
+    left join public.student_profiles p on p.id = u.id
+    left join public.staff_roles r on r.user_id = u.id
+    order by coalesce(nullif(p.full_name, ''), u.email::text);
+end;
+$$;
+revoke all on function public.member_directory() from public, anon;
+grant execute on function public.member_directory() to authenticated;
+
 -- ---------- managing staff (Admins only) ----------
 create or replace function public.staff_members()
 returns table (id uuid, email text, full_name text, role text)
