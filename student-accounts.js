@@ -18,7 +18,6 @@
   function linkedPerson(acc) { return people().find(p => p.accountId === acc.id) || null; }
   function certText(c) { return [c.agency, c.level].filter(Boolean).join(" ") + (c.number ? " #" + c.number : "") + (c.date ? " (" + L().fmtDate(c.date) + ")" : ""); }
   function certsOf(acc) { return (Array.isArray(acc.certifications) ? acc.certifications : []).filter(c => c && (c.agency || c.level)); }
-  function latestCert(acc) { return certsOf(acc).slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))[0] || null; }
   // Course records whose student is linked to an account: these are what "Share progress" sends.
   function sharedEnrollments() {
     const ids = new Set(people().filter(p => p.accountId).map(p => p.id));
@@ -32,15 +31,17 @@
   function applyAccount(p, acc, overwrite) {
     const map = { name: acc.full_name, email: acc.email, phone: acc.phone, address: acc.address,
       emergencyName: acc.emergency_name, emergencyRel: acc.emergency_relationship, emergencyPhone: acc.emergency_phone };
-    const c = latestCert(acc);
-    if (c) Object.assign(map, { certAgency: c.agency, certLevel: c.level, certNumber: c.number });
     Object.keys(map).forEach(k => { const val = String(map[k] || "").trim(); if (val && (overwrite || !String(p[k] || "").trim())) p[k] = val; });
-    const all = certsOf(acc);
-    if (all.length > 1) {
-      const line = "Certifications (from student account): " + all.map(certText).join("; ");
-      const notes = String(p.notes || "").split("\n").filter(x => !x.startsWith("Certifications (from student account):"));
-      notes.push(line); p.notes = notes.filter(Boolean).join("\n");
-    }
+    // Certifications: add each one from the account that the student's list doesn't have yet (same agency and name).
+    // With overwrite, a matching certification also takes the account's number and date.
+    if (!Array.isArray(p.certs)) p.certs = [];
+    const key = (c) => (String(c.agency || "") + "|" + String(c.level || "")).trim().toLowerCase();
+    certsOf(acc).forEach(c => {
+      const mine = p.certs.find(x => key(x) === key(c));
+      const val = { agency: c.agency || "", level: c.level || "", number: c.number || "", date: c.date || "" };
+      if (!mine) p.certs.push(val);
+      else ["number", "date"].forEach(k => { if (val[k] && (overwrite || !mine[k])) mine[k] = val[k]; });
+    });
     p.accountId = acc.id;
   }
 

@@ -147,7 +147,7 @@
 
       <h2 class="sec">Class</h2><div class="grid">
         <div class="field"><label for="cal-course">Course</label><select id="cal-course"${ros.length ? " disabled" : ""}>
-          ${L().COURSE_ORDER.map(id => `<option value="${id}"${id === k.course ? " selected" : ""}>${esc(L().COURSES[id].fullName || L().COURSES[id].name)}</option>`).join("")}</select>
+          ${L().courseOptions(k.course)}</select>
           ${ros.length ? `<span class="hint" style="margin:0">Remove the students to change the course.</span>` : ""}</div>
         ${f("title", "Title (blank = course name)")}${f("time", "Time")}${f("location", "Location")}
         ${f("price", "Price ($)", "number")}${f("seats", "Seats (blank = no limit)", "number")}

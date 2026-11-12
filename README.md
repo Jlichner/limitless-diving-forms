@@ -6,7 +6,8 @@ A web app for Limitless Diving & Technical Training's courses: Open Water Diver 
 
 - **Class calendar (the landing page):** plan training classes on a month calendar. Each class has a course, dates (one per class day), time, location, price, seats and a public description. Enroll students straight from a class: they get a course record with the class's dates and location filled in, and the class shows their progress and balance. Mark a class **Show on the public calendar**, then use **Publish calendar** to put it on the public page.
 - **Public class calendar (`classes.html`):** a page for students and the public with a month calendar and a card for each upcoming published class (dates, time, location, price, open seats, description, and an "Ask about this class" email link). It never shows student names.
-- **Students:** one shared student list for every course: contact info, date of birth, address, emergency contact, medical notes, current certification, and the courses each student is in.
+- **Students:** one shared student list for every course: contact info, date of birth, address, emergency contact, medical notes, every certification the student holds (agency, certification, number and date; pick from the course list or type any other), and the courses each student is in.
+- **All courses:** the full catalog of NAUI, NAUI Technical and TDI courses students can enroll in, grouped by agency, with each NAUI course's minimum age, prerequisites, required open water dives and maximum depth from the 2026 NAUI Standards and Policies Manual. TDI standards are left blank for you to fill in under **Settings → Course standards**. Every course can be picked when you add a class to the calendar or enroll a student. Courses without a full skill matrix still get a prerequisite checklist, dive log, payments, sign-off and a proposal.
 
 - **Open Water records:** each enrollment links to a student and holds the training dates, open water site and notes. A course-profile tracker and gauges show progress at a glance.
 - **Required skill matrix:** the NAUI Open Water skills (checked against the 2026 NAUI Standards), with Confined and Open Water status (IP / PR / R), Pass, and initials.
@@ -92,6 +93,8 @@ Note: if this repository is public, anyone can see the code and the default cont
 
 ## Adding a course
 
+The course list lives in `catalog.js` (one line per course: agency, name, and the standards). Add a course there and it shows up on **All courses**, in the calendar and in the enroll pickers right away. To give a catalog course a full skill matrix, register it as below with the same `id`.
+
 Courses live in a registry in `app.js`. Rescue Diver and Divemaster are added this way in `courses.js`. To add one, load a script after `app.js` that calls:
 
 ```js
@@ -110,7 +113,7 @@ Optional fields (defaults in `registerCourse`): `cols` (`"three"` for Confined /
 
 ## Data shape (localStorage key `limitless-ow-v1`)
 
-- `students`: the shared student list (`id, name, email, phone, dob, address, emergencyName, emergencyPhone, emergencyRel, medical, certAgency, certLevel, certNumber, notes, accountId`). `accountId` links a student to their online account.
+- `students`: the shared student list (`id, name, email, phone, dob, address, emergencyName, emergencyPhone, emergencyRel, medical, certs, notes, accountId`). `certs` is a list of `{ agency, level, number, date }`, the same shape as a student account's certifications; older backups with a single `certAgency / certLevel / certNumber` are converted on load. `accountId` links a student to their online account.
 - `enrollments`: one per student per course (`id, studentId, course, dates, location, notes, skills, final, dives, remed, pay, ack`).
 - `program`: Open Water settings. `programs[courseId]`: settings for the other courses.
 - `classes`: calendar classes (`id, course, title, dates[], time, location, price, seats, notes, published`). An enrollment's `classId` links it to its class.

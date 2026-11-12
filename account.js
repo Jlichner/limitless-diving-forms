@@ -8,7 +8,15 @@
 
   const G = window.LDCalGrid, esc = G.esc;
   const main = document.getElementById("acct");
-  const AGENCIES = ["NAUI", "PADI", "SSI", "SDI / TDI", "RAID", "GUE", "NASE", "BSAC", "CMAS", "IANTD", "Other"];
+  // Agencies and certification suggestions come from the course catalog (catalog.js), which lists every NAUI, NAUI Technical and TDI course.
+  const CAT = window.LDCatalog;
+  const AGENCIES = CAT ? CAT.CERT_AGENCIES : ["NAUI", "NAUI Technical", "TDI", "PADI", "SSI", "SDI", "RAID", "GUE", "NASE", "BSAC", "CMAS", "IANTD", "Other"];
+  const listId = (a) => "cert-levels-" + (AGENCIES.indexOf(a) < 0 ? "any" : AGENCIES.indexOf(a));
+  function certLists() {
+    const names = (a) => CAT ? CAT.certNames(a) : ["Scuba Diver", "Open Water Scuba Diver", "Advanced Open Water Scuba Diver", "Nitrox Diver", "Rescue Scuba Diver", "Master Scuba Diver", "Divemaster", "Assistant Instructor", "Instructor", "First Aid / CPR", "Emergency Oxygen Provider (EO2)"];
+    const dl = (id, list) => `<datalist id="${id}">${list.map(x => `<option value="${esc(x)}">`).join("")}</datalist>`;
+    return AGENCIES.map(a => dl(listId(a), names(a))).join("") + dl("cert-levels-any", names(""));
+  }
   const ROSE = `<svg class="acct-rose" aria-hidden="true" viewBox="0 0 200 200"><circle cx="100" cy="100" r="92" fill="none" stroke-width="3"></circle>${[0, 90, 180, 270].map(a => `<polygon points="100,6 90,100 110,100" stroke="none" transform="rotate(${a} 100 100)"></polygon>`).join("")}${[45, 135, 225, 315].map(a => `<polygon points="100,38 94,100 106,100" stroke="none" transform="rotate(${a} 100 100)"></polygon>`).join("")}</svg>`;
 
   // view.auth: "signin" | "signup" | "forgot" | "recover" (set a new password after the email link)
@@ -72,7 +80,7 @@
       <div class="field"><label for="c-${i}-agency">Agency</label><select id="c-${i}-agency" data-c="agency">
         <option value="">Choose</option>${AGENCIES.map(x => `<option${x === c.agency ? " selected" : ""}>${esc(x)}</option>`).join("")}
         ${c.agency && !known ? `<option selected>${esc(c.agency)}</option>` : ""}</select></div>
-      <div class="field"><label for="c-${i}-level">Certification</label><input id="c-${i}-level" data-c="level" list="cert-levels" value="${esc(c.level)}" placeholder="e.g. Open Water Scuba Diver" maxlength="120"></div>
+      <div class="field"><label for="c-${i}-level">Certification</label><input id="c-${i}-level" data-c="level" list="${listId(c.agency)}" value="${esc(c.level)}" placeholder="Pick from the list or type your own" maxlength="120"></div>
       <div class="field"><label for="c-${i}-number">Cert number</label><input id="c-${i}-number" data-c="number" value="${esc(c.number)}" maxlength="60"></div>
       <div class="field"><label for="c-${i}-date">Date certified</label><input id="c-${i}-date" data-c="date" type="date" value="${esc(c.date)}"></div>
       <button type="button" class="btn small danger" data-act="rm-cert" data-i="${i}" aria-label="Remove this certification">Remove</button>
@@ -132,9 +140,9 @@
         <div class="grid">${input("emergency_name", "Name", "text", "", 'maxlength="200"')}${input("emergency_relationship", "Relationship", "text", "", 'maxlength="100" placeholder="e.g. Spouse, parent"')}
           ${input("emergency_phone", "Phone number", "tel", "", 'maxlength="50"')}</div>
         <h2 class="sec">Current certifications</h2>
-        <p class="hint">Add every scuba or first aid certification you hold. Bring your cards to class.</p>
+        <p class="hint">Add every scuba or first aid certification you hold: choose the agency, then pick the certification from the list or type your own. Bring your cards to class.</p>
         <div class="certs">${certs.length ? certs.map(certRow).join("") : `<p class="hint"><b>None added yet.</b> New to diving? Leave this empty.</p>`}</div>
-        <datalist id="cert-levels">${["Scuba Diver", "Open Water Scuba Diver", "Advanced Scuba Diver", "Enriched Air Nitrox Diver", "Rescue Scuba Diver", "Master Scuba Diver", "Divemaster", "Assistant Instructor", "Instructor", "First Aid / CPR", "Emergency Oxygen Provider"].map(x => `<option value="${esc(x)}">`).join("")}</datalist>
+        ${certLists()}
         <div class="row-actions"><button type="button" class="btn" data-act="add-cert">+ Add a certification</button></div>
         <div class="acct-save"><button class="btn primary" type="submit"${view.busy ? " disabled" : ""}>${view.busy ? "Saving…" : "Save my details"}</button><span id="save-state" class="hint" role="status"></span></div>
       </form>
@@ -216,7 +224,11 @@
     if (el.closest("#auth-form")) { if (el.type !== "password") view.vals[el.id] = el.value; return; }
     if (!profile) return;
     if (el.dataset.p) { profile[el.dataset.p] = el.value; dirty(); }
-    if (el.dataset.c) { const row = el.closest(".cert-row"); profile.certifications[Number(row.dataset.i)][el.dataset.c] = el.value; dirty(); }
+    if (el.dataset.c) {
+      const row = el.closest(".cert-row"); profile.certifications[Number(row.dataset.i)][el.dataset.c] = el.value; dirty();
+      // A new agency: suggest that agency's certifications.
+      if (el.dataset.c === "agency") { const lvl = row.querySelector('[data-c="level"]'); if (lvl) lvl.setAttribute("list", listId(el.value)); }
+    }
   });
 
   main.addEventListener("submit", async (e) => {

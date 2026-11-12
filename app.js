@@ -154,7 +154,8 @@
       id: newId("s"), created: new Date().toISOString(),
       name: "", email: "", phone: "", dob: "", address: "",
       emergencyName: "", emergencyPhone: "", emergencyRel: "",
-      medical: "", certAgency: "", certLevel: "", certNumber: "", notes: "",
+      medical: "", notes: "",
+      certs: [],      // certifications held: { agency, level, number, date } (same shape as the student account)
       accountId: ""   // the student's online account (student-accounts.js), once linked
     };
   }
@@ -197,7 +198,14 @@
         return person;
       });
     }
-    data.students = students.map(p => mergeDeep(blankPerson(), p));
+    data.students = students.map(p => {
+      const n = mergeDeep(blankPerson(), p);
+      if (!Array.isArray(n.certs)) n.certs = [];
+      // Earlier versions kept one certification in certAgency / certLevel / certNumber.
+      if (!n.certs.length && (p.certAgency || p.certLevel || p.certNumber)) n.certs.push({ agency: p.certAgency || "", level: p.certLevel || "", number: p.certNumber || "", date: "" });
+      delete n.certAgency; delete n.certLevel; delete n.certNumber;
+      return n;
+    });
     data.enrollments = enrollments.map(e => COURSES[e.course] ? mergeDeep(blankEnrollment(e.studentId, e.course, true), e) : e);
     return data;
   }
@@ -267,7 +275,11 @@
             + FI.filter((_, i) => s.final[i] && (s.final[i].cw === "R" || s.final[i].ow === "R")).length;
     const tot = SK.length + FI.length;
     const q = c.prereqs.filter(x => s.prereq && s.prereq[x.k] && s.prereq[x.k].ok).length;
-    return { m, f, r, q, nQ: c.prereqs.length, nS: SK.length, nF: FI.length, pct: tot ? Math.round(((m + f) / tot) * 100) : 0 };
+    // A course without a skill matrix (most catalog courses) counts prerequisites and logged dives instead.
+    const logged = (s.dives || []).filter(d => d && (d.date || d.ini)).length, nD = c.dives;
+    const pct = tot ? Math.round(((m + f) / tot) * 100)
+      : (c.prereqs.length + nD) ? Math.round(((q + Math.min(logged, nD)) / (c.prereqs.length + nD)) * 100) : 0;
+    return { m, f, r, q, nQ: c.prereqs.length, nS: SK.length, nF: FI.length, pct };
   }
   function owed(s) {
     const extras = (s.pay.extras || []).reduce((a, x) => a + (Number(x.amt) || 0), 0);
@@ -329,10 +341,13 @@
     const groups = [
       [null, [["account", "Student log in"]]],
       ["Classes", [["calendar", "Calendar"]]],
-      ["Records", [["students", "Students"]].concat(COURSE_ORDER.map(id => [id, COURSES[id].name]))],
+      ["Records", [["students", "Students"]].concat(COURSE_ORDER.filter(id => !COURSES[id].basic).map(id => [id, COURSES[id].name]),
+        window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
       ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
     ];
-    const btn = ([m, l]) => m === "account" ? `<a class="navbtn account" href="account.html">${esc(l)}</a>` : `<button class="navbtn${view.mode === m ? " active" : ""}" data-mode="${m}"${view.mode === m ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
+    // A catalog course without its own nav entry lights up "All courses".
+    const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
+    const btn = ([m, l]) => m === "account" ? `<a class="navbtn account" href="account.html">${esc(l)}</a>` : `<button class="navbtn${on(m) ? " active" : ""}" data-mode="${m}"${on(m) ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
     nav.innerHTML = groups.map(([g, items]) => (g ? `<span class="nav-group">${esc(g)}</span>` : "") + items.map(btn).join("")).join("");
   }
   function render() {
@@ -349,6 +364,12 @@
       main.className = "shell full";
       main.innerHTML = window.LDAccount ? window.LDAccount.render() : `<section class="panel"><div class="empty"><h2>Student accounts are coming soon</h2>
         <p>Students will be able to create their own account here and keep their name, address, phone, emergency contact and certifications up to date.</p></div></section>`;
+      return;
+    }
+    if (view.mode === "catalog" && window.LDCatalogPage) {
+      // The full course list by agency, drawn by catalog-page.js.
+      main.className = "shell full";
+      main.innerHTML = `<section class="panel">${window.LDCatalogPage.render()}</section>`;
       return;
     }
     if (view.mode === "invoices" && window.LDInvoices) {
@@ -387,7 +408,7 @@
   }
 
   function tabsFor(c) {
-    return [["details", "Details"], ["skills", "Skill matrix"]]
+    return [["details", "Details"]].concat(c.skills.length ? [["skills", "Skill matrix"]] : [])
       .concat(c.final.length ? [["final", "Final evaluation"]] : [])
       .concat([["dives", c.diveTab], ["remed", "Remediation"], ["pay", "Payment"], ["ack", "Sign-off"], ["proposal", "Proposal"]]);
   }
@@ -396,7 +417,7 @@
     const s = cur();
     if (!s) {
       return `<div class="empty"><h2>Enroll a student in ${esc(C().name)}</h2>
-        <p>Each ${esc(C().name)} record holds the course schedule, the required skill matrix, ${C().final.length ? "final evaluation, " : ""}${esc(C().diveTab.toLowerCase())}, remediation plan, payments and sign-off.
+        <p>Each ${esc(C().name)} record holds the course schedule, ${C().prereqs.length ? "prerequisites, " : ""}${C().skills.length ? "the required skill matrix, " : ""}${C().final.length ? "final evaluation, " : ""}${esc(C().diveTab.toLowerCase())}, remediation plan, payments and sign-off.
         It also builds a proposal with the student's name and dates that you can print or save as PDF.</p>
         <button class="btn primary" data-act="enroll">+ Enroll a student</button></div>`;
     }
@@ -423,7 +444,7 @@
     return `<div class="gauge"><svg role="img" aria-label="${esc(label)} ${n} of ${of}" viewBox="0 0 100 58"><path d="${ARC}" fill="none" class="track" stroke-width="8" stroke-linecap="round"></path>${len ? `<path d="${ARC}" fill="none" class="fill ${cls || ""}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${len} 126"></path>` : ""}<text x="50" y="50" text-anchor="middle">${n}/${of}</text></svg><span>${esc(label)}</span></div>`;
   }
   function gaugesHtml(p, o) {
-    return gauge(p.m, p.nS, "Skills passed") + (p.nF ? gauge(p.f, p.nF, "Final eval", "f2") : "") + (p.nQ ? gauge(p.q, p.nQ, "Prerequisites", "f2") : "") +
+    return (p.nS ? gauge(p.m, p.nS, "Skills passed") : "") + (p.nF ? gauge(p.f, p.nF, "Final eval", "f2") : "") + (p.nQ ? gauge(p.q, p.nQ, "Prerequisites", "f2") : "") +
       `<div class="gauge"><b style="color:${p.r ? "var(--bad)" : "inherit"}">${p.r}</b><span>Remediation</span></div>` +
       `<div class="gauge"><b class="money">${money(o.due)}</b><span>Balance due</span></div>`;
   }
@@ -490,6 +511,7 @@
   function go(mode, opts) {
     view.mode = mode; view.enrolling = false;
     if (opts && opts.psel) view.psel = opts.psel;
+    if (opts && opts.settingsCourse) view.settingsCourse = opts.settingsCourse;
     if (opts && opts.sel) { view.sel = opts.sel; view.tab = "details"; }
     if (isCourse(view.mode) && !cur()) view.sel = firstId(courseList(view.mode));
     render();
@@ -590,6 +612,7 @@
     }
     const enr = state.enrollments.filter(e => e.studentId === p.id);
     const notIn = COURSE_ORDER.filter(id => !enr.some(e => e.course === id));
+    if (!Array.isArray(p.certs)) p.certs = [];
     return `${WATERMARK}<div class="rec-head"><h1 id="person-name">${esc(p.name || "Unnamed student")}</h1></div>
       ${window.LDAccount ? window.LDAccount.personNote(p) : ""}
       <h2 class="sec">Contact</h2><div class="grid">
@@ -598,8 +621,9 @@
       <h2 class="sec">Emergency contact</h2><div class="grid">
         ${inp("d", "emergencyName", "Name")}${inp("d", "emergencyRel", "Relationship")}${inp("d", "emergencyPhone", "Phone", "tel")}</div>
       <h2 class="sec">Medical</h2><div class="grid">${area("d", "medical", "Medical notes (conditions, medications, physician clearance)")}</div>
-      <h2 class="sec">Current certification</h2><div class="grid">
-        ${inp("d", "certAgency", "Agency")}${inp("d", "certLevel", "Level")}${inp("d", "certNumber", "Cert number")}</div>
+      <h2 class="sec">Certifications</h2>
+      <p class="hint">Every certification the student holds. Pick from the course list or type any other certification.</p>
+      ${certRows(p)}
       <h2 class="sec">Notes</h2><div class="grid">${area("d", "notes", "Notes")}</div>
       <h2 class="sec">Courses</h2>
       ${enr.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Course</th><th>Start date</th><th>Progress</th><th>Balance due</th><th></th></tr></thead><tbody>
@@ -609,8 +633,42 @@
             <td>${known ? progress(e).pct + "%" : ""}</td><td class="money">${known ? money(owed(e).due) : ""}</td>
             <td>${known ? `<button class="btn small" data-act="open-enr" data-id="${e.id}">Open</button>` : ""}</td></tr>`;
         }).join("")}</tbody></table></div>` : `<p class="hint">Not enrolled in any course yet.</p>`}
-      <div class="row-actions">${notIn.map(id => `<button class="btn" data-act="enroll-go" data-id="${p.id}" data-course="${id}">Enroll in ${esc(COURSES[id].name)}</button>`).join("")}</div>
+      ${notIn.length ? `<div class="row-actions"><select id="person-course" aria-label="Course to enroll in"><option value="">Choose a course…</option>${courseOptions("", notIn)}</select>
+        <button class="btn primary" data-act="enroll-go" data-id="${p.id}" data-course="?">Enroll</button></div>` : ""}
       <div class="row-actions"><button class="btn danger" data-act="del-person">Delete this student…</button><span id="pdel-confirm"></span></div>`;
+  }
+  // A student's certifications, one editable row each: agency, certification (suggested from the course list), number and date.
+  function certRows(p) {
+    const cat = window.LDCatalog, agencies = cat ? cat.CERT_AGENCIES : ["NAUI", "NAUI Technical", "TDI", "PADI", "SSI", "Other"];
+    const listId = (a) => "cert-list-" + (agencies.indexOf(a) < 0 ? "any" : agencies.indexOf(a));
+    const lists = cat ? agencies.map(a => `<datalist id="${listId(a)}">${cat.certNames(a).map(x => `<option value="${esc(x)}">`).join("")}</datalist>`).join("")
+      + `<datalist id="cert-list-any">${cat.certNames("").map(x => `<option value="${esc(x)}">`).join("")}</datalist>` : "";
+    const row = (c, i) => {
+      const id = "f-d-certs-" + i + "-", known = agencies.includes(c.agency);
+      return `<div class="cert-row wide4" data-i="${i}">
+        <div class="field"><label for="${id}agency">Agency</label><select id="${id}agency" data-s="d" data-b="certs.${i}.agency" data-cert-agency="${i}">
+          <option value="">Choose</option>${agencies.map(a => `<option${a === c.agency ? " selected" : ""}>${esc(a)}</option>`).join("")}
+          ${c.agency && !known ? `<option selected>${esc(c.agency)}</option>` : ""}</select></div>
+        <div class="field"><label for="${id}level">Certification</label><input id="${id}level" data-s="d" data-b="certs.${i}.level" list="${listId(c.agency)}" value="${esc(c.level)}" placeholder="Pick or type a certification"></div>
+        <div class="field"><label for="${id}number">Cert number</label><input id="${id}number" data-s="d" data-b="certs.${i}.number" value="${esc(c.number)}"></div>
+        <div class="field"><label for="${id}date">Date certified</label><input id="${id}date" type="date" data-s="d" data-b="certs.${i}.date" value="${esc(c.date)}"></div>
+        <button type="button" class="btn small danger" data-act="rm-cert" data-i="${i}" aria-label="Remove this certification">Remove</button></div>`;
+    };
+    return `${lists}<div class="certs">${p.certs.length ? p.certs.map(row).join("") : `<p class="hint"><b>None added yet.</b></p>`}</div>
+      <div class="row-actions"><button class="btn" data-act="add-cert">+ Add a certification</button></div>`;
+  }
+  // <option>s for a course picker, grouped by agency from the course catalog. only: limit to these course ids.
+  function courseOptions(selected, only) {
+    const ids = (only || COURSE_ORDER).filter(id => COURSES[id]), opt = (id) => `<option value="${id}"${id === selected ? " selected" : ""}>${esc(COURSES[id].fullName || COURSES[id].name)}</option>`;
+    const cat = window.LDCatalog; if (!cat) return ids.map(opt).join("");
+    const used = new Set();
+    const groups = cat.byAgency().map(g => {
+      const list = g.courses.map(c => c.app).filter(id => ids.includes(id) && !used.has(id));
+      list.forEach(id => used.add(id));
+      return list.length ? `<optgroup label="${esc(g.agency)}">${list.map(opt).join("")}</optgroup>` : "";
+    }).join("");
+    const rest = ids.filter(id => !used.has(id));
+    return groups + (rest.length ? `<optgroup label="Other">${rest.map(opt).join("")}</optgroup>` : "");
   }
   function refreshPeople() {
     const p = curPerson();
@@ -634,7 +692,7 @@
   // ---------- program settings ----------
   function renderProgram() {
     const P = settingsProgram(), sc = settingsCourse();
-    const picker = COURSE_ORDER.length > 1 ? `<div class="field" style="max-width:320px"><label for="settings-course">Course</label><select id="settings-course">${COURSE_ORDER.map(id => `<option value="${id}"${id === sc.id ? " selected" : ""}>${esc(COURSES[id].fullName || COURSES[id].name)}</option>`).join("")}</select></div>` : "";
+    const picker = COURSE_ORDER.length > 1 ? `<div class="field" style="max-width:420px"><label for="settings-course">Course</label><select id="settings-course">${courseOptions(sc.id)}</select></div>` : "";
     return `<div class="rec-head"><h1>Settings — ${esc(sc.fullName || sc.name)}</h1></div>${picker}
       <p class="hint">These fields fill every ${esc(sc.name)} student's proposal. Changes apply to all of them.</p>
       <h2 class="sec">Cover</h2><div class="grid">
@@ -646,6 +704,10 @@
         ${inp("p", "feeLabel", "Course fee line in Course Investment", "text", "wide")}
         ${inp("p", "depositPurpose", "Deposit secures…")}${inp("p", "balanceDue", "Balance is…")}
         ${inp("p", "payment", "Payments accepted via")}${inp("p", "paymentUrl", "Payment link", "url")}</div>
+      <h2 class="sec">Course standards</h2>
+      <p class="hint">Shown on the All courses page${sc.basic ? " and in the proposal" : ""}. Prerequisites are listed below.</p><div class="grid">
+        ${inp("p", "minAge", "Minimum age")}${inp("p", "minDives", "Required open water dives", "text", "wide")}
+        ${inp("p", "maxDepth", "Maximum training depth", "text", "wide")}${inp("p", "standardsRef", "Source (e.g. NAUI Standards 2026, p. 159)", "text", "wide")}</div>
       <h2 class="sec">Contact</h2><div class="grid">${inp("p", "instructor", "Instructor")}${inp("p", "phone", "Phone", "tel")}${inp("p", "email", "Email", "email")}</div>
       <h2 class="sec">Program structure</h2>
       <p class="hint">A default date fills that ${esc(sc.unit.toLowerCase())} in for each new enrollment.</p>
@@ -717,9 +779,11 @@
       <dl class="facts">
         ${nameOf(s) ? `<dt>Prepared for</dt><dd>${esc(nameOf(s))}</dd>` : ""}
         <dt>Program</dt><dd>${esc(P.program)}</dd>
-        <dt>Format</dt><dd>${esc(P.format)}</dd>
+        ${P.format ? `<dt>Format</dt><dd>${esc(P.format)}</dd>` : ""}
         ${when ? `<dt>${P.hours ? "Dates &amp; times" : "Training dates"}</dt><dd>${esc(when)}</dd>` : (P.schedule ? `<dt>Schedule</dt><dd>${esc(P.schedule)}${P.hours ? " | " + esc(P.hours) : ""}</dd>` : "")}
         ${loc ? `<dt>${esc(c.siteLabel)}</dt><dd>${esc(loc)}</dd>` : ""}
+        ${c.basic && P.minDives ? `<dt>Open water dives</dt><dd>${esc(P.minDives)}</dd>` : ""}
+        ${c.basic && P.maxDepth ? `<dt>Maximum depth</dt><dd>${esc(P.maxDepth)}</dd>` : ""}
         <dt>Investment</dt><dd>${money(P.price)}</dd>
         ${P.payment ? `<dt>Payment</dt><dd>${linkOrText(P.payment, P.paymentUrl)}</dd>` : ""}
         <dt>Contact</dt><dd>${contact}</dd>
@@ -743,9 +807,9 @@
       <h2>Performance Expectations</h2>${P.expectationsCallout ? `<p class="callout">${esc(P.expectationsCallout)}</p>` : ""}${para(P.expectations)}
       ${P.commitment ? `<h2>Instructor Commitment</h2>${para(P.commitment)}` : ""}
 
-      <div class="pb"></div>${head("Required Skill Matrix")}
+      ${c.skills.length ? `<div class="pb"></div>${head("Required Skill Matrix")}
       <h2>${esc(P.matrixTitle || c.name + " — Required Skill Matrix")}</h2>${para(P.matrixIntro)}${key}
-      ${matrixDoc(c, c.skills, s.skills)}
+      ${matrixDoc(c, c.skills, s.skills)}` : ""}
 
       ${c.final.length ? `<div class="pb"></div>${head(c.finalTitle)}
       <h2>${esc(c.finalTitle)} Matrix</h2>${key}${matrixDoc(c, c.final, s.final)}` : ""}
@@ -810,6 +874,11 @@
     if (el.type === "number") v = el.value === "" ? "" : Number(el.value);
     setPath(src, el.dataset.b, v);
     if (el.classList.contains("st")) el.dataset.v = v;
+    if (el.dataset.certAgency != null && window.LDCatalog) {
+      // Suggest that agency's certifications in the row's Certification box.
+      const k = window.LDCatalog.CERT_AGENCIES.indexOf(v), lvl = document.getElementById("f-d-certs-" + el.dataset.certAgency + "-level");
+      if (lvl) lvl.setAttribute("list", "cert-list-" + (k < 0 ? "any" : k));
+    }
     const tr = el.closest("tr");
     if (tr && /^(skills|final)\.\d+\.m$/.test(el.dataset.b)) tr.classList.toggle("done", !!v);
     if (el.dataset.s === "p") { const d = document.getElementById("dep-amt"); if (d) d.textContent = money(settingsDeposit()); }
@@ -827,13 +896,18 @@
     switch (b.dataset.act) {
       case "add-person": { const n = blankPerson(); state.students.push(n); view.psel = n.id; view.mode = "students"; save(); render(); const f = document.getElementById("f-d-name"); if (f) f.focus(); break; }
       case "pick-person": view.psel = b.dataset.id; render(); break;
+      case "add-cert": { const p = curPerson(); if (!p) break; p.certs.push({ agency: "", level: "", number: "", date: "" }); save(); render();
+        const f = document.getElementById("f-d-certs-" + (p.certs.length - 1) + "-agency"); if (f) f.focus(); break; }
+      case "rm-cert": { const p = curPerson(); if (!p) break; p.certs.splice(i, 1); save(); render(); break; }
       case "open-person": view.psel = b.dataset.id; view.mode = "students"; render(); break;
       case "enroll": view.enrolling = true; render(); break;
       case "enroll-cancel": view.enrolling = false; render(); break;
       case "enroll-go": {
         const sel = document.getElementById("enroll-pick"), id = b.dataset.id || (sel && sel.value);
         if (!id) { toast("Choose a student first"); break; }
-        const course = b.dataset.course || (isCourse(view.mode) ? view.mode : "open-water");
+        const pc = document.getElementById("person-course");
+        const course = b.dataset.course === "?" ? (pc && pc.value) : b.dataset.course || (isCourse(view.mode) ? view.mode : "open-water");
+        if (!isCourse(course)) { toast("Choose a course first"); break; }
         const e = blankEnrollment(id, course); state.enrollments.push(e);
         view.mode = course; view.enrolling = false; view.sel = e.id; view.tab = "details"; save(); render(); toast("Enrolled in " + COURSES[course].name);
         break;
@@ -912,6 +986,9 @@
   // Shared helpers for add-ons loaded after this file (invoice.js, extra courses).
   window.LD = Object.assign(window.LD || {}, {
     COURSES, registerCourse: (def) => { registerCourse(def); adoptCourse(def.id); render(); },
+    // Many at once (the course catalog), drawing the page once.
+    registerCourses: (defs) => { defs.forEach(d => { registerCourse(d); adoptCourse(d.id); }); render(); },
+    defaultProgram: () => clone(DEFAULT_PROGRAM), courseOptions, isCourse, view: () => view,
     COURSE_ORDER, program: (id) => P({ course: id }), enrollInClass, addStudent, go,
     get state() { return state; }, save, render, toast, esc, money, fmtDate, billing, progress, owed, nameOf, personById
   });
