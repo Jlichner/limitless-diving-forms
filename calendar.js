@@ -243,6 +243,13 @@
       const courseId = L().COURSES[r.course] ? r.course : L().COURSE_ORDER[0];
       k = blank(courseId, r.dates[0]);
       k.dates = r.dates.slice();
+      if (/^offer-/.test(r.course)) {
+        // A coaching or tours listing: schedule it as that listing's calendar type (Tour, Event…), with its name as the title.
+        const o = await (window.LDOfferings ? window.LDOfferings.load() : Promise.resolve([])).then(list => list.find(x => "offer-" + x.id === r.course)).catch(() => null);
+        const nonCourse = types().filter(t => !t.course);
+        const t = nonCourse.find(x => x.id === (o && o.calType)) || nonCourse[0];
+        if (t) Object.assign(k, { type: t.id, course: "", title: r.course_name || (o && o.name) || "", time: "", location: "", price: "" });
+      }
       k.notes = r.notes ? "Requested by " + (r.student_name || r.student_email) + ": " + r.notes : "";
     }
     const { error } = await window.LDCloud.client.from("class_requests")
@@ -549,6 +556,6 @@
     }
   });
 
-  window.LDCalendar = { render, renderTypes };
+  window.LDCalendar = { render, renderTypes, types };
   L().render();
 })();
