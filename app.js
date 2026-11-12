@@ -366,14 +366,15 @@
     // Staff sign in with the Admin Log in button in the header (mode "staff", drawn by student-accounts.js).
     const groups = [
       [null, [["account", "Student log in"]]],
-      ["Classes", [["calendar", "Calendar"]]],
+      ["Classes", [["calendar", "Calendar"], ["available", "Available classes"]]],
       allowed("divemaster") && ["Records", [["students", "Students"]].concat(COURSE_ORDER.filter(id => !COURSES[id].basic).map(id => [id, COURSES[id].name]),
         window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
       allowed("instructor") && ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
     ].filter(Boolean);
     // A catalog course without its own nav entry lights up "All courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
-    const btn = ([m, l]) => m === "account" ? `<a class="navbtn account" href="account.html">${esc(l)}</a>` : `<button class="navbtn${on(m) ? " active" : ""}" data-mode="${m}"${on(m) ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
+    const LINKS = { account: "account.html", available: "available-classes.html" };  // separate public pages
+    const btn = ([m, l]) => LINKS[m] ? `<a class="navbtn ${m}" href="${LINKS[m]}">${esc(l)}</a>` : `<button class="navbtn${on(m) ? " active" : ""}" data-mode="${m}"${on(m) ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
     nav.innerHTML = groups.map(([g, items]) => (g ? `<span class="nav-group">${esc(g)}</span>` : "") + items.map(btn).join("")).join("");
   }
   function render() {

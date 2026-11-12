@@ -124,7 +124,47 @@
     { agency: "TDI", id: "tdi-intro-tech", name: "Intro to Technical Diving", std: null },
     { agency: "TDI", id: "tdi-dpv", name: "Technical Diver Propulsion Vehicle", std: null }
   ];
-  COURSES.forEach(c => { c.cert = c.cert || c.name; c.app = c.app || c.id; c.fullName = c.agency + " " + c.name; });
+
+  // Short course descriptions for the public "Available classes" page, written for students in our own words
+  // from the 2026 NAUI Standards and Policies Manual. Edit freely; a course without one shows only its standards.
+  const ABOUT = {
+    "naui-intro": "A first try at scuba in a pool, with an instructor right beside you. No certification, just a safe taste of breathing underwater, with an optional open water dive for ages 10 and up.",
+    "naui-tandem": "A guided scuba experience for non-divers. Your instructor stays in direct control the whole dive, so you can enjoy the underwater world before committing to a full course.",
+    "naui-sas": "Surface snorkeling with a supplied-air system, so you can float and breathe comfortably with your face in the water. A relaxed first step for anyone nervous about the water.",
+    "naui-skin": "Learn to dive with mask, fins and snorkel on a breath hold: equipment, breathing, surface dives and water safety. A great start for younger divers and future scuba students.",
+    "naui-scuba-diver": "An entry-level scuba certification for diving to 40 feet with a dive professional. A shorter path into the water that can later be upgraded to Open Water Scuba Diver.",
+    "naui-hookah": "Learn to dive on a surface-supplied (hookah) air system: how it works, how to dive it safely, and the skills to handle problems, to a maximum of 60 feet.",
+    "naui-adaptive": "Scuba training adapted for divers with physical or other challenges. Skills and pacing are adjusted to each student, with a buddy team trained to support them.",
+    "open-water": "The full scuba certification. Classroom, pool and four open water dives teach you to plan and make your own dives with a buddy to 60 feet, anywhere in the world.",
+    "naui-experienced": "For people who already dive but never earned a recognized certification. We review your skills and knowledge and certify you as an Open Water diver.",
+    "naui-refresher": "Been out of the water for a while? Review the key skills and safety knowledge in a pool session before getting back to open water diving.",
+    "naui-international": "Prepare to dive abroad: travel planning, local customs and regulations, and diving with operators in other countries.",
+    "naui-nitrox": "Learn to plan and dive with enriched air nitrox for longer no-decompression times, including oxygen limits, analyzing your own gas and choosing the right mix.",
+    "naui-aow": "The next step after Open Water. Six guided dives build real experience in navigation, night or limited visibility, and deep diving, plus three specialties you choose.",
+    "rescue": "Learn to prevent, recognize and handle diving emergencies: self-rescue, helping a tired or panicked diver, and bringing an unresponsive diver to safety. Many divers call it their favorite course.",
+    "naui-master": "NAUI's top recreational rating. Advanced theory and eight open water dives covering deep, navigation, night, search and recovery and more, for confident and capable divers.",
+    "naui-deep": "Plan and make dives deeper than 60 feet, down to 130 feet, while managing gas, narcosis and no-decompression limits.",
+    "naui-drysuit": "Stay warm in cold water. Learn to choose, use and care for a drysuit, control your buoyancy in it, and handle problems like a stuck inflator.",
+    "naui-night": "Dive after dark and in low visibility: lights, communication, navigation and staying together with your buddy.",
+    "naui-sar": "Find and bring up lost objects using search patterns, lift bags and good planning.",
+    "naui-archaeology": "An introduction to underwater archaeology: surveying, mapping and documenting sites, and the laws and ethics that protect them.",
+    "naui-imaging": "Take better underwater photos and video: camera handling, lighting, composition and protecting the reef while you shoot.",
+    "naui-hunter": "Hunt and collect responsibly: the regulations, safe techniques and conservation practices for game and specimen collecting.",
+    "naui-naturalist": "Learn about the plants, animals and ecosystems you see on every dive, and how to observe them without disturbing them.",
+    "naui-wreck": "Explore wrecks safely from the outside: research, planning, hazards, and surveying a wreck without entering it.",
+    "naui-ice": "Dive under the ice with a tended line, safety team and cold-water equipment. A specialty for experienced divers who want an unforgettable dive.",
+    "naui-dpv": "Learn to plan and ride a diver propulsion vehicle (scooter) safely, covering more distance with less effort.",
+    "naui-ai": "Your first leadership rating. Learn to assist NAUI Instructors in the classroom, pool and open water, and build the skills to become an instructor.",
+    "divemaster": "NAUI's professional dive leader rating. Learn to supervise and lead certified divers, assist with training, and organize dive activities.",
+    "naui-skin-instructor": "Become certified to teach skin diving (mask, fins and snorkel) courses on your own.",
+    "naui-tech-intro": "Your first step into technical diving: gas planning, equipment configuration and the skills tech divers rely on, within no-decompression limits.",
+    "naui-tech-deco": "Plan and make staged decompression dives to 150 feet using nitrox and oxygen-rich gases for decompression.",
+    "tdi-intro-tech": "TDI's introduction to technical diving: gas planning, equipment configuration, trim and the core skills behind technical diving.",
+    "tdi-dpv": "Use a diver propulsion vehicle on technical dives: rigging, trim, towing and handling problems on a scooter."
+  };
+  // Where to read the agency's own information about its courses.
+  const AGENCY_SITES = { "NAUI": "https://www.naui.org/", "NAUI Technical": "https://www.naui.org/", "TDI": "https://www.tdisdi.com/" };
+  COURSES.forEach(c => { c.cert = c.cert || c.name; c.app = c.app || c.id; c.fullName = c.agency + " " + c.name; c.about = c.about || ABOUT[c.id] || ""; });
 
   // Certifications people commonly hold that aren't on the course list (offered on every agency).
   const OTHER_CERTS = ["Divemaster", "Instructor", "First Aid / CPR", "Diving First Aid (DFA)", "Emergency Oxygen Provider (EO2)"];
@@ -142,5 +182,5 @@
     return base.concat(OTHER_CERTS.filter(x => !base.includes(x)));
   }
 
-  window.LDCatalog = { AGENCIES, CERT_AGENCIES, COURSES, byAgency, find, certNames };
+  window.LDCatalog = { AGENCIES, AGENCY_SITES, CERT_AGENCIES, COURSES, byAgency, find, certNames };
 })();

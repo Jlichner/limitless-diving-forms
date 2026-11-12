@@ -95,3 +95,27 @@
 .cal-upcoming li button { border: 1px solid var(--line); background: var(--surface-2); height: 100%; }
 .cal-upcoming li button:hover { border-color: var(--accent); }
 .cal-upcoming > .btn { align-self: flex-start; }
+
+/* ---------- Available classes (available-classes.html) ---------- */
+.course-group { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; }
+.course-group h2 { font-size: 24px; }
+.course-group p { margin: 0; color: var(--muted); font-size: 14px; }
+a.course-card { color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
+a.course-card:hover, a.course-card:focus-visible { border-color: var(--accent); transform: translateY(-1px); }
+.course-card .facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.course-card .facts span { font-size: 12px; font-weight: 700; letter-spacing: .04em; padding: 1px 9px; border-radius: 99px; background: var(--surface-2); color: var(--ink); }
+.course-card .facts .soon { background: var(--ok-bg); color: var(--ok); }
+.course-card .more { margin-top: auto; color: var(--accent); font-weight: 600; font-size: 14px; }
+.pub .back { color: var(--accent); font-weight: 600; text-decoration: none; }
+.pub > p { margin: 0; }
+.course-detail h2 { font-size: 22px; margin-bottom: 10px; }
+.course-facts { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; margin: 0; }
+.course-facts dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; padding-top: 3px; }
+.course-facts dd { margin: 0; }
+.course-facts ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.course-detail .src { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
+.course-dates { margin: 0 0 12px; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.course-dates span { font-family: var(--font-mono); font-size: 13px; }
+.course-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.course-actions .btn { text-decoration: none; }
+@media (max-width: 560px) { .course-facts { grid-template-columns: 1fr; gap: 2px; } .course-facts dd { margin-bottom: 8px; } }
