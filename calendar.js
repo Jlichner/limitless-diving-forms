@@ -7,7 +7,7 @@
 
   const L = () => window.LD;
   const G = () => window.LDCalGrid;
-  const v = { ym: null, sel: null, past: false, publish: false, reqs: null, reqsBusy: false, reqsErr: "" };
+  const v = { ym: null, sel: null, past: false, publish: false, reqs: null, reqsBusy: false, reqsErr: "", pub: null, pubBusy: false };
   const UPLOAD_URL = "https://github.com/jlichner/limitless-diving-forms/upload/main";
   const PUBLIC_URL = "https://jlichner.github.io/limitless-diving-forms/classes.html";
 
@@ -42,7 +42,11 @@
     if (!Array.isArray(s.eventTypes) || !s.eventTypes.length) s.eventTypes = JSON.parse(JSON.stringify(DEFAULT_TYPES));
     return s.eventTypes;
   }
-  function typeOf(k) { const t = types(); return t.find(x => x.id === (k.type || "class")) || t.find(x => x.course) || t[0]; }
+  function typeOf(k) {
+    // Entries from the published calendar carry their own type name (this browser may not have that type).
+    if (k.pub) return { id: k.type, name: k.typeName || "Class", course: !k.type || k.type === "class" || !!k.course, color: k.color };
+    const t = types(); return t.find(x => x.id === (k.type || "class")) || t.find(x => x.course) || t[0];
+  }
   function isCourseType(k) { return !!typeOf(k).course; }
 
   function cur() { return data().classes.find(k => k.id === v.sel) || null; }
@@ -50,11 +54,12 @@
   function courseName(k) { if (!isCourseType(k)) return ""; const c = course(k); return c ? (c.fullName || c.name) : k.course; }
   function titleOf(k) { return k.title || (isCourseType(k) ? courseName(k) : "Untitled " + typeOf(k).name.toLowerCase()); }
   function colorOf(k) {
+    if (k.pub && /^k\d$/.test(k.color || "")) return k.color;
     if (k.type && !isCourseType(k)) return /^k\d$/.test(typeOf(k).color || "") ? typeOf(k).color : "k5";
     const i = L().COURSE_ORDER.indexOf(k.course); return "k" + ((i < 0 ? 5 : i) % 6);
   }
   function roster(k) { return L().state.enrollments.filter(e => e.classId === k.id); }
-  function seatsLeft(k) { const n = Number(k.seats); return n > 0 ? Math.max(0, n - roster(k).length) : null; }
+  function seatsLeft(k) { if (k.pub) return k.seatsLeft == null ? null : Number(k.seatsLeft); const n = Number(k.seats); return n > 0 ? Math.max(0, n - roster(k).length) : null; }
   function isPast(k) { const last = G().lastDate(k.dates); return !!last && last < G().today(); }
   function sorted(list) { return list.slice().sort((a, b) => (G().firstDate(a.dates) || "9999").localeCompare(G().firstDate(b.dates) || "9999")); }
 
@@ -96,7 +101,43 @@
   // Dive Masters) sees a read-only month with published classes only. When online logins aren't set up
   // (no supabase-config.js values) the calendar stays open, as before. The database has the same rule.
   function canEdit() { const C = window.LDCloud; return !C || !C.configured || C.can("instructor"); }
-  function shown() { return canEdit() ? data().classes : data().classes.filter(k => k.published); }
+  // Visitors (and students and Dive Masters) see what was last published, read from the online calendar
+  // (or classes.json), not this browser's own copy: on their phone or computer that copy is empty.
+  function shown() {
+    if (canEdit()) return data().classes;
+    if (v.pub === null) { setTimeout(loadPublished, 0); return []; }
+    return v.pub;
+  }
+  async function loadPublished() {
+    if (v.pubBusy) return;
+    v.pubBusy = true;
+    let rows = null;
+    const C = window.LDCloud;
+    try {
+      if (C && C.configured) {
+        // Plain reads with the public key: anyone may read the published calendar (supabase/schema.sql).
+        const get = (path) => fetch(C.url + "/rest/v1/" + path, { headers: { apikey: C.key }, cache: "no-store" })
+          .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); });
+        const [set, list] = await Promise.all([get("calendar_settings?id=eq.1&select=id"), get("classes?select=*")]);
+        // Never published online yet: fall back to classes.json.
+        if (Array.isArray(set) && set.length) rows = (list || []).map(k => ({
+          id: k.id, type: k.event_type || "class", typeName: k.event_type_name || "Class", course: k.course, title: k.title,
+          color: k.color, dates: k.dates, time: k.time, location: k.location, seatsLeft: k.seats_left
+        }));
+      }
+    } catch (e) { console.warn("Online calendar not available:", e); }
+    if (!rows) {
+      try {
+        const r = await fetch("classes.json", { cache: "no-store" });
+        const d = r.ok ? await r.json() : {};
+        rows = Array.isArray(d.classes) ? d.classes : [];
+      } catch (e) { rows = []; }
+    }
+    v.pub = rows.map(k => Object.assign({}, k, { pub: true, published: true, type: k.type || "class",
+      dates: (Array.isArray(k.dates) ? k.dates : []).filter(x => G().parse(x)).sort() }));
+    v.pubBusy = false;
+    if (!canEdit() && L().view().mode === "calendar") rerender();
+  }
 
   // ---------- render ----------
   function render() {
@@ -145,7 +186,8 @@
       date: d, html: `<button class="req-tag request" data-cact="req-show" title="${esc("Requested: " + (r.course_name || r.course) + " by " + (r.student_name || r.student_email))}">Request: ${esc(r.student_name || r.student_email)}</button>`
     })));
     const used = L().COURSE_ORDER.filter(id => shown().some(k => isCourseType(k) && k.course === id));
-    const usedTypes = types().filter(t => !t.course && shown().some(k => typeOf(k) === t));
+    const usedTypes = edit ? types().filter(t => !t.course && shown().some(k => typeOf(k) === t))
+      : shown().filter(k => !isCourseType(k)).map(typeOf).filter((t, i, a) => a.findIndex(x => x.name === t.name) === i);
     const signedIn = C && C.user;
     const lockNote = `<p class="acct-note" style="margin-top:12px">Only Instructors and Admins can add or change classes.${signedIn ? ` You're logged in as ${esc(C.ROLE_NAMES[C.role] || "Student")}.` : ""}
         ${signedIn ? "" : `<button class="btn small" data-mode="staff">Admin Log in</button>`} Want a class on a certain day? <a href="request.html">Request a class</a>.</p>`;
@@ -158,7 +200,7 @@
       ${requestsBox()}
       ${G().month(v.ym, events, edit ? { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` } : {})}
       <div class="cal-legend">${used.map(id => `<span><i class="cal-dot ${colorOf({ course: id })}" aria-hidden="true"></i>${esc(L().COURSES[id].name)}</span>`).join("")}
-        ${usedTypes.map(t => `<span><i class="cal-dot ${colorOf({ type: t.id })}" aria-hidden="true"></i>${esc(t.name)}</span>`).join("")}
+        ${usedTypes.map(t => `<span><i class="cal-dot ${t.color && /^k\d$/.test(t.color) && !edit ? t.color : colorOf({ type: t.id })}" aria-hidden="true"></i>${esc(t.name)}</span>`).join("")}
         ${shown().some(k => !k.published) ? `<span><i class="cal-dot draft" aria-hidden="true"></i>Draft (not published)</span>` : ""}</div>
       ${edit ? `<p class="hint" style="margin-top:12px">Click a day to add a class, event, exploration or tour on it, or click an entry to edit it. Published entries appear on the public calendar after you publish.</p>` : lockNote}
       <div class="roster cal-upcoming" id="cal-list">${renderList()}</div>`;
@@ -210,7 +252,7 @@
     if (k) { data().classes.push(k); open(k.id); L().save(); L().go("calendar"); L().toast("Draft class made from the request. Enroll the student, then publish."); }
     else { rerender(); L().toast("Request declined"); }
   }
-  if (window.LDCloud) window.LDCloud.onChange(() => { v.reqs = null; v.reqsErr = ""; });
+  if (window.LDCloud) window.LDCloud.onChange(() => { v.reqs = null; v.reqsErr = ""; v.pub = null; });
 
   function f(path, label, type, extra) {
     const k = cur(), val = path.split(".").reduce((o, x) => (o == null ? undefined : o[x]), k), id = "cal-f-" + path.replace(/\./g, "-");
