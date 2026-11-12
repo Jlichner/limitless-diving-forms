@@ -125,3 +125,4 @@
 .sa-addrole select, .sa-row select, table.m select { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 @media (max-width: 760px) { .topbar { padding-top: 44px; } }
 a.navbtn { text-decoration: none; display: flex; align-items: center; }
+.pubnav a.home { display: inline-flex; align-items: center; gap: 6px; }
