@@ -10,6 +10,7 @@
   const main = document.getElementById("acct");
   // Agencies and certification suggestions come from the course catalog (catalog.js), which lists every NAUI, NAUI Technical and TDI course.
   const CAT = window.LDCatalog;
+  const STATES = ["AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","PR","VI","GU"];
   const AGENCIES = CAT ? CAT.CERT_AGENCIES : ["NAUI", "NAUI Technical", "TDI", "PADI", "SSI", "SDI", "RAID", "GUE", "NASE", "BSAC", "CMAS", "IANTD", "Other"];
   const listId = (a) => "cert-levels-" + (AGENCIES.indexOf(a) < 0 ? "any" : AGENCIES.indexOf(a));
   function certLists() {
@@ -124,7 +125,7 @@
     const mineIds = new Set(progress.map(r => r.summary && r.summary.classId).filter(Boolean));
     const t = G.today();
     const upcoming = classes.filter(k => !k.dates.length || G.lastDate(k.dates) >= t);
-    return `<section class="acct-hero"><div><span class="eyebrow">Signed in as ${esc(email)}</span>
+    return `<section class="acct-hero">${avatar("photo-sm")}<div class="acct-hero-text"><span class="eyebrow">Signed in as ${esc(email)}</span>
         <h1>${esc(profile.full_name ? "Welcome, " + profile.full_name.split(/\s+/)[0] : "Welcome")}</h1>
         <p class="hint">Keep these details current. Your instructor uses them for your course paperwork and in an emergency.</p></div>
         <button class="btn" data-act="signout">Sign out</button></section>
@@ -133,9 +134,19 @@
       <div class="acct-cols">
       <form class="panel acct-profile" id="profile-form" novalidate>${ROSE.replace("acct-rose", "watermark")}
         <h2 class="sec">Your details</h2>
+        <div class="photo-row">${avatar("photo-lg")}
+          <div><b>Profile photo</b><p class="hint">A clear, recent photo of your face helps your instructor and dive team know you on the boat or at the shore.</p>
+          <div class="row-actions"><label class="btn${view.photoBusy ? " is-busy" : ""}" for="photo-file">${view.photoBusy ? "Uploading…" : profile.photo_path ? "Change photo" : "Upload photo"}</label>
+            <input type="file" id="photo-file" accept="image/jpeg,image/png,image/webp,image/heic,image/*" class="sr-only"${view.photoBusy ? " disabled" : ""}>
+            ${profile.photo_path ? `<button type="button" class="btn danger" data-act="rm-photo">Remove</button>` : ""}</div></div></div>
         <div class="grid">${input("full_name", "Full name", "text", "wide", 'autocomplete="name" maxlength="200" required')}
-          <div class="field wide"><label for="p-address">Mailing address</label><textarea id="p-address" data-p="address" autocomplete="street-address" maxlength="500" rows="3">${esc(profile.address)}</textarea></div>
           ${input("phone", "Phone number", "tel", "", 'autocomplete="tel" maxlength="50"')}</div>
+        <h2 class="sec">Mailing address</h2>
+        <div class="grid addr">${input("street", "Street", "text", "wide", 'autocomplete="street-address" maxlength="200" placeholder="e.g. 12 Reef Rd, Apt 3"')}
+          ${input("city", "City", "text", "", 'autocomplete="address-level2" maxlength="100"')}
+          ${input("state", "State", "text", "", 'autocomplete="address-level1" maxlength="40" list="us-states"')}
+          ${input("zip", "Zip code", "text", "", 'autocomplete="postal-code" inputmode="numeric" maxlength="20" pattern="[0-9]{5}(-[0-9]{4})?"')}</div>
+        <datalist id="us-states">${STATES.map(x => `<option value="${x}">`).join("")}</datalist>
         <h2 class="sec">Emergency contact</h2>
         <div class="grid">${input("emergency_name", "Name", "text", "", 'maxlength="200"')}${input("emergency_relationship", "Relationship", "text", "", 'maxlength="100" placeholder="e.g. Spouse, parent"')}
           ${input("emergency_phone", "Phone number", "tel", "", 'maxlength="50"')}</div>
@@ -167,9 +178,66 @@
     main.innerHTML = renderAccount();
   }
 
+  // ---------- profile photo ----------
+  // The photo is in a private bucket, so it's shown through a short-lived signed link.
+  let photoUrl = "";
+  function initials() { return String(profile.full_name || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase() || "?"; }
+  function avatar(cls) {
+    return photoUrl ? `<img class="avatar ${cls}" src="${esc(photoUrl)}" alt="${esc(profile.full_name || "Your")} profile photo">`
+      : `<span class="avatar ${cls}" aria-hidden="true">${esc(initials())}</span>`;
+  }
+  async function loadPhoto() {
+    photoUrl = "";
+    if (!profile || !profile.photo_path) return;
+    const { data } = await window.LDCloud.client.storage.from("avatars").createSignedUrl(profile.photo_path, 3600);
+    photoUrl = (data && data.signedUrl) || "";
+  }
+  // Square-crop the picture to its center and shrink it to 512px, so uploads are small and quick.
+  function shrink(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        const s = Math.min(img.naturalWidth, img.naturalHeight), out = Math.min(512, s), cv = document.createElement("canvas");
+        cv.width = cv.height = out;
+        cv.getContext("2d").drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, out, out);
+        URL.revokeObjectURL(url);
+        cv.toBlob(b => b ? resolve(b) : reject(new Error("That picture couldn't be read.")), "image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file isn't a picture this browser can open. Try a JPG or PNG.")); };
+      img.src = url;
+    });
+  }
+  async function uploadPhoto(file) {
+    const C = window.LDCloud, sb = C.client, path = C.user.id + "/photo.jpg";
+    view.photoBusy = true; render();
+    try {
+      const blob = await shrink(file);
+      const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg", cacheControl: "60" });
+      if (up.error) throw up.error;
+      const r = await sb.from("student_profiles").update({ photo_path: path }).eq("id", C.user.id);
+      if (r.error) throw r.error;
+      profile.photo_path = path; await loadPhoto();
+      if (photoUrl) photoUrl += (photoUrl.includes("?") ? "&" : "?") + "v=" + Date.now();
+      toast("Photo saved");
+    } catch (err) { toast("Photo not saved: " + C.explain(err)); }
+    view.photoBusy = false; render();
+  }
+  async function removePhoto() {
+    const C = window.LDCloud, sb = C.client;
+    view.photoBusy = true; render();
+    try {
+      const rm = await sb.storage.from("avatars").remove([profile.photo_path]);
+      if (rm.error) throw rm.error;
+      const r = await sb.from("student_profiles").update({ photo_path: "" }).eq("id", C.user.id);
+      if (r.error) throw r.error;
+      profile.photo_path = ""; photoUrl = ""; toast("Photo removed");
+    } catch (err) { toast("Photo not removed: " + C.explain(err)); }
+    view.photoBusy = false; render();
+  }
+
   // ---------- data ----------
   function blankProfile(id) {
-    return { id, full_name: "", address: "", phone: "", emergency_name: "", emergency_relationship: "", emergency_phone: "", certifications: [] };
+    return { id, full_name: "", photo_path: "", address: "", street: "", city: "", state: "", zip: "", phone: "", emergency_name: "", emergency_relationship: "", emergency_phone: "", certifications: [] };
   }
   async function loadAll() {
     const C = window.LDCloud, sb = C.client, uid = C.user.id;
@@ -182,11 +250,14 @@
     if (p.error) loadError = "Your details couldn't be loaded: " + C.explain(p.error);
     profile = Object.assign(blankProfile(uid), p.data || {});
     if (!Array.isArray(profile.certifications)) profile.certifications = [];
+    // Saved before the address was split into parts: start Street with the old one-line address.
+    if (profile.address && !profile.street && !profile.city && !profile.state && !profile.zip) profile.street = profile.address.replace(/\s*\n\s*/g, ", ");
     // A brand-new account whose profile wasn't made at sign-up: start it with the name they gave.
     if (!p.data && !p.error) {
       profile.full_name = (C.user.user_metadata && C.user.user_metadata.full_name) || "";
       await sb.from("student_profiles").upsert(profileRow());
     }
+    try { await loadPhoto(); } catch (err) { photoUrl = ""; }
     progress = pr.error ? [] : pr.data || [];
     classes = cl.error ? [] : (cl.data || []).map(k => Object.assign({}, k, { dates: (Array.isArray(k.dates) ? k.dates : []).filter(x => G.parse(x)).sort() }))
       .sort((a, b) => (G.firstDate(a.dates) || "9999").localeCompare(G.firstDate(b.dates) || "9999"));
@@ -195,7 +266,10 @@
   function profileRow() {
     const clean = (s, n) => String(s || "").trim().slice(0, n);
     return {
-      id: profile.id, full_name: clean(profile.full_name, 200), address: clean(profile.address, 500), phone: clean(profile.phone, 50),
+      id: profile.id, full_name: clean(profile.full_name, 200), phone: clean(profile.phone, 50),
+      street: clean(profile.street, 200), city: clean(profile.city, 100), state: clean(profile.state, 40), zip: clean(profile.zip, 20),
+      // The one-line address the instructor's Students list and invoices use: "12 Reef Rd, Lakeside, PA 19000".
+      address: [clean(profile.street, 200), [clean(profile.city, 100), [clean(profile.state, 40), clean(profile.zip, 20)].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ").slice(0, 500),
       emergency_name: clean(profile.emergency_name, 200), emergency_relationship: clean(profile.emergency_relationship, 100), emergency_phone: clean(profile.emergency_phone, 50),
       certifications: profile.certifications
         .map(c => ({ agency: clean(c.agency, 60), level: clean(c.level, 120), number: clean(c.number, 60), date: G.parse(c.date) ? c.date : "" }))
@@ -215,6 +289,7 @@
         const f = document.getElementById("c-" + (profile.certifications.length - 1) + "-agency"); if (f) f.focus();
         dirty(); break;
       }
+      case "rm-photo": removePhoto(); break;
       case "rm-cert": profile.certifications.splice(Number(b.dataset.i), 1); render(); dirty(); break;
     }
   });
@@ -229,6 +304,13 @@
       // A new agency: suggest that agency's certifications.
       if (el.dataset.c === "agency") { const lvl = row.querySelector('[data-c="level"]'); if (lvl) lvl.setAttribute("list", listId(el.value)); }
     }
+  });
+
+  main.addEventListener("change", (e) => {
+    if (e.target.id !== "photo-file" || !e.target.files || !e.target.files[0]) return;
+    const f = e.target.files[0];
+    if (f.size > 25 * 1024 * 1024) { toast("That picture is too large. Please choose one under 25 MB."); return; }
+    uploadPhoto(f);
   });
 
   main.addEventListener("submit", async (e) => {

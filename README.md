@@ -24,7 +24,7 @@ A web app for Limitless Diving & Technical Training's courses: Open Water Diver 
 
 ## Student accounts
 
-Students can create their own account at `account.html` (the **Student log in** button links to it). On their account page they keep their **name, address, phone number, emergency contact (with phone) and current certifications** up to date, see the training progress you share with them, and see upcoming classes, with the ones they're enrolled in marked.
+Students can create their own account at `account.html` (the **Student log in** button links to it). On their account page they add a **profile photo** and keep their **name, mailing address (street, city, state, zip), phone number, emergency contact (with phone) and current certifications** up to date, see the training progress you share with them, and see upcoming classes, with the ones they're enrolled in marked.
 
 Staff use the **Admin Log in** button in the header (next to the dive flag). Instructors and Admins sign in there to:
 
@@ -61,6 +61,12 @@ Your course records, invoices and settings in this app still live only in the br
 6. In the app, click **Admin Log in** and sign in with that account. Give Dive Masters and Instructors their roles under **Staff and roles** (they sign up as students first). Send students the link shown there.
 
 Supabase sends the sign-up and password emails itself. Its built-in email is limited to a few emails an hour, which is fine to start. If many students sign up at once, add your own email sender under **Authentication → Emails → SMTP Settings**.
+
+### Updating the database after an app update
+
+When an update changes `supabase/schema.sql` (for example, the split mailing address and profile photos), copy the whole file into **SQL Editor → New query** again and click **Run**. It's safe to run any number of times and keeps existing accounts and data.
+
+Profile photos are kept in a private storage bucket called `avatars`, which the schema creates. Students can only add, change or remove their own photo, and only staff (Dive Master and up) can see other people's photos. Photos are cropped square and shrunk to 512px before upload.
 
 ### The class calendar, online
 

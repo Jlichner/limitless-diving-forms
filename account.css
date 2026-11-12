@@ -126,3 +126,20 @@
 @media (max-width: 760px) { .topbar { padding-top: 44px; } }
 a.navbtn { text-decoration: none; display: flex; align-items: center; }
 .pubnav a.home { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Profile photos */
+.avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+  background: linear-gradient(160deg, var(--head-1, #0f6a9e), var(--head-3, #08345a)); color: #e6f4f5; font-family: var(--font-display); font-weight: 700;
+  border: 3px solid var(--surface); box-shadow: 0 0 0 2px var(--shallows); }
+.avatar.photo-lg { width: 112px; height: 112px; font-size: 38px; }
+.avatar.photo-sm { width: 56px; height: 56px; font-size: 20px; }
+.photo-row { display: flex; gap: 18px; align-items: center; margin-bottom: 18px; }
+.photo-row .hint { margin: 2px 0 0; }
+.photo-row .row-actions { margin-top: 8px; }
+.photo-row label.btn { cursor: pointer; }
+.photo-row input[type=file]:focus-visible + .btn, .photo-row label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.is-busy { opacity: .6; cursor: progress; }
+.acct-hero { align-items: center; }
+.acct-hero-text { margin-right: auto; }
+.sa-who { display: flex; gap: 12px; align-items: center; margin-bottom: 4px; }
+@media (max-width: 520px) { .photo-row { flex-direction: column; align-items: flex-start; } }

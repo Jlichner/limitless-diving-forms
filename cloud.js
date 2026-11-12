@@ -41,6 +41,8 @@
       if (/already registered|already been registered/i.test(m)) return "There's already an account with that email. Try signing in, or reset your password.";
       if (/password should be|weak password/i.test(m)) return "Please choose a longer password (at least 8 characters).";
       if (/rate limit|too many/i.test(m)) return "Too many tries. Please wait a few minutes and try again.";
+      if (/PGRST204|could not find the .* column|column .* does not exist/i.test(m)) return "The database needs a quick update first. Ask your instructor to run the latest supabase/schema.sql.";
+      if (/bucket not found/i.test(m)) return "Photo storage isn't set up yet. Ask your instructor to run the latest supabase/schema.sql.";
       if (/failed to fetch|network/i.test(m)) return "Couldn't reach the server. Check your connection and try again.";
       return m || "Something went wrong. Please try again.";
     }

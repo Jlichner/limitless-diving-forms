@@ -74,7 +74,11 @@ $$;
 create table if not exists public.student_profiles (
   id                     uuid primary key references auth.users (id) on delete cascade,
   full_name              text not null default '',
-  address                text not null default '',
+  address                text not null default '',   -- the whole mailing address on one line, built from the four parts below
+  street                 text not null default '',
+  city                   text not null default '',
+  state                  text not null default '',
+  zip                    text not null default '',
   phone                  text not null default '',
   emergency_name         text not null default '',
   emergency_relationship text not null default '',
@@ -90,6 +94,20 @@ create table if not exists public.student_profiles (
   )
 );
 alter table public.student_profiles enable row level security;
+
+-- Mailing address in parts (added after the first version; safe to run again).
+alter table public.student_profiles add column if not exists street text not null default '';
+alter table public.student_profiles add column if not exists city   text not null default '';
+alter table public.student_profiles add column if not exists state  text not null default '';
+alter table public.student_profiles add column if not exists zip    text not null default '';
+-- Profile photo: the file's path in the private "avatars" storage bucket (see the end of this file).
+alter table public.student_profiles add column if not exists photo_path text not null default '';
+alter table public.student_profiles drop constraint if exists student_profiles_address_parts;
+alter table public.student_profiles drop constraint if exists student_profiles_photo_own_folder;
+alter table public.student_profiles add constraint student_profiles_photo_own_folder
+  check (photo_path = '' or photo_path like id::text || '/%');
+alter table public.student_profiles add constraint student_profiles_address_parts
+  check (length(street) <= 200 and length(city) <= 100 and length(state) <= 40 and length(zip) <= 20);
 
 drop trigger if exists student_profiles_touch on public.student_profiles;
 create trigger student_profiles_touch before update on public.student_profiles
@@ -128,11 +146,13 @@ create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
 
 -- Staff's list of student accounts, with each student's sign-in email (which lives in auth.users).
+drop function if exists public.student_accounts();
 create or replace function public.student_accounts()
 returns table (
   id uuid, email text, full_name text, address text, phone text,
   emergency_name text, emergency_relationship text, emergency_phone text,
-  certifications jsonb, created_at timestamptz, updated_at timestamptz, email_confirmed boolean
+  certifications jsonb, created_at timestamptz, updated_at timestamptz, email_confirmed boolean,
+  photo_path text
 )
 language plpgsql stable security definer set search_path = ''
 as $$
@@ -143,7 +163,8 @@ begin
   return query
     select p.id, u.email::text, p.full_name, p.address, p.phone,
            p.emergency_name, p.emergency_relationship, p.emergency_phone,
-           p.certifications, p.created_at, p.updated_at, u.email_confirmed_at is not null
+           p.certifications, p.created_at, p.updated_at, u.email_confirmed_at is not null,
+           p.photo_path
     from public.student_profiles p
     join auth.users u on u.id = p.id
     where not exists (select 1 from public.staff_roles r where r.user_id = p.id)
@@ -283,3 +304,31 @@ grant select on public.classes, public.calendar_settings to anon;
 grant select on public.staff_roles to authenticated;
 grant select, insert, update on public.student_profiles to authenticated;
 grant select, insert, update, delete on public.student_progress, public.classes, public.calendar_settings to authenticated;
+
+-- ---------- profile photos (Supabase Storage) ----------
+-- A private bucket: photos are never public. Each student's photo lives in a folder named after their
+-- account id ("<id>/photo.jpg"). Students upload, replace and remove only their own; staff can view all.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', false, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Photos: students see their own, staff see all" on storage.objects;
+create policy "Photos: students see their own, staff see all" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'avatars' and ((storage.foldername(name))[1] = (select auth.uid())::text or (select public.has_role('divemaster'))));
+
+drop policy if exists "Photos: students add their own" on storage.objects;
+create policy "Photos: students add their own" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Photos: students replace their own" on storage.objects;
+create policy "Photos: students replace their own" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text)
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+drop policy if exists "Photos: students remove their own" on storage.objects;
+create policy "Photos: students remove their own" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text);
