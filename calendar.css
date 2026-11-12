@@ -158,3 +158,18 @@ a.course-card:hover, a.course-card:focus-visible { border-color: var(--accent); 
 .cal-reqs .req-acts { flex: 0 1 380px; }
 .cal-reqs .req-acts input { width: 100%; flex-basis: 100%; }
 .cal-reqs .req-acts { justify-content: flex-start; } .cal-reqs .req-acts .btn { flex: 0 0 auto; }
+
+/* ---------- Nitrox calculator (nitrox.html) ---------- */
+.nx-settings { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px 18px; }
+.nx-settings .field { min-width: 160px; }
+.nx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 14px; }
+.nx-card { display: flex; flex-direction: column; gap: 10px; }
+.nx-card h2 { font-size: 22px; }
+.nx-card .hint { margin: 0; }
+.nx-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
+.nx-result { display: flex; flex-direction: column; gap: 4px; margin-top: auto; padding: 12px 14px; border-radius: 10px; background: var(--accent-soft); border-left: 4px solid var(--accent); }
+.nx-result .nx-main { font-family: var(--font-display); font-size: 30px; line-height: 1.1; color: var(--ink); }
+.nx-result .nx-sub { font-size: 14px; color: var(--ink); }
+.nx-result.warn { background: var(--ip-bg); border-left-color: var(--ip); }
+.nx-result.bad { background: var(--bad-bg); border-left-color: var(--bad); }
+.nx-note { font-size: 14px; color: var(--muted); max-width: 75ch; margin: 0; }
