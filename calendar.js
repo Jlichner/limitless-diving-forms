@@ -108,6 +108,36 @@
     if (v.pub === null) { setTimeout(loadPublished, 0); return []; }
     return v.pub;
   }
+  // Classes are kept in the browser they were made in. When an Instructor opens the calendar in another
+  // browser (Brave, a phone, a new computer), published entries that aren't in this browser are listed here
+  // so they can be copied in, and so publishing from here doesn't take them off the public calendar.
+  function missingHere() {
+    if (!canEdit()) return [];
+    if (v.pub === null) { setTimeout(loadPublished, 0); return []; }
+    const have = new Set(data().classes.map(k => k.id));
+    return v.pub.filter(p => !have.has(p.id));
+  }
+  function copyPublishedHere() {
+    const list = missingHere(), t = types();
+    list.forEach(p => {
+      const type = p.type || "class";
+      if (!t.some(x => x.id === type)) t.push({ id: type, name: p.typeName || "Event", about: "", course: false, color: /^k\d$/.test(p.color || "") ? p.color : "" });
+      data().classes.push({
+        id: p.id, type, course: p.course || "", title: p.title || "", dates: p.dates.slice(), time: p.time || "", location: p.location || "",
+        price: p.price == null || p.price === "" ? "" : Number(p.price), seats: Number(p.seats) > 0 ? Number(p.seats) : "", notes: p.notes || "",
+        published: true, created: new Date().toISOString()
+      });
+    });
+    L().save(); rerender();
+    L().toast(list.length + " published entr" + (list.length === 1 ? "y" : "ies") + " copied into this browser.");
+  }
+  function missingNote() {
+    const m = missingHere(); if (!m.length) return "";
+    return `<p class="acct-note" style="margin:0 0 12px"><b>${m.length} published entr${m.length === 1 ? "y is" : "ies are"} not saved in this browser</b>
+      (${L().esc(m.slice(0, 3).map(titleOf).join(", ") + (m.length > 3 ? "…" : ""))}). Your calendar is kept in the browser you made it in, so another browser
+      or device starts without it. Publishing from here would take ${m.length === 1 ? "it" : "them"} off the public calendar.
+      <button class="btn small" data-cact="copy-pub">Copy into this browser</button></p>`;
+  }
   async function loadPublished() {
     if (v.pubBusy) return;
     v.pubBusy = true;
@@ -122,7 +152,8 @@
         // Never published online yet: fall back to classes.json.
         if (Array.isArray(set) && set.length) rows = (list || []).map(k => ({
           id: k.id, type: k.event_type || "class", typeName: k.event_type_name || "Class", course: k.course, title: k.title,
-          color: k.color, dates: k.dates, time: k.time, location: k.location, seatsLeft: k.seats_left
+          color: k.color, dates: k.dates, time: k.time, location: k.location, seatsLeft: k.seats_left,
+          price: k.price, seats: k.seats, notes: k.notes
         }));
       }
     } catch (e) { console.warn("Online calendar not available:", e); }
@@ -136,7 +167,7 @@
     v.pub = rows.map(k => Object.assign({}, k, { pub: true, published: true, type: k.type || "class",
       dates: (Array.isArray(k.dates) ? k.dates : []).filter(x => G().parse(x)).sort() }));
     v.pubBusy = false;
-    if (!canEdit() && L().view().mode === "calendar") rerender();
+    if (L().view().mode === "calendar" && !v.sel) rerender();
   }
 
   // ---------- render ----------
@@ -197,6 +228,7 @@
         <div class="cal-nav"><button class="btn" data-cact="month" data-n="-1" aria-label="Previous month">‹</button>
         <button class="btn" data-cact="month" data-n="0">Today</button>
         <button class="btn" data-cact="month" data-n="1" aria-label="Next month">›</button></div></div>
+      ${edit ? missingNote() : ""}
       ${requestsBox()}
       ${G().month(v.ym, events, edit ? { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` } : {})}
       <div class="cal-legend">${used.map(id => `<span><i class="cal-dot ${colorOf({ course: id })}" aria-hidden="true"></i>${esc(L().COURSES[id].name)}</span>`).join("")}
@@ -328,6 +360,7 @@
       ? `<textarea id="cal-s-${k}" data-cs="${k}">${esc(s[k])}</textarea>` : `<input id="cal-s-${k}" type="${type || "text"}" data-cs="${k}" value="${esc(s[k])}">`}</div>`;
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Public calendar</span><h1>Publish your classes</h1></div></div>
       <p class="hint">The public calendar page shows the classes you mark <b>Show on the public calendar</b> that haven't ended yet: the course, dates, time, location, price, open seats and description. Student names and records are never included.</p>
+      ${missingNote()}
       <h2 class="sec">1. Check what goes out</h2>
       ${d.classes.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Class</th><th>Dates</th><th>Price</th><th>Seats open</th></tr></thead><tbody>
         ${d.classes.map(k => `<tr><td><i class="cal-dot ${k.color}" aria-hidden="true"></i> ${esc(k.title)}</td><td>${esc(G().range(k.dates) || "TBD")}</td>
@@ -384,7 +417,7 @@
       if (up.error) throw up.error;
     }
     if (stale.length) { const del = await sb.from("classes").delete().in("id", stale); if (del.error) throw del.error; }
-    S().publishedOnline = d.updated; L().save();
+    S().publishedOnline = d.updated; v.pub = null; L().save();
     return rows.length;
   }
 
@@ -543,6 +576,7 @@
         break;
       }
       case "download": download(); break;
+      case "copy-pub": copyPublishedHere(); break;
       case "req-show": { const x = document.getElementById("cal-reqs"); if (x) x.scrollIntoView({ behavior: "smooth", block: "start" }); break; }
       case "req-schedule": b.disabled = true; await answerRequest(b.dataset.id, "scheduled"); break;
       case "req-decline": b.disabled = true; await answerRequest(b.dataset.id, "declined"); break;
