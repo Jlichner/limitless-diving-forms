@@ -239,3 +239,46 @@ span.cal-ev:hover { filter: none; }
 .dt6-links .btn.primary { background: #c9a24a; border-color: #c9a24a; color: #04080b; }
 .dt6-links .btn:not(.primary) { background: transparent; color: #e9dcc0; border-color: #8a6d2a; }
 @media (max-width: 760px) { .dt6-panel { grid-template-columns: minmax(0, 1fr); padding: 18px; gap: 18px; } .dt6-logo { max-width: 360px; margin: 0 auto; } }
+
+/* Members-only gate (members-only.js) on the Tools pages */
+.members-gate { display: grid; }
+.members-gate[hidden], main[hidden] { display: none !important; }
+.gate-card { max-width: 620px; margin: 24px auto; padding: 28px; text-align: center; }
+.gate-card h1 { font-size: clamp(26px, 4.5vw, 36px); margin: 6px 0 10px; }
+.gate-card p { color: var(--muted); }
+.gate-card .row-actions { justify-content: center; margin-top: 16px; }
+
+/* Diving Physics – Made Simple (diving-physics.js) */
+#physics { display: grid; gap: 18px; }
+.pm-toc { display: grid; gap: 6px; }
+.pm-toc ol { margin: 0; padding-left: 22px; columns: 2 260px; column-gap: 28px; }
+.pm-toc li { margin: 2px 0; }
+.pm-score { font-weight: 600; color: var(--accent); }
+.pm-score:empty { display: none; }
+.pm-part { scroll-margin-top: 16px; }
+.pm-part p, .pm-part ul { max-width: 72ch; }
+.pm-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.pm-head h2 { margin: 0; font-size: clamp(20px, 3.4vw, 26px); }
+.pm-num { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--thermo); color: #fff; font-family: var(--font-mono); font-weight: 600; }
+.pm-rule { background: var(--accent-soft); border-left: 4px solid var(--shallows); padding: 8px 12px; border-radius: 6px; }
+.pm-why { border-top: 1px dashed var(--line); padding-top: 10px; }
+.pm-quiz { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.pm-q { margin: 0 0 8px; }
+.pm-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.pm-opts .btn.pm-right { background: var(--ok-bg); border-color: var(--ok-mark); color: var(--ok); }
+.pm-opts .btn.pm-wrong { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); }
+.pm-fb { margin: 8px 0 0; font-weight: 600; min-height: 1.4em; }
+.pm-fb.ok { color: var(--ok); } .pm-fb.bad { color: var(--bad); }
+.pm-sim { margin: 14px 0; padding: 14px; border-radius: 12px; background: linear-gradient(180deg, #d8f1f4 0%, #2c6c7c 100%); color: #06222d; }
+.pm-sim-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.pm-sim-ctl input[type=range] { flex: 1 1 220px; accent-color: #0b4a5a; }
+.pm-units { display: inline-flex; border: 1px solid #0b4a5a; border-radius: 999px; overflow: hidden; }
+.pm-units button { border: 0; background: transparent; padding: 4px 12px; cursor: pointer; color: inherit; font: inherit; }
+.pm-units button.on { background: #0b4a5a; color: #fff; }
+.pm-sim-view { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 10px; }
+.pm-sim-view svg { width: 140px; height: 140px; }
+.pm-ghost { fill: none; stroke: rgba(255, 255, 255, .7); stroke-dasharray: 4 5; stroke-width: 2; }
+.pm-ball { fill: rgba(255, 255, 255, .85); stroke: #0b4a5a; stroke-width: 2; transition: r .15s ease; }
+.pm-sim-view dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; }
+.pm-sim-view dt { font-weight: 600; } .pm-sim-view dd { margin: 0; font-family: var(--font-mono); }
+.pm-sim .hint { color: #fff; margin: 10px 0 0; }
