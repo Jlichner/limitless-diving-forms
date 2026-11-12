@@ -26,11 +26,33 @@
     return st;
   }
   const S = () => data().calendarSettings;
+
+  // ---------- calendar entry types (Settings → Calendar event types) ----------
+  // Each entry on the calendar has a type. A type marked "course" (Class) links the entry to a course, so
+  // students can be enrolled; other types (Event, Exploration, Tour…) have just a title. Staff edit the list.
+  const DEFAULT_TYPES = [
+    { id: "class", name: "Class", about: "Training course. Students enroll and get the dates on their course record.", course: true, color: "" },
+    { id: "event", name: "Event", about: "Club events, talks, socials and other get-togethers.", course: false, color: "k6" },
+    { id: "exploration", name: "Exploration", about: "Team diving.", course: false, color: "k7" },
+    { id: "tour", name: "Tour", about: "Dive Master led.", course: false, color: "k8" }
+  ];
+  const TYPE_COLORS = [["k6", "Blue"], ["k7", "Amber"], ["k8", "Olive"], ["k9", "Crimson"], ["k0", "Reef teal"], ["k1", "Rust"], ["k2", "Violet"], ["k3", "Green"], ["k4", "Magenta"], ["k5", "Slate"]];
+  function types() {
+    const s = S();
+    if (!Array.isArray(s.eventTypes) || !s.eventTypes.length) s.eventTypes = JSON.parse(JSON.stringify(DEFAULT_TYPES));
+    return s.eventTypes;
+  }
+  function typeOf(k) { const t = types(); return t.find(x => x.id === (k.type || "class")) || t.find(x => x.course) || t[0]; }
+  function isCourseType(k) { return !!typeOf(k).course; }
+
   function cur() { return data().classes.find(k => k.id === v.sel) || null; }
-  function course(k) { return L().COURSES[k.course] || null; }
-  function courseName(k) { const c = course(k); return c ? (c.fullName || c.name) : k.course; }
-  function titleOf(k) { return k.title || courseName(k); }
-  function colorOf(k) { const i = L().COURSE_ORDER.indexOf(k.course); return "k" + ((i < 0 ? 5 : i) % 6); }
+  function course(k) { return isCourseType(k) ? L().COURSES[k.course] || null : null; }
+  function courseName(k) { if (!isCourseType(k)) return ""; const c = course(k); return c ? (c.fullName || c.name) : k.course; }
+  function titleOf(k) { return k.title || (isCourseType(k) ? courseName(k) : "Untitled " + typeOf(k).name.toLowerCase()); }
+  function colorOf(k) {
+    if (k.type && !isCourseType(k)) return /^k\d$/.test(typeOf(k).color || "") ? typeOf(k).color : "k5";
+    const i = L().COURSE_ORDER.indexOf(k.course); return "k" + ((i < 0 ? 5 : i) % 6);
+  }
   function roster(k) { return L().state.enrollments.filter(e => e.classId === k.id); }
   function seatsLeft(k) { const n = Number(k.seats); return n > 0 ? Math.max(0, n - roster(k).length) : null; }
   function isPast(k) { const last = G().lastDate(k.dates); return !!last && last < G().today(); }
@@ -46,7 +68,7 @@
     });
     return {
       id: "k" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      course: c.id, title: "", dates, time: pr.hours || "", location: pr.location || "",
+      type: "class", course: c.id, title: "", dates, time: pr.hours || "", location: pr.location || "",
       price: pr.price === "" || pr.price == null ? "" : Number(pr.price), seats: 6, notes: "", published: false,
       created: new Date().toISOString()
     };
@@ -56,7 +78,7 @@
   function publicData() {
     const s = S(), t = G().today();
     const classes = sorted(data().classes.filter(k => k.published && (G().lastDate(k.dates) || t) >= t)).map(k => ({
-      id: k.id, course: k.course, courseName: courseName(k), title: titleOf(k), color: colorOf(k),
+      id: k.id, type: typeOf(k).id, typeName: typeOf(k).name, course: isCourseType(k) ? k.course : "", courseName: courseName(k), title: titleOf(k), color: colorOf(k),
       dates: (k.dates || []).filter(Boolean).sort(), time: k.time || "", location: k.location || "",
       price: k.price === "" || k.price == null ? null : Number(k.price),
       seats: Number(k.seats) > 0 ? Number(k.seats) : null, seatsLeft: seatsLeft(k), notes: k.notes || ""
@@ -94,16 +116,16 @@
     const item = (k) => {
       const left = seatsLeft(k), n = roster(k).length;
       if (!edit) return `<li><div class="cal-ro"><span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
-        <span class="meta">${esc(G().range(k.dates) || "No dates yet")}</span>
+        <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
         <span class="meta">${left === null ? "" : left ? left + " open seat" + (left === 1 ? "" : "s") : "Full"}</span></div></li>`;
       return `<li><button data-cact="pick" data-id="${k.id}" class="${k.id === v.sel && !v.publish ? "sel" : ""}">
         <span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
-        <span class="meta">${esc(G().range(k.dates) || "No dates yet")}</span>
-        <span class="meta">${n} enrolled${left === null ? "" : " · " + (left ? left + " open" : "full")}
+        <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
+        <span class="meta">${esc([isCourseType(k) ? n + " enrolled" : "", left === null ? "" : left ? left + " open" : "full"].filter(Boolean).join(" · "))}
           <span class="cal-status${k.published ? " on" : ""}">${k.published ? "Published" : "Draft"}</span></span></button></li>`;
     };
-    return `<h2 class="sec">Upcoming classes</h2>
-      <ul>${up.map(item).join("") || `<li class="meta" style="padding:8px 10px">No upcoming classes.</li>`}</ul>
+    return `<h2 class="sec">Coming up</h2>
+      <ul>${up.map(item).join("") || `<li class="meta" style="padding:8px 10px">Nothing on the calendar yet.</li>`}</ul>
       ${past.length ? `<button class="btn small" data-cact="past" aria-expanded="${v.past}">${v.past ? "Hide" : "Show"} past classes (${past.length})</button>
         ${v.past ? `<ul>${past.map(item).join("")}</ul>` : ""}` : ""}`;
   }
@@ -122,12 +144,13 @@
     (v.reqs || []).forEach(r => r.dates.forEach(d => events.push({
       date: d, html: `<button class="req-tag request" data-cact="req-show" title="${esc("Requested: " + (r.course_name || r.course) + " by " + (r.student_name || r.student_email))}">Request: ${esc(r.student_name || r.student_email)}</button>`
     })));
-    const used = L().COURSE_ORDER.filter(id => shown().some(k => k.course === id));
+    const used = L().COURSE_ORDER.filter(id => shown().some(k => isCourseType(k) && k.course === id));
+    const usedTypes = types().filter(t => !t.course && shown().some(k => typeOf(k) === t));
     const signedIn = C && C.user;
     const lockNote = `<p class="acct-note" style="margin-top:12px">Only Instructors and Admins can add or change classes.${signedIn ? ` You're logged in as ${esc(C.ROLE_NAMES[C.role] || "Student")}.` : ""}
         ${signedIn ? "" : `<button class="btn small" data-mode="staff">Admin Log in</button>`} Want a class on a certain day? <a href="request.html">Request a class</a>.</p>`;
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Class calendar</span><h1>${esc(G().monthName(v.ym))}</h1></div>
-        ${edit ? `<div class="cal-tools no-print"><button class="btn primary" data-cact="new">+ New class</button>
+        ${edit ? `<div class="cal-tools no-print"><button class="btn primary" data-cact="new">+ Add to calendar</button>
         <button class="btn" data-cact="publish">Publish calendar…</button></div>` : ""}
         <div class="cal-nav"><button class="btn" data-cact="month" data-n="-1" aria-label="Previous month">‹</button>
         <button class="btn" data-cact="month" data-n="0">Today</button>
@@ -135,8 +158,9 @@
       ${requestsBox()}
       ${G().month(v.ym, events, edit ? { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` } : {})}
       <div class="cal-legend">${used.map(id => `<span><i class="cal-dot ${colorOf({ course: id })}" aria-hidden="true"></i>${esc(L().COURSES[id].name)}</span>`).join("")}
+        ${usedTypes.map(t => `<span><i class="cal-dot ${colorOf({ type: t.id })}" aria-hidden="true"></i>${esc(t.name)}</span>`).join("")}
         ${shown().some(k => !k.published) ? `<span><i class="cal-dot draft" aria-hidden="true"></i>Draft (not published)</span>` : ""}</div>
-      ${edit ? `<p class="hint" style="margin-top:12px">Click a day to add a class on it, or a class to edit it and enroll students. Published classes appear on the public calendar after you publish.</p>` : lockNote}
+      ${edit ? `<p class="hint" style="margin-top:12px">Click a day to add a class, event, exploration or tour on it, or click an entry to edit it. Published entries appear on the public calendar after you publish.</p>` : lockNote}
       <div class="roster cal-upcoming" id="cal-list">${renderList()}</div>`;
   }
 
@@ -202,32 +226,37 @@
     const unit = c ? c.unit : "Day";
     const enrolledIds = new Set(ros.map(e => e.studentId));
     const avail = L().state.students.filter(p => !enrolledIds.has(p.id)).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-    const dateLabel = (i) => c && c.unit === "Day" && c.schedule[i] ? c.schedule[i] : (i === 0 ? "Start date" : unit + " " + (i + 1));
+    const ty = typeOf(k), isClass = !!ty.course;
+    const dateLabel = (i) => !isClass ? (k.dates.length > 1 ? "Day " + (i + 1) : "Date") : c && c.unit === "Day" && c.schedule[i] ? c.schedule[i] : (i === 0 ? "Start date" : unit + " " + (i + 1));
+    const typeSel = `<div class="field"><label for="cal-type">Type</label><select id="cal-type"${ros.length ? " disabled" : ""}>
+        ${types().map(t => `<option value="${esc(t.id)}"${t === ty ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+        ${ros.length ? `<span class="hint" style="margin:0">Remove the students to change the type.</span>` : `<span class="hint" style="margin:0">${esc(ty.about || "")}</span>`}</div>`;
     return `<div class="row-actions" style="margin:0 0 10px"><button class="btn small" data-cact="back">‹ Calendar</button></div>
-      <div class="rec-head"><div class="who"><span class="eyebrow"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i> ${esc(courseName(k))}</span>
+      <div class="rec-head"><div class="who"><span class="eyebrow"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i> ${esc(isClass ? courseName(k) : ty.name)}</span>
         <h1 id="cal-title">${esc(titleOf(k))}</h1><span class="sub" id="cal-range">${esc(G().range(k.dates) || "No dates yet")}</span></div>
-        <div class="stats"><div class="stat"><b>${ros.length}</b><span>Enrolled</span></div>
+        <div class="stats">${isClass ? `<div class="stat"><b>${ros.length}</b><span>Enrolled</span></div>` : ""}
           <div class="stat"><b id="cal-left">${left === null ? "—" : left}</b><span>Seats open</span></div></div></div>
 
       <div class="cal-pub${k.published ? " on" : ""}"><label class="chk"><input type="checkbox" data-ck="published"${k.published ? " checked" : ""}> Show on the public calendar</label>
-        <span class="hint" style="margin:0">${k.published ? "Published classes go out the next time you use Publish calendar." : "Drafts stay private to this app."}</span></div>
+        <span class="hint" style="margin:0">${k.published ? "Published entries go out the next time you use Publish calendar." : "Drafts stay private to this app."}</span></div>
 
-      <h2 class="sec">Class</h2><div class="grid">
-        <div class="field"><label for="cal-course">Course</label><select id="cal-course"${ros.length ? " disabled" : ""}>
+      <h2 class="sec">${esc(ty.name)}</h2><div class="grid">
+        ${typeSel}
+        ${isClass ? `<div class="field"><label for="cal-course">Course</label><select id="cal-course"${ros.length ? " disabled" : ""}>
           ${L().courseOptions(k.course)}</select>
-          ${ros.length ? `<span class="hint" style="margin:0">Remove the students to change the course.</span>` : ""}</div>
-        ${f("title", "Title (blank = course name)")}${f("time", "Time")}${f("location", "Location")}
+          ${ros.length ? `<span class="hint" style="margin:0">Remove the students to change the course.</span>` : ""}</div>` : ""}
+        ${f("title", isClass ? "Title (blank = course name)" : "Title")}${f("time", "Time")}${f("location", "Location")}
         ${f("price", "Price ($)", "number")}${f("seats", "Seats (blank = no limit)", "number")}
         ${f("notes", "Description for the public calendar", "area", "wide")}</div>
 
       <h2 class="sec">Dates</h2>
-      <p class="hint">${c && c.unit === "Day" ? "One date per class day. " : ""}Students enrolled from here get these dates and the location on their course record.</p>
+      <p class="hint">${isClass ? (c && c.unit === "Day" ? "One date per class day. " : "") + "Students enrolled from here get these dates and the location on their course record." : "Add a date for each day."}</p>
       <div class="grid">${(k.dates.length ? k.dates : [""]).map((d, i) => `<div class="field"><label for="cal-f-dates-${i}">${esc(dateLabel(i))}</label>
         <span class="cal-date"><input id="cal-f-dates-${i}" type="date" data-ck="dates.${i}" value="${esc(d)}">
         ${k.dates.length > 1 ? `<button class="btn small" data-cact="rm-date" data-i="${i}" aria-label="Remove this date">✕</button>` : ""}</span></div>`).join("")}</div>
       <div class="row-actions"><button class="btn" data-cact="add-date">+ Add a date</button></div>
 
-      <h2 class="sec">Students</h2>
+      ${isClass ? `<h2 class="sec">Students</h2>
       ${ros.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Student</th><th>Contact</th><th>Progress</th><th>Balance due</th><th></th></tr></thead><tbody>
         ${ros.map(e => { const p = L().personById(e.studentId) || {}; return `<tr>
           <td><button class="linkbtn" data-act="open-person" data-id="${esc(p.id || "")}">${esc(p.name || "Unnamed student")}</button></td>
@@ -238,10 +267,10 @@
       ${left === 0 ? `<p class="hint">This class is full. You can still enroll more students.</p>` : ""}
       <div class="row-actions">${avail.length ? `<select id="cal-enroll" aria-label="Student to enroll"><option value="">Choose a student…</option>${avail.map(p => `<option value="${p.id}">${esc(p.name || "Unnamed student")}</option>`).join("")}</select>
         <button class="btn primary" data-cact="enroll">Enroll</button>` : ""}
-        <button class="btn" data-cact="enroll-new">+ New student</button></div>
+        <button class="btn" data-cact="enroll-new">+ New student</button></div>` : ""}
 
-      <div class="row-actions" style="margin-top:28px"><button class="btn" data-cact="dup">Duplicate class</button>
-        <button class="btn danger" data-cact="del">Delete class…</button><span id="cal-del-confirm"></span></div>`;
+      <div class="row-actions" style="margin-top:28px"><button class="btn" data-cact="dup">Duplicate</button>
+        <button class="btn danger" data-cact="del">Delete…</button><span id="cal-del-confirm"></span></div>`;
   }
 
   function renderPublish() {
@@ -288,7 +317,7 @@
     const rows = d.classes.map(k => ({
       id: k.id, course: k.course, course_name: k.courseName, title: k.title, color: k.color, dates: k.dates,
       time: k.time, location: k.location, price: k.price, seats: k.seats, seats_left: k.seatsLeft, notes: k.notes,
-      updated_at: d.updated
+      event_type: k.type, event_type_name: k.typeName, updated_at: d.updated
     }));
     const set = await sb.from("calendar_settings").upsert({ id: 1, heading: d.heading, intro: d.intro,
       instructor: d.contact.instructor, phone: d.contact.phone, email: d.contact.email, updated_at: d.updated });
@@ -296,10 +325,48 @@
     const old = await sb.from("classes").select("id");
     if (old.error) throw old.error;
     const keep = new Set(rows.map(r => r.id)), stale = (old.data || []).map(r => r.id).filter(id => !keep.has(id));
-    if (rows.length) { const up = await sb.from("classes").upsert(rows); if (up.error) throw up.error; }
+    if (rows.length) {
+      let up = await sb.from("classes").upsert(rows);
+      // Database not updated for event types yet (supabase/schema.sql): publish without them.
+      if (up.error && /event_type|PGRST204|schema cache/i.test(up.error.message || "")) {
+        up = await sb.from("classes").upsert(rows.map(r => { const x = Object.assign({}, r); delete x.event_type; delete x.event_type_name; return x; }));
+        if (!up.error) setTimeout(() => L().toast("Published. Run the latest supabase/schema.sql so the public calendar shows event types."), 2500);
+      }
+      if (up.error) throw up.error;
+    }
     if (stale.length) { const del = await sb.from("classes").delete().in("id", stale); if (del.error) throw del.error; }
     S().publishedOnline = d.updated; L().save();
     return rows.length;
+  }
+
+  // ---------- Settings: the list of calendar entry types ----------
+  function redrawTypes() { const box = document.getElementById("cal-types"); if (box) box.outerHTML = renderTypes(); }
+  function renderTypes() {
+    const { esc } = L(), list = types();
+    const used = (t) => data().classes.filter(k => typeOf(k) === t).length;
+    const rows = list.map((t, i) => {
+      const n = used(t);
+      return `<tr>
+        <td><input aria-label="Type name" data-ct="name" data-i="${i}" value="${esc(t.name)}"></td>
+        <td><input aria-label="Description" data-ct="about" data-i="${i}" value="${esc(t.about || "")}"></td>
+        <td>${t.course ? `<span class="meta">Course colors</span>` : `<span class="cal-type-color"><i class="cal-dot ${esc(t.color || "k5")}" aria-hidden="true"></i><select aria-label="Color" data-ct="color" data-i="${i}">${TYPE_COLORS.map(([c, l]) => `<option value="${c}"${t.color === c ? " selected" : ""}>${l}</option>`).join("")}</select></span>`}</td>
+        <td><label class="chk"><input type="checkbox" data-ct="course" data-i="${i}"${t.course ? " checked" : ""}${n ? " disabled" : ""}> Links to a course</label></td>
+        <td class="meta">${n} on calendar</td>
+        <td class="cal-acts"><button class="btn small" data-cact="type-up" data-i="${i}" aria-label="Move ${esc(t.name)} up"${i ? "" : " disabled"}>↑</button>
+          <button class="btn small danger" data-cact="type-rm" data-i="${i}"${n || list.length < 2 ? ` disabled title="${n ? "Move or delete its calendar entries first" : "Keep at least one type"}"` : ""}>Remove</button></td></tr>`;
+    }).join("");
+    return `<section class="cal-types" id="cal-types"><h2 class="sec">Calendar event types</h2>
+      <p class="hint">The kinds of things you can put on the calendar. A type that <b>links to a course</b> (like Class) lets you pick the course and enroll students. Other types just have a title. Renaming a type renames it everywhere. Republish the calendar to update the public page.</p>
+      <div class="tablewrap"><table class="m"><thead><tr><th>Name</th><th>Description</th><th>Color</th><th>Kind</th><th>Used</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="row-actions"><button class="btn" data-cact="type-add">+ Add a type</button></div></section>`;
+  }
+  function typeInput(el) {
+    const t = types()[Number(el.dataset.i)]; if (!t) return;
+    const f = el.dataset.ct;
+    if (f === "course") t.course = el.checked; else t[f] = el.value;
+    if (f === "course" && !t.course && !t.color) t.color = "k6";
+    L().save();
+    if (f === "course" || f === "color") redrawTypes();
   }
 
   // ---------- updates without a full redraw (keeps focus while typing) ----------
@@ -327,6 +394,17 @@
   document.addEventListener("input", (e) => {
     const el = e.target;
     if (el.dataset && el.dataset.cs) { S()[el.dataset.cs] = el.value; L().save(); return; }
+    if (el.id === "cal-type") {
+      const k = cur(); if (!k || roster(k).length) return;
+      const wasClass = isCourseType(k);
+      k.type = el.value;
+      if (isCourseType(k) && !L().COURSES[k.course]) k.course = L().COURSE_ORDER[0];
+      // A class filled in the course's days and price; an event starts as one day with no price.
+      if (wasClass && !isCourseType(k)) { k.dates = [G().firstDate(k.dates) || ""]; k.price = ""; k.time = ""; }
+      if (!wasClass && isCourseType(k)) { const fresh = blank(k.course, G().firstDate(k.dates)); k.dates = fresh.dates; k.price = fresh.price; if (!k.time) k.time = fresh.time; }
+      L().save(); rerender(); const x = document.getElementById(isCourseType(k) ? "cal-type" : "cal-f-title"); if (x) x.focus(); return;
+    }
+    if (el.dataset && el.dataset.ct) { typeInput(el); return; }
     if (el.id === "cal-course") {
       const k = cur(); if (!k) return;
       const fresh = blank(el.value, G().firstDate(k.dates));
@@ -359,6 +437,20 @@
         break;
       }
       case "pick": open(b.dataset.id); L().go("calendar"); break;
+      case "type-add": {
+        const list = types(), taken = new Set(list.map(t => t.color));
+        list.push({ id: "t" + Date.now().toString(36), name: "New type", about: "", course: false, color: (TYPE_COLORS.find(([c]) => !taken.has(c)) || TYPE_COLORS[0])[0] });
+        L().save(); redrawTypes();
+        const inputs = document.querySelectorAll('#cal-types [data-ct="name"]'), last = inputs[inputs.length - 1]; if (last) { last.focus(); last.select(); }
+        break;
+      }
+      case "type-up": case "type-rm": {
+        const list = types(), n = Number(b.dataset.i);
+        if (b.dataset.cact === "type-up" && n > 0) list.splice(n - 1, 0, list.splice(n, 1)[0]);
+        if (b.dataset.cact === "type-rm" && list.length > 1 && !data().classes.some(k => typeOf(k) === list[n])) list.splice(n, 1);
+        L().save(); redrawTypes();
+        break;
+      }
       case "back": v.sel = null; v.publish = false; rerender(); break;
       case "publish": v.publish = !v.publish; if (v.publish) v.sel = null; rerender(); break;
       case "past": v.past = !v.past; refresh(); break;
@@ -393,7 +485,7 @@
       }
       case "del": {
         const n = roster(k).length;
-        document.getElementById("cal-del-confirm").innerHTML = `Delete this class for good?${n ? " The " + n + " enrolled student" + (n > 1 ? "s keep their course records." : " keeps their course record.") : ""} <button class="btn small danger" data-cact="del-yes">Delete</button>`;
+        document.getElementById("cal-del-confirm").innerHTML = `Delete this ${L().esc(typeOf(k).name.toLowerCase())} for good?${n ? " The " + n + " enrolled student" + (n > 1 ? "s keep their course records." : " keeps their course record.") : ""} <button class="btn small danger" data-cact="del-yes">Delete</button>`;
         break;
       }
       case "del-yes": {
@@ -415,6 +507,6 @@
     }
   });
 
-  window.LDCalendar = { render };
+  window.LDCalendar = { render, renderTypes };
   L().render();
 })();
