@@ -111,7 +111,7 @@
     const url = accountPageUrl(), { esc } = L();
     return `<h2 class="sec">For students</h2>
       <p class="hint">Students create their own account and keep their details current: name, address, phone, emergency contact and certifications. Share this link with them.</p>
-      <div class="sa-copy"><code>${esc(url)}</code><a class="btn primary" href="account.html" target="_blank" rel="noopener">Student log in / create account</a><button class="btn" data-sa="copy">Copy link</button></div>`;
+      <div class="sa-copy"><code>${esc(url)}</code><a class="btn primary" href="account.html" target="_blank" rel="noopener">Student portal</a><button class="btn" data-sa="copy">Copy link</button></div>`;
   }
   function setupBox() {
     return `<h2 class="sec">Turn on logins</h2>
@@ -120,25 +120,25 @@
         <li>Create a project at <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com</a>.</li>
         <li>In its <b>SQL Editor</b>, run the file <code>supabase/schema.sql</code> from this repository.</li>
         <li>Paste the project URL and publishable key into <code>supabase-config.js</code> and commit it.</li>
-        <li>Sign up on the Student log in page with your own email, then make yourself the Admin (one line of SQL).</li>
+        <li>Sign up on the Student portal page with your own email, then make yourself the Admin (one line of SQL).</li>
       </ol>
       <p class="hint">The README has every step and where to click.</p>`;
   }
   function signInBox() {
     return `<h2 class="sec">Staff log in</h2>
-      <p class="hint">For Dive Masters, Instructors and Admins. Students log in on the <a href="account.html">Student log in</a> page.</p>
+      <p class="hint">For Dive Masters, Instructors and Admins. Students log in on the <a href="account.html">Student portal</a> page.</p>
       ${note()}
       <form class="sa-auth" id="sa-signin" novalidate>
         <div class="field"><label for="sa-email">Email</label><input id="sa-email" type="email" autocomplete="email" required></div>
         <div class="field"><label for="sa-pass">Password</label><input id="sa-pass" type="password" autocomplete="current-password" required></div>
         <div class="row-actions"><button class="btn primary" type="submit"${v.busy ? " disabled" : ""}>${v.busy ? "Signing in…" : "Sign in"}</button></div>
-        <p class="hint">Staff use the same kind of account as students. Create one on the <a href="account.html">Student log in</a> page, then an Admin gives it a staff role.</p>
+        <p class="hint">Staff use the same kind of account as students. Create one on the <a href="account.html">Student portal</a> page, then an Admin gives it a staff role.</p>
       </form>`;
   }
   function notStaffBox() {
     const { esc } = L(), email = C().user.email || "";
     return `<h2 class="sec">This is a student account</h2>
-      <p class="hint">You're signed in as <b>${esc(email)}</b>, which doesn't have a staff role. An Admin can give it one under <b>Staff and roles</b>. Students manage their details on the <a href="account.html">Student log in</a> page.</p>
+      <p class="hint">You're signed in as <b>${esc(email)}</b>, which doesn't have a staff role. An Admin can give it one under <b>Staff and roles</b>. Students manage their details on the <a href="account.html">Student portal</a> page.</p>
       <details><summary>Setting up the very first Admin?</summary>
       <p class="hint">In Supabase, open <b>SQL Editor</b>, paste this, and click <b>Run</b>:</p>
       <pre class="sa-sql"><code>insert into public.staff_roles (user_id, role)
@@ -272,7 +272,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         <button class="btn small" data-sa="refresh">Refresh list</button></aside>
       <section class="panel" id="record">${v.error ? `<p class="acct-note bad" role="alert">${esc(v.error)}</p>` : ""}
         ${acc ? dirDetail(acc) : `<div class="empty"><h2>${v.loading ? "Loading students…" : "No registered students yet"}</h2>
-          <p>Students show up here once they create an account on the <a href="account.html">Student log in</a> page.</p></div>`}</section>`;
+          <p>Students show up here once they create an account on the <a href="account.html">Student portal</a> page.</p></div>`}</section>`;
   }
 
   function render() {

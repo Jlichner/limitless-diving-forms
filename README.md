@@ -27,7 +27,7 @@ A web app for Limitless Diving & Technical Training's courses: Open Water Diver 
 
 ## Student accounts
 
-Students can create their own account at `account.html` (the **Student log in** button links to it). On their account page they add a **profile photo** and keep their **name, mailing address (street, city, state, zip), phone number, emergency contact (with phone) and current certifications** up to date, see the training progress you share with them, and see upcoming classes, with the ones they're enrolled in marked.
+Students can create their own account at `account.html` (the **Student portal** button links to it). On their account page they add a **profile photo** and keep their **name, mailing address (street, city, state, zip), phone number, emergency contact (with phone) and current certifications** up to date, see the training progress you share with them, and see upcoming classes, with the ones they're enrolled in marked.
 
 Staff use the **Admin Log in** button in the header (next to the dive flag). Instructors and Admins sign in there to:
 
