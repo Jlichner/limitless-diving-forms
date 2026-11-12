@@ -173,6 +173,10 @@
   const GENERIC = ["Scuba Diver", "Open Water Diver", "Advanced Open Water Diver", "Enriched Air Nitrox Diver", "Rescue Diver",
     "Master Scuba Diver", "Deep Diver", "Drysuit Diver", "Night Diver", "Wreck Diver", "Divemaster", "Assistant Instructor", "Instructor"];
 
+  // Training days a course needs: no more than 2 training dives a day, so 4 dives take at least 2 days.
+  const DIVES_PER_DAY = 2;
+  function minDays(c) { const n = c && c.std && Number(c.std.dives); return n > 0 ? Math.ceil(n / DIVES_PER_DAY) : 1; }
+
   function byAgency() { return AGENCIES.map(a => ({ agency: a, courses: COURSES.filter(c => c.agency === a) })); }
   function find(id) { return COURSES.find(c => c.id === id || c.app === id) || null; }
   // Certification names to suggest for an agency (the catalog's courses for NAUI / NAUI Technical / TDI).
@@ -182,5 +186,5 @@
     return base.concat(OTHER_CERTS.filter(x => !base.includes(x)));
   }
 
-  window.LDCatalog = { AGENCIES, AGENCY_SITES, CERT_AGENCIES, COURSES, byAgency, find, certNames };
+  window.LDCatalog = { AGENCIES, AGENCY_SITES, CERT_AGENCIES, COURSES, DIVES_PER_DAY, minDays, byAgency, find, certNames };
 })();

@@ -77,7 +77,8 @@
       <section class="panel course-detail" aria-label="Scheduled classes"><h2>Scheduled classes</h2>
         ${dates.length ? `<ul class="course-dates">${dates.map(k => `<li><a href="classes.html#class-${esc(k.id)}">${esc(k.title || c.name)}</a> <span>${esc(G.range(k.dates) || "Dates to be announced")}</span>${k.seatsLeft === 0 ? " <em>(full, waitlist)</em>" : ""}</li>`).join("")}</ul>`
           : `<p>No dates are set yet. Get in touch and we'll plan it with you.</p>`}
-        <div class="course-actions">${ask ? `<a class="btn primary" href="${esc(ask)}">Ask about this course</a>` : ""}
+        <div class="course-actions"><a class="btn primary" href="request.html?course=${encodeURIComponent(c.id)}">Request this course</a>
+          ${ask ? `<a class="btn" href="${esc(ask)}">Ask a question</a>` : ""}
           ${site ? `<a class="btn" href="${esc(site)}" target="_blank" rel="noopener">More from ${esc(c.agency.split(" ")[0])} ↗</a>` : ""}</div></section>
       ${foot()}`;
     window.scrollTo(0, 0);

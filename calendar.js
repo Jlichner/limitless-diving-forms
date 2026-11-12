@@ -7,7 +7,7 @@
 
   const L = () => window.LD;
   const G = () => window.LDCalGrid;
-  const v = { ym: null, sel: null, past: false, publish: false };
+  const v = { ym: null, sel: null, past: false, publish: false, reqs: null, reqsBusy: false, reqsErr: "" };
   const UPLOAD_URL = "https://github.com/jlichner/limitless-diving-forms/upload/main";
   const PUBLIC_URL = "https://jlichner.github.io/limitless-diving-forms/classes.html";
 
@@ -107,6 +107,9 @@
           ${esc(titleOf(k))}${ds.length > 1 ? ` <small>${i + 1}/${ds.length}</small>` : ""}</button>`
       }));
     });
+    (v.reqs || []).forEach(r => r.dates.forEach(d => events.push({
+      date: d, html: `<button class="req-tag request" data-cact="req-show" title="${esc("Requested: " + (r.course_name || r.course) + " by " + (r.student_name || r.student_email))}">Request: ${esc(r.student_name || r.student_email)}</button>`
+    })));
     const used = L().COURSE_ORDER.filter(id => data().classes.some(k => k.course === id));
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Class calendar</span><h1>${esc(G().monthName(v.ym))}</h1></div>
         <div class="cal-tools no-print"><button class="btn primary" data-cact="new">+ New class</button>
@@ -114,12 +117,61 @@
         <div class="cal-nav"><button class="btn" data-cact="month" data-n="-1" aria-label="Previous month">‹</button>
         <button class="btn" data-cact="month" data-n="0">Today</button>
         <button class="btn" data-cact="month" data-n="1" aria-label="Next month">›</button></div></div>
+      ${requestsBox()}
       ${G().month(v.ym, events, { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` })}
       <div class="cal-legend">${used.map(id => `<span><i class="cal-dot ${colorOf({ course: id })}" aria-hidden="true"></i>${esc(L().COURSES[id].name)}</span>`).join("")}
         ${data().classes.some(k => !k.published) ? `<span><i class="cal-dot draft" aria-hidden="true"></i>Draft (not published)</span>` : ""}</div>
       <p class="hint" style="margin-top:12px">Click a day to add a class on it, or a class to edit it and enroll students. Published classes appear on the public calendar after you publish.</p>
       <div class="roster cal-upcoming" id="cal-list">${renderList()}</div>`;
   }
+
+  // ---------- class requests from students (request.html), when student accounts are set up ----------
+  const canSeeReqs = () => !!(window.LDCloud && window.LDCloud.can("divemaster"));
+  async function loadRequests() {
+    if (v.reqsBusy || !canSeeReqs()) return;
+    v.reqsBusy = true;
+    const { data: rows, error } = await window.LDCloud.client.from("class_requests").select("*").eq("status", "pending").order("created_at");
+    v.reqsBusy = false;
+    v.reqsErr = error ? window.LDCloud.explain(error) : "";
+    v.reqs = (rows || []).map(r => Object.assign({}, r, { dates: (Array.isArray(r.dates) ? r.dates : []).slice().sort() }));
+    if (L().view().mode === "calendar" && !v.sel && !v.publish) rerender();
+  }
+  function requestsBox() {
+    if (!canSeeReqs()) return "";
+    if (v.reqs === null) { setTimeout(loadRequests, 0); return ""; }
+    const { esc } = L(), boss = window.LDCloud.can("instructor");
+    if (v.reqsErr) return `<p class="acct-note bad" role="alert">Class requests couldn't be loaded: ${esc(v.reqsErr)}</p>`;
+    if (!v.reqs.length) return "";
+    const need = (r) => { const c = window.LDCatalog && window.LDCatalog.find(r.course); return c ? window.LDCatalog.minDays(c) : 1; };
+    return `<section class="cal-reqs" id="cal-reqs" aria-label="Class requests"><h2 class="sec">Class requests <span class="req-status wait">${v.reqs.length} waiting</span></h2>
+      <ul class="req-list">${v.reqs.map(r => `<li><div><b>${esc(r.course_name || r.course)}</b>
+          <span>${esc(r.student_name || "Student")}${r.student_email ? ` · <a href="mailto:${esc(r.student_email)}">${esc(r.student_email)}</a>` : ""}</span>
+          <span class="when">${esc(r.dates.map(d => G().fmt(d, { weekday: "short", year: undefined })).join(" · "))} (${r.dates.length} day${r.dates.length === 1 ? "" : "s"}, needs ${need(r)})</span>
+          ${r.notes ? `<span class="hint">“${esc(r.notes)}”</span>` : ""}
+          <span class="hint">Asked ${esc(new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }))}</span></div>
+        ${boss ? `<div class="req-acts"><input id="req-note-${esc(r.id)}" maxlength="1000" placeholder="Note to the student (optional)" aria-label="Note to ${esc(r.student_name || "the student")}">
+          <button class="btn small primary" data-cact="req-schedule" data-id="${esc(r.id)}">Schedule as a class</button>
+          <button class="btn small" data-cact="req-decline" data-id="${esc(r.id)}">Decline</button></div>` : ""}</li>`).join("")}</ul>
+      ${boss ? `<p class="hint">Schedule makes a draft class on those days so you can enroll the student and publish it. The student sees your answer and note on their Request a class page.</p>` : ""}</section>`;
+  }
+  async function answerRequest(id, status) {
+    const r = (v.reqs || []).find(x => x.id === id); if (!r) return;
+    const noteEl = document.getElementById("req-note-" + id), note = noteEl ? noteEl.value.trim().slice(0, 1000) : "";
+    let k = null;
+    if (status === "scheduled") {
+      const courseId = L().COURSES[r.course] ? r.course : L().COURSE_ORDER[0];
+      k = blank(courseId, r.dates[0]);
+      k.dates = r.dates.slice();
+      k.notes = r.notes ? "Requested by " + (r.student_name || r.student_email) + ": " + r.notes : "";
+    }
+    const { error } = await window.LDCloud.client.from("class_requests")
+      .update({ status, staff_note: note, class_id: k ? k.id : null, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) { L().toast("Not saved: " + window.LDCloud.explain(error)); return; }
+    v.reqs = v.reqs.filter(x => x.id !== id);
+    if (k) { data().classes.push(k); open(k.id); L().save(); L().go("calendar"); L().toast("Draft class made from the request. Enroll the student, then publish."); }
+    else { rerender(); L().toast("Request declined"); }
+  }
+  if (window.LDCloud) window.LDCloud.onChange(() => { v.reqs = null; v.reqsErr = ""; });
 
   function f(path, label, type, extra) {
     const k = cur(), val = path.split(".").reduce((o, x) => (o == null ? undefined : o[x]), k), id = "cal-f-" + path.replace(/\./g, "-");
@@ -333,6 +385,9 @@
         break;
       }
       case "download": download(); break;
+      case "req-show": { const x = document.getElementById("cal-reqs"); if (x) x.scrollIntoView({ behavior: "smooth", block: "start" }); break; }
+      case "req-schedule": b.disabled = true; await answerRequest(b.dataset.id, "scheduled"); break;
+      case "req-decline": b.disabled = true; await answerRequest(b.dataset.id, "declined"); break;
       case "publish-online": {
         v.publishing = true; rerender();
         try { const n = await publishOnline(); L().toast("Published " + n + " class" + (n === 1 ? "" : "es") + ". The public calendar is up to date."); }
