@@ -18,18 +18,25 @@
   };
 
   function tomorrow() { const d = G.parse(G.today()); d.setDate(d.getDate() + 1); return G.ymd(d); }
-  function course() { return v.course ? CAT.find(v.course) : null; }
+  // Coaching and tours listings (offerings.js) can be requested too, as course "offer-<id>".
+  let offers = [];
+  const O = window.LDOfferings;
+  function find(id) { return offers.find(c => c.id === id) || CAT.find(id); }
+  function course() { return v.course ? find(v.course) : null; }
   function setNote(text, kind) { v.note = text || ""; v.noteKind = kind || ""; }
   function noteHtml() { return v.note ? `<p class="acct-note ${v.noteKind}" role="${v.noteKind === "bad" ? "alert" : "status"}">${esc(v.note)}</p>` : ""; }
 
   function courseSelect() {
     return `<select id="r-course"><option value="">Choose a course…</option>
+      ${offers.length ? `<optgroup label="Coaching and tours">${offers.map(c => `<option value="${esc(c.id)}"${c.id === v.course ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</optgroup>` : ""}
       ${CAT.byAgency().map(g => `<optgroup label="${esc(g.agency)}">${g.courses.map(c => `<option value="${esc(c.id)}"${c.id === v.course ? " selected" : ""}>${esc(c.name)}</option>`).join("")}</optgroup>`).join("")}
     </select>`;
   }
 
   function courseInfo(c) {
     if (!c) return "";
+    if (c.offer) return `<div class="req-info"><p>${c.about ? esc(c.about) : ""}${c.price ? ` <b>${esc(c.price)}</b>` : ""}</p>
+      <p class="req-need">Pick the day or days you'd like. We'll confirm the details with you.</p></div>`;
     const s = c.std, need = CAT.minDays(c);
     const dives = s && Number(s.dives) > 0
       ? `${s.dives} open water dive${s.dives === 1 ? "" : "s"}, and we do no more than ${CAT.DIVES_PER_DAY} training dives a day, so pick <b>at least ${need} day${need === 1 ? "" : "s"}</b>.`
@@ -176,6 +183,11 @@
   // ---------- start ----------
   const q = new URLSearchParams(location.search).get("course");
   if (q && CAT.find(q)) v.course = CAT.find(q).id;
+  if (O) O.load(true).then(list => {
+    offers = list.map(O.asCourse);
+    if (q && offers.some(c => c.id === q) && !v.picked.length) v.course = q;
+    render();
+  });
   v.ym = G.ym(tomorrow());
   render();
   if (!C || !C.available) return;

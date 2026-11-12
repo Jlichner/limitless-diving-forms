@@ -415,6 +415,45 @@ create policy "Instructors answer requests" on public.class_requests
 revoke all on public.class_requests from anon;
 grant select, insert, update, delete on public.class_requests to authenticated;
 
+-- ---------- coaching and tours listings ----------
+-- The cards at the top of Available classes (coaching sessions, Lake Hydra tours, ...). Anyone can read them;
+-- Instructors and Admins edit them in the staff app (Settings → Coaching and tours listings). Students ask for
+-- one on Request a class, as course "offer-<id>". cal_type is the calendar event type a scheduled request becomes.
+create table if not exists public.offerings (
+  id         text primary key check (id ~ '^[a-z0-9-]{1,40}$'),
+  name       text not null check (char_length(name) between 1 and 120),
+  tag        text not null default '' check (char_length(tag) <= 80),
+  about      text not null default '' check (char_length(about) <= 1000),
+  price      text not null default '' check (char_length(price) <= 80),
+  cal_type   text not null default 'event' check (char_length(cal_type) <= 40),
+  active     boolean not null default true,
+  sort       integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+alter table public.offerings enable row level security;
+
+drop policy if exists "Anyone can read the listings" on public.offerings;
+create policy "Anyone can read the listings" on public.offerings
+  for select to anon, authenticated using (true);
+
+drop policy if exists "Instructors manage the listings" on public.offerings;
+create policy "Instructors manage the listings" on public.offerings
+  for all to authenticated
+  using ((select public.has_role('instructor')))
+  with check ((select public.has_role('instructor')));
+
+revoke all on public.offerings from anon;
+grant select on public.offerings to anon;
+grant select, insert, update, delete on public.offerings to authenticated;
+
+-- The first two listings, added only while the table is empty (so a listing you remove stays removed).
+insert into public.offerings (id, name, tag, about, cal_type, sort)
+select * from (values
+  ('coaching', 'Coaching sessions', 'With an instructor', 'Work one on one or in a small group with an instructor to hone the skill of your choice.', 'event', 0),
+  ('hydra', 'Lake Hydra tours', 'Led by a divemaster', 'Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day.', 'tour', 1)
+) v(id, name, tag, about, cal_type, sort)
+where not exists (select 1 from public.offerings);
+
 -- ---------- table access for the API roles (row-level security above still applies) ----------
 revoke all on public.staff_roles, public.student_profiles, public.student_progress, public.classes, public.calendar_settings from anon;
 grant select on public.classes, public.calendar_settings to anon;
