@@ -416,7 +416,11 @@
     }
     main.className = "shell";
     if (view.mode === "students") {
-      main.innerHTML = `<aside class="roster no-print">${renderPeopleRoster()}</aside><section class="panel" id="record">${renderPerson()}</section>`;
+      // With online logins, Students opens on the searchable list of registered students (student-accounts.js);
+      // the switch at the top goes to the course records kept in this browser.
+      const dir = window.LDAccount && window.LDAccount.directoryOn && window.LDAccount.directoryOn();
+      if (dir && view.studentsTab !== "records") { main.innerHTML = window.LDAccount.renderDirectory(studentsSwitch("accounts")); return; }
+      main.innerHTML = `<aside class="roster no-print">${dir ? studentsSwitch("records") : ""}${renderPeopleRoster()}</aside><section class="panel" id="record">${renderPerson()}</section>`;
       return;
     }
     main.innerHTML = `<aside class="roster no-print">${renderRoster()}</aside><section class="panel" id="record">${view.enrolling ? renderEnroll() : renderRecord()}</section>`;
@@ -542,7 +546,7 @@
   function addStudent() { const n = blankPerson(); state.students.push(n); save(); return n; }
   function go(mode, opts) {
     view.mode = mode; view.enrolling = false;
-    if (opts && opts.psel) view.psel = opts.psel;
+    if (opts && opts.psel) { view.psel = opts.psel; view.studentsTab = "records"; }
     if (opts && opts.settingsCourse) view.settingsCourse = opts.settingsCourse;
     if (opts && opts.sel) { view.sel = opts.sel; view.tab = "details"; }
     if (isCourse(view.mode) && !cur()) view.sel = firstId(courseList(view.mode));
@@ -622,6 +626,10 @@
   }
 
   // ---------- shared student directory ----------
+  function studentsSwitch(on) {
+    const b = (k, l) => `<button type="button" data-act="students-tab" data-tab="${k}" aria-pressed="${on === k}"${on === k ? ' class="on"' : ""}>${l}</button>`;
+    return `<div class="seg-switch" role="group" aria-label="Students view">${b("accounts", "Registered")}${b("records", "Course records")}</div>`;
+  }
   function renderPeopleRoster() {
     const q = view.pq.trim().toLowerCase();
     const list = state.students.filter(p => !q || [p.name, p.email, p.phone].join(" ").toLowerCase().includes(q))
@@ -931,12 +939,13 @@
     }
     const s = cur(), P = settingsProgram(), i = Number(b.dataset.i);
     switch (b.dataset.act) {
-      case "add-person": { const n = blankPerson(); state.students.push(n); view.psel = n.id; view.mode = "students"; save(); render(); const f = document.getElementById("f-d-name"); if (f) f.focus(); break; }
+      case "add-person": { const n = blankPerson(); state.students.push(n); view.psel = n.id; view.mode = "students"; view.studentsTab = "records"; save(); render(); const f = document.getElementById("f-d-name"); if (f) f.focus(); break; }
       case "pick-person": view.psel = b.dataset.id; render(); break;
+      case "students-tab": view.studentsTab = b.dataset.tab; render(); break;
       case "add-cert": { const p = curPerson(); if (!p) break; p.certs.push({ agency: "", level: "", number: "", date: "" }); save(); render();
         const f = document.getElementById("f-d-certs-" + (p.certs.length - 1) + "-agency"); if (f) f.focus(); break; }
       case "rm-cert": { const p = curPerson(); if (!p) break; p.certs.splice(i, 1); save(); render(); break; }
-      case "open-person": view.psel = b.dataset.id; view.mode = "students"; render(); break;
+      case "open-person": view.psel = b.dataset.id; view.mode = "students"; view.studentsTab = "records"; render(); break;
       case "enroll": view.enrolling = true; render(); break;
       case "enroll-cancel": view.enrolling = false; render(); break;
       case "enroll-go": {
