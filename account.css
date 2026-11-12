@@ -148,3 +148,23 @@ a.navbtn { text-decoration: none; display: flex; align-items: center; }
 /* Links to other websites (left menu and the student menu). position keeps their screen-reader text inside the menu. */
 .navbtn.ext, .pubnav a.ext { position: relative; }
 .navbtn.ext span[aria-hidden], .pubnav a.ext span[aria-hidden] { font-size: .85em; opacity: .8; }
+
+/* Records → Students: registered students list with search (student-accounts.js renderDirectory). */
+.seg-switch { display: flex; border: 1px solid var(--accent); border-radius: 99px; padding: 3px; background: var(--surface); gap: 2px; }
+.seg-switch button { flex: 1; border: 0; background: transparent; padding: 6px 10px; border-radius: 99px; font-weight: 600; color: var(--accent); cursor: pointer; min-height: 34px; }
+.seg-switch button.on { background: var(--accent); color: var(--accent-ink); }
+.seg-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.roster li button.dir-item { flex-direction: row; align-items: center; gap: 10px; }
+.dir-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dir-txt .nm, .dir-txt .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dir-count { font-size: 12px; }
+.avatar.photo-xs { width: 34px; height: 34px; font-size: 13px; }
+.avatar.photo-md { width: 72px; height: 72px; font-size: 26px; }
+.rec-head .who.dir-head { display: flex; flex-direction: row; align-items: center; gap: 16px; }
+.dir-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.dir-actions .btn { text-decoration: none; }
+.dir-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 16px; }
+.dir-dl dt { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; padding-top: 3px; }
+.dir-dl dd { margin: 0; overflow-wrap: anywhere; }
+.dir-dl a, .dir-certs a { color: var(--accent); }
+.dir-certs { margin: 0; padding-left: 20px; }

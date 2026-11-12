@@ -10,7 +10,7 @@
 
   const L = () => window.LD;
   const C = () => window.LDCloud || { configured: false };
-  const v = { accounts: null, staff: null, loading: false, error: "", busy: false, note: "", noteKind: "" };
+  const v = { accounts: null, staff: null, loading: false, error: "", busy: false, note: "", noteKind: "", dsel: null, dq: "" };
   const roleName = (r) => (window.LDCloud && window.LDCloud.ROLE_NAMES[r]) || "Student";
 
   function accountPageUrl() { return new URL("account.html", location.href).href; }
@@ -156,22 +156,12 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         <button class="btn primary" type="submit">Give role</button>
       </form>`;
   }
-  function accountRow(acc) {
-    const { esc, fmtDate } = L(), p = linkedPerson(acc), certs = certsOf(acc), edit = C().can("instructor");
+  function linkBlock(acc) {
+    const { esc } = L(), p = linkedPerson(acc), edit = C().can("instructor");
     const free = people().filter(x => !x.accountId).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     const em = String(acc.email || "").toLowerCase(), nm = String(acc.full_name || "").trim().toLowerCase();
     const guess = free.find(x => em && String(x.email || "").trim().toLowerCase() === em) || free.find(x => nm && String(x.name || "").trim().toLowerCase() === nm);
-    const dd = (label, val) => val ? `<dt>${label}</dt><dd>${esc(val)}</dd>` : "";
-    const emergency = [acc.emergency_name, acc.emergency_relationship ? "(" + acc.emergency_relationship + ")" : "", acc.emergency_phone].filter(Boolean).join(" ");
-    const photo = acc.photo_path && v.photos && v.photos[acc.photo_path];
-    const ini = String(acc.full_name || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase() || "?";
-    return `<article class="sa-row${p ? " linked" : ""}">
-      <div><div class="sa-who">${photo ? `<img class="avatar photo-sm" src="${esc(photo)}" alt="${esc(acc.full_name || "Student")} profile photo">` : `<span class="avatar photo-sm" aria-hidden="true">${esc(ini)}</span>`}
-        <h3>${esc(acc.full_name || "No name yet")}</h3></div>
-        <span class="meta">${esc(acc.email)} ${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span>`}</span>
-        <dl>${dd("Phone", acc.phone)}${dd("Address", acc.address)}${dd("Emergency", emergency)}${dd("Certs", certs.map(certText).join("\n"))}
-          ${dd("Updated", acc.updated_at ? fmtDate(String(acc.updated_at).slice(0, 10)) : "")}</dl></div>
-      <div class="sa-link">${!edit ? "" : p
+    return `<div class="sa-link">${!edit ? "" : p
         ? `<span><span class="sa-badge">Linked</span> to <b>${esc(p.name || "Unnamed student")}</b> in Students</span>
            <div class="row-actions"><button class="btn small" data-sa="open" data-id="${esc(p.id)}">Open student</button>
              <button class="btn small" data-sa="pull" data-acc="${esc(acc.id)}">Copy their latest details in</button>
@@ -181,7 +171,24 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
            <div class="row-actions"><button class="btn small primary" data-sa="link" data-acc="${esc(acc.id)}">Link</button>
              <button class="btn small" data-sa="add" data-acc="${esc(acc.id)}">Add as a new student</button></div>
            ${guess ? `<span class="hint">Suggested by matching ${String(guess.email || "").trim().toLowerCase() === em ? "email" : "name"}.</span>` : ""}`}
-      </div></article>`;
+      </div>`;
+  }
+  function initials(acc) { return String(acc.full_name || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase() || "?"; }
+  function avatar(acc, cls) {
+    const { esc } = L(), photo = acc.photo_path && v.photos && v.photos[acc.photo_path];
+    return photo ? `<img class="avatar ${cls}" src="${esc(photo)}" alt="${esc(acc.full_name || "Student")} profile photo">` : `<span class="avatar ${cls}" aria-hidden="true">${esc(initials(acc))}</span>`;
+  }
+  function accountRow(acc) {
+    const { esc, fmtDate } = L(), p = linkedPerson(acc), certs = certsOf(acc);
+    const dd = (label, val) => val ? `<dt>${label}</dt><dd>${esc(val)}</dd>` : "";
+    const emergency = [acc.emergency_name, acc.emergency_relationship ? "(" + acc.emergency_relationship + ")" : "", acc.emergency_phone].filter(Boolean).join(" ");
+    return `<article class="sa-row${p ? " linked" : ""}">
+      <div><div class="sa-who">${avatar(acc, "photo-sm")}
+        <h3>${esc(acc.full_name || "No name yet")}</h3></div>
+        <span class="meta">${esc(acc.email)} ${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span>`}</span>
+        <dl>${dd("Phone", acc.phone)}${dd("Address", acc.address)}${dd("Emergency", emergency)}${dd("Certs", certs.map(certText).join("\n"))}
+          ${dd("Updated", acc.updated_at ? fmtDate(String(acc.updated_at).slice(0, 10)) : "")}</dl></div>
+      ${linkBlock(acc)}</article>`;
   }
   function signedInBox() {
     const { esc } = L(), list = v.accounts || [], n = sharedEnrollments().length, edit = C().can("instructor");
@@ -201,6 +208,65 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         : list.length ? `<div class="sa-list">${list.map(accountRow).join("")}</div>`
         : `<p class="hint">No students have created an account yet. Send them the link above.</p>`}`;
   }
+  // ---------- Records → Students: searchable list of registered students ----------
+  // Shown to Dive Masters and up when online logins are set up. Search by name, email, phone, address or cert.
+  function directoryOn() { return !!(C().configured && C().available); }
+  function hay(acc) {
+    return [acc.full_name, acc.email, acc.phone, String(acc.phone || "").replace(/\D/g, ""), acc.address, acc.emergency_name,
+      certsOf(acc).map(certText).join(" "), (linkedPerson(acc) || {}).name].join(" ").toLowerCase();
+  }
+  function dirMatches() {
+    const words = v.dq.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return (v.accounts || []).filter(a => words.every(w => hay(a).includes(w)))
+      .sort((a, b) => (a.full_name || a.email || "").localeCompare(b.full_name || b.email || ""));
+  }
+  function dirList() {
+    const { esc } = L(), list = dirMatches();
+    if (v.loading && !v.accounts) return `<li class="meta" style="padding:8px 10px">Loading students…</li>`;
+    if (!list.length) return `<li class="meta" style="padding:8px 10px">${(v.accounts || []).length ? "No matches." : "No students have registered yet."}</li>`;
+    return list.map(a => `<li><button data-sa="dpick" data-acc="${esc(a.id)}" class="dir-item${a.id === v.dsel ? " sel" : ""}"${a.id === v.dsel ? ' aria-current="true"' : ""}>
+        ${avatar(a, "photo-xs")}<span class="dir-txt"><span class="nm">${esc(a.full_name || "No name yet")}</span>
+        <span class="meta">${esc(a.phone || a.email || "")}</span></span></button></li>`).join("");
+  }
+  function telLink(n) { const d = String(n || "").replace(/[^\d+]/g, ""); return d.length >= 7 ? `<a href="tel:${L().esc(d)}">${L().esc(n)}</a>` : L().esc(n || ""); }
+  function dirDetail(acc) {
+    const { esc, fmtDate } = L(), p = linkedPerson(acc), certs = certsOf(acc);
+    const row = (label, html) => html ? `<dt>${label}</dt><dd>${html}</dd>` : "";
+    const map = acc.address ? `<a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(acc.address)}" target="_blank" rel="noopener">${esc(acc.address)}</a>` : "";
+    const enrolled = p ? L().state.enrollments.filter(e => e.studentId === p.id && L().COURSES[e.course]) : [];
+    return `<div class="rec-head"><div class="who dir-head">${avatar(acc, "photo-md")}<div><span class="eyebrow">Registered student</span>
+        <h1>${esc(acc.full_name || "No name yet")}</h1>
+        <span class="sub">${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span> `}${acc.updated_at ? "Updated " + esc(fmtDate(String(acc.updated_at).slice(0, 10))) : ""}</span></div></div></div>
+      <div class="dir-actions">${acc.phone ? `<a class="btn primary" href="tel:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Call</a><a class="btn" href="sms:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Text</a>` : ""}
+        ${acc.email ? `<a class="btn" href="mailto:${esc(acc.email)}">Email</a>` : ""}
+        <button class="btn" data-sa="dcopy" data-acc="${esc(acc.id)}">Copy contact</button></div>
+      <h2 class="sec">Contact</h2>
+      <dl class="dir-dl">${row("Phone", telLink(acc.phone))}${row("Email", acc.email ? `<a href="mailto:${esc(acc.email)}">${esc(acc.email)}</a>` : "")}${row("Address", map)}</dl>
+      <h2 class="sec">Emergency contact</h2>
+      ${acc.emergency_name || acc.emergency_phone ? `<dl class="dir-dl">${row("Name", esc([acc.emergency_name, acc.emergency_relationship ? "(" + acc.emergency_relationship + ")" : ""].filter(Boolean).join(" ")))}${row("Phone", telLink(acc.emergency_phone))}</dl>` : `<p class="hint">None given yet.</p>`}
+      <h2 class="sec">Certifications</h2>
+      ${certs.length ? `<ul class="dir-certs">${certs.map(c => `<li>${esc(certText(c))}</li>`).join("")}</ul>` : `<p class="hint">None listed yet.</p>`}
+      <h2 class="sec">Course records</h2>
+      ${p ? `<p class="hint">${enrolled.length ? enrolled.map(e => esc(L().COURSES[e.course].name)).join(", ") : "No courses yet"} · <button class="linkbtn" data-sa="open" data-id="${esc(p.id)}">Open ${esc(p.name || "their")} record</button></p>`
+        : `<p class="hint">Not linked to a course record in this browser yet.${C().can("instructor") ? "" : " An Instructor can link it."}</p>`}
+      ${C().can("instructor") && !p ? linkBlock(acc) : ""}`;
+  }
+  function renderDirectory(switchHtml) {
+    const { esc } = L();
+    if (!v.accounts && !v.loading && !v.error) setTimeout(loadAccounts, 0);
+    const list = v.accounts || [];
+    if (!list.some(a => a.id === v.dsel)) v.dsel = (dirMatches()[0] || {}).id || null;
+    const acc = list.find(a => a.id === v.dsel);
+    return `<aside class="roster no-print" id="dir-panel">${switchHtml || ""}
+        <input type="search" id="dir-q" placeholder="Search name, phone, email, city, cert" value="${esc(v.dq)}" aria-label="Search registered students" autocomplete="off">
+        <span class="meta dir-count" id="dir-count">${list.length ? dirMatches().length + " of " + list.length + " registered" : ""}</span>
+        <ul id="dir-list">${dirList()}</ul>
+        <button class="btn small" data-sa="refresh">Refresh list</button></aside>
+      <section class="panel" id="record">${v.error ? `<p class="acct-note bad" role="alert">${esc(v.error)}</p>` : ""}
+        ${acc ? dirDetail(acc) : `<div class="empty"><h2>${v.loading ? "Loading students…" : "No registered students yet"}</h2>
+          <p>Students show up here once they create an account on the <a href="account.html">Student log in</a> page.</p></div>`}</section>`;
+  }
+
   function render() {
     const c = C();
     let body;
@@ -213,7 +279,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     return `<section class="panel" id="sa-panel"><div class="rec-head"><div class="who"><span class="eyebrow">Staff</span><h1>${title}</h1></div></div>
       ${body}${studentBox()}</section>`;
   }
-  function rerender() { if (L().state && document.getElementById("sa-panel")) L().render(); }
+  function rerender() { if (L().state && (document.getElementById("sa-panel") || document.getElementById("dir-panel"))) L().render(); }
 
   // A line on each student's page in the Students tab.
   function personNote(p) {
@@ -263,6 +329,12 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       case "signout": await C().signOut(); v.accounts = null; v.staff = null; setNote(""); rerender(); break;
       case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast("Still a student account. Ask an Admin for a staff role."); } break;
       case "refresh": setNote(""); loadAccounts(); break;
+      case "dpick": v.dsel = b.dataset.acc; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
+      case "dcopy": {
+        const t = [acc.full_name, acc.phone, acc.email, acc.address].filter(Boolean).join("\n");
+        try { await navigator.clipboard.writeText(t); L().toast("Contact copied"); } catch (err) { L().toast("Couldn't copy. Select the details and copy them."); }
+        break;
+      }
       case "link": {
         const sel = document.getElementById("sa-pick-" + acc.id), p = sel && L().personById(sel.value);
         if (!p) { L().toast("Choose a student to link to"); break; }
@@ -310,6 +382,14 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     });
   }
 
-  window.LDAccount = { render, personNote, summary };
+  // Live search: redraw only the list so typing isn't interrupted.
+  document.addEventListener("input", (e) => {
+    if (e.target.id !== "dir-q") return;
+    v.dq = e.target.value;
+    const ul = document.getElementById("dir-list"); if (ul) ul.innerHTML = dirList();
+    const n = document.getElementById("dir-count"); if (n && v.accounts) n.textContent = dirMatches().length + " of " + v.accounts.length + " registered";
+  });
+
+  window.LDAccount = { render, personNote, summary, directoryOn, renderDirectory };
   L().render();
 })();
