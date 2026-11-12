@@ -38,7 +38,7 @@
   }
   function renderAuth() {
     const a = view.auth;
-    const title = { signin: "Student log in", signup: "Create your student account", forgot: "Reset your password", recover: "Choose a new password" }[a];
+    const title = { signin: "Student portal", signup: "Create your student account", forgot: "Reset your password", recover: "Choose a new password" }[a];
     const intro = {
       signin: "Log in to update your contact details, emergency contact and certifications, and to follow your training.",
       signup: "Create an account so your instructor has your up-to-date details, and so you can follow your training progress.",

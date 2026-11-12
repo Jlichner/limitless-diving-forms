@@ -357,15 +357,15 @@
     return `<section class="panel"><div class="empty"><h2>Staff only</h2>
       <p>This page is for ${who}.${signedIn ? ` You're logged in as ${esc(C.user.email || "")} (${esc(C.ROLE_NAMES[C.role] || "Student")}).` : ""}</p>
       <div class="row-actions" style="justify-content:center">${signedIn ? `<button class="btn" data-mode="calendar">Back to the calendar</button>` : `<button class="btn primary" data-mode="staff">Admin Log in</button>`}
-        <a class="btn" href="account.html">Student log in</a></div></div></section>`;
+        <a class="btn" href="account.html">Student portal</a></div></div></section>`;
   }
 
   function renderNav() {
     const nav = document.getElementById("nav-modes"); if (!nav) return;
-    // The left navigation column. Student log in (a link to account.html) sits on top; the rest is grouped.
+    // The left navigation column. Student portal (a link to account.html) sits on top; the rest is grouped.
     // Staff sign in with the Admin Log in button in the header (mode "staff", drawn by student-accounts.js).
     const groups = [
-      [null, [["account", "Student log in"]]],
+      [null, [["account", "Student portal"]]],
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"]]],
       ["Tools", [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]]],
       ["Teams", [["dt6", "Dive Team 6"]]],

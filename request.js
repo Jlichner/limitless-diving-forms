@@ -102,7 +102,7 @@
     if (!C.user) {
       main.innerHTML = `<section class="pub-hero"><h1>Request a class</h1><p>Pick a course and the days that work for you, and we'll set it up.</p></section>
         <div class="msg"><p>Please log in to your student account first, so we know who's asking and how to reach you.</p>
-        <p><a class="btn primary" href="account.html#then=request">Student log in</a></p><p class="hint">New here? You can create an account on the same page.</p></div>`;
+        <p><a class="btn primary" href="account.html#then=request">Student portal</a></p><p class="hint">New here? You can create an account on the same page.</p></div>`;
       return;
     }
     if (!v.loaded) { main.innerHTML = `<div class="msg">Loading open dates…</div>`; return; }
