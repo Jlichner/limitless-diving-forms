@@ -62,7 +62,7 @@
   // Classes come from the online database when student accounts are set up (supabase-config.js) and the
   // instructor has published there; otherwise from classes.json.
   async function fromSupabase() {
-    const cfg = window.LD_SUPABASE || {}, url = String(cfg.url || "").trim().replace(/\/+$/, ""), key = String(cfg.key || "").trim();
+    const cfg = window.LD_SUPABASE || {}, url = (function (u) { try { const x = new URL(String(u || "").trim()); return x.protocol === "https:" ? x.origin : ""; } catch (e) { return ""; } })(cfg.url), key = String(cfg.key || "").trim();
     if (!/^https:\/\/[^\s/]+$/.test(url) || key.length < 20) return null;
     const get = (path) => fetch(url + "/rest/v1/" + path, { headers: { apikey: key }, cache: "no-store" })
       .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });

@@ -5,7 +5,8 @@
   "use strict";
 
   const cfg = window.LD_SUPABASE || {};
-  const url = String(cfg.url || "").trim().replace(/\/+$/, "");
+  // Accept the Project URL with or without extra path (e.g. ".../rest/v1/"): only the origin is used.
+  const url = (function (u) { try { const x = new URL(String(u || "").trim()); return x.protocol === "https:" ? x.origin : ""; } catch (e) { return ""; } })(cfg.url);
   const key = String(cfg.key || "").trim();
   const configured = /^https:\/\/[^\s/]+$/.test(url) && key.length > 20;
   const hasLib = !!(window.supabase && window.supabase.createClient);
