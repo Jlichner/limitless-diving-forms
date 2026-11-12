@@ -339,7 +339,7 @@
   // Instructors and Admins. Staff log in with Admin Log in (student-accounts.js, cloud.js). When online logins
   // aren't set up (no supabase-config.js values), everything stays open, as before.
   const RECORD_MODES = ["students", "catalog"];
-  const BUSINESS_MODES = ["invoices", "program"];
+  const BUSINESS_MODES = ["scheduling", "invoices", "program"];
   function minRoleFor(mode) {
     if (BUSINESS_MODES.includes(mode)) return "instructor";
     if (RECORD_MODES.includes(mode) || isCourse(mode)) return "divemaster";
@@ -371,7 +371,7 @@
       ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"]]],
       allowed("divemaster") && ["Records", [["students", "Students"]].concat(window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
-      allowed("instructor") && ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
+      allowed("instructor") && ["Business", [["scheduling", "Scheduling"], ["invoices", "Invoices"], ["program", "Settings"]]]
     ].filter(Boolean);
     // A catalog course without its own nav entry lights up "All courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
@@ -403,6 +403,12 @@
       // The full course list by agency, drawn by catalog-page.js.
       main.className = "shell full";
       main.innerHTML = `<section class="panel">${window.LDCatalogPage.render()}</section>`;
+      return;
+    }
+    if (view.mode === "scheduling" && window.LDScheduling) {
+      // Put a student on a class, event, tour or coaching session and make their learning agreement (scheduling.js).
+      main.className = "shell";
+      main.innerHTML = window.LDScheduling.render();
       return;
     }
     if (view.mode === "invoices" && window.LDInvoices) {
