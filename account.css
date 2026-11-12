@@ -146,3 +146,6 @@ a.navbtn { text-decoration: none; display: flex; align-items: center; }
 .backup-box { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; justify-content: space-between; padding: 12px 16px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
 .backup-box .hint { margin: 2px 0 0; }
 .backup-box .row-actions { margin: 0; }
+/* Links to other websites (left menu and the student menu). position keeps their screen-reader text inside the menu. */
+.navbtn.ext, .pubnav a.ext { position: relative; }
+.navbtn.ext span[aria-hidden], .pubnav a.ext span[aria-hidden] { font-size: .85em; opacity: .8; }
