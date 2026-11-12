@@ -478,8 +478,22 @@ create policy "Members see their own dive sites; staff see all" on public.dive_s
 
 drop policy if exists "Members add their own dive sites" on public.dive_sites;
 create policy "Members add their own dive sites" on public.dive_sites
-  for insert to authenticated with check (user_id = (select auth.uid())
-    and (select count(*) from public.dive_sites d where d.user_id = (select auth.uid())) < 500);
+  for insert to authenticated with check (user_id = (select auth.uid()));
+
+-- At most 500 places per member. Checked in a trigger: a policy can't count rows of its own table.
+create or replace function public.check_dive_site()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if (select count(*) from public.dive_sites where user_id = new.user_id) >= 500 then
+    raise exception 'You can save up to 500 places.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists dive_sites_check on public.dive_sites;
+create trigger dive_sites_check before insert on public.dive_sites
+  for each row execute function public.check_dive_site();
 
 drop policy if exists "Members change their own dive sites" on public.dive_sites;
 create policy "Members change their own dive sites" on public.dive_sites
