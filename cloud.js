@@ -54,7 +54,7 @@
   C.ready = new Promise(r => { resolveReady = r; });
 
   if (!C.available) {
-    resolveReady(C);
+    C.loaded = true; resolveReady(C);
   } else {
     C.client = window.supabase.createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     let first = true;
@@ -65,7 +65,7 @@
       setTimeout(async () => {
         if (first || (C.user && C.user.id) !== prev || event === "SIGNED_IN") await C.refreshRole();
         if (!C.user) { C.role = "student"; C.instructor = false; }
-        if (first) { first = false; resolveReady(C); }
+        if (first) { first = false; C.loaded = true; resolveReady(C); }
         emit(event);
       }, 0);
     });

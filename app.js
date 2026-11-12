@@ -334,6 +334,32 @@
   }
 
   // ---------- render ----------
+  // ---------- who can open what ----------
+  // Records (students and course records) are for Dive Masters and up; Business (invoices, settings) for
+  // Instructors and Admins. Staff log in with Admin Log in (student-accounts.js, cloud.js). When online logins
+  // aren't set up (no supabase-config.js values), everything stays open, as before.
+  const RECORD_MODES = ["students", "catalog"];
+  const BUSINESS_MODES = ["invoices", "program"];
+  function minRoleFor(mode) {
+    if (BUSINESS_MODES.includes(mode)) return "instructor";
+    if (RECORD_MODES.includes(mode) || isCourse(mode)) return "divemaster";
+    return null;
+  }
+  function allowed(minRole) {
+    const C = window.LDCloud;
+    if (!minRole || !C || !C.configured) return true;
+    return C.can(minRole);
+  }
+  function lockedPanel(minRole) {
+    const C = window.LDCloud, who = minRole === "instructor" ? "Instructors and Admins" : "Dive Masters, Instructors and Admins";
+    if (C && C.available && !C.loaded) return `<section class="panel"><div class="empty"><h2>Checking your log in…</h2></div></section>`;
+    const signedIn = C && C.user;
+    return `<section class="panel"><div class="empty"><h2>Staff only</h2>
+      <p>This page is for ${who}.${signedIn ? ` You're logged in as ${esc(C.user.email || "")} (${esc(C.ROLE_NAMES[C.role] || "Student")}).` : ""}</p>
+      <div class="row-actions" style="justify-content:center">${signedIn ? `<button class="btn" data-mode="calendar">Back to the calendar</button>` : `<button class="btn primary" data-mode="staff">Admin Log in</button>`}
+        <a class="btn" href="account.html">Student log in</a></div></div></section>`;
+  }
+
   function renderNav() {
     const nav = document.getElementById("nav-modes"); if (!nav) return;
     // The left navigation column. Student log in (a link to account.html) sits on top; the rest is grouped.
@@ -341,10 +367,10 @@
     const groups = [
       [null, [["account", "Student log in"]]],
       ["Classes", [["calendar", "Calendar"]]],
-      ["Records", [["students", "Students"]].concat(COURSE_ORDER.filter(id => !COURSES[id].basic).map(id => [id, COURSES[id].name]),
+      allowed("divemaster") && ["Records", [["students", "Students"]].concat(COURSE_ORDER.filter(id => !COURSES[id].basic).map(id => [id, COURSES[id].name]),
         window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
-      ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
-    ];
+      allowed("instructor") && ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
+    ].filter(Boolean);
     // A catalog course without its own nav entry lights up "All courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
     const btn = ([m, l]) => m === "account" ? `<a class="navbtn account" href="account.html">${esc(l)}</a>` : `<button class="navbtn${on(m) ? " active" : ""}" data-mode="${m}"${on(m) ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
@@ -353,6 +379,8 @@
   function render() {
     renderNav();
     const main = $("#main");
+    const need = minRoleFor(view.mode);
+    if (!allowed(need)) { main.className = "shell full"; main.innerHTML = lockedPanel(need); return; }
     if (view.mode === "calendar") {
       // calendar.js draws the landing page; it loads after this file and calls render() again.
       main.className = "shell single";
@@ -693,7 +721,10 @@
   function renderProgram() {
     const P = settingsProgram(), sc = settingsCourse();
     const picker = COURSE_ORDER.length > 1 ? `<div class="field" style="max-width:420px"><label for="settings-course">Course</label><select id="settings-course">${courseOptions(sc.id)}</select></div>` : "";
-    return `<div class="rec-head"><h1>Settings — ${esc(sc.fullName || sc.name)}</h1></div>${picker}
+    return `<div class="rec-head"><h1>Settings — ${esc(sc.fullName || sc.name)}</h1></div>
+      <div class="backup-box"><div><b>Backup</b><p class="hint">Your student records, invoices and settings live in this browser. Download a backup now and then, or move them to another computer.</p></div>
+        <div class="row-actions"><button class="btn" data-act="export">Download backup</button><button class="btn" data-act="import">Restore from backup…</button></div></div>
+      ${picker}
       <p class="hint">These fields fill every ${esc(sc.name)} student's proposal. Changes apply to all of them.</p>
       <h2 class="sec">Cover</h2><div class="grid">
         ${inp("p", "business", "Business name", "text", "wide")}${inp("p", "docTitle", "Document title")}${inp("p", "program", "Program")}

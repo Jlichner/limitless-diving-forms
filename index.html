@@ -49,14 +49,10 @@
 <div class="layout">
   <nav class="sidenav no-print" aria-label="Main">
     <div id="nav-modes" class="nav-modes"></div>
-    <div class="nav-tools">
-      <button class="navbtn" data-act="export">Export backup</button>
-      <button class="navbtn" data-act="import">Import</button>
-      <input type="file" id="import-file" accept="application/json,.json" hidden>
-    </div>
   </nav>
   <main id="main" class="shell"></main>
 </div>
+<input type="file" id="import-file" accept="application/json,.json" hidden>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.99.3/dist/umd/supabase.js"></script>
 <script src="supabase-config.js"></script>
