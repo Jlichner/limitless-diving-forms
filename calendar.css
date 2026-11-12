@@ -329,3 +329,50 @@ span.cal-ev:hover { filter: none; }
 .of-card textarea { min-height: 70px; }
 .of-card .row-actions { align-items: center; }
 .of-card .row-actions .chk { margin-right: auto; }
+
+/* Map pins (map-pins.js): a little diver-down flag */
+.dive-pin { background: none; border: 0; }
+.dive-pin svg { width: 26px; height: 30px; display: block; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, .45)); }
+.dive-pin .pin-n { position: absolute; left: 16px; top: -8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #0b2a3a; color: #fff;
+  font: 700 11px/18px var(--font-body); text-align: center; box-shadow: 0 0 0 2px #fff; }
+.leaflet-container { font: 14px/1.4 var(--font-body); background: #aad3df; }
+.leaflet-popup-content b { font-family: var(--font-display); font-size: 16px; }
+
+/* Dive map page (dive-map.js) */
+.dm-hero a { font-weight: 600; color: var(--accent); }
+.dm-stats { display: flex; flex-wrap: wrap; gap: 12px; }
+.dm-stats div { flex: 1 1 120px; display: grid; padding: 12px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--shallows); }
+.dm-stats b { font-family: var(--font-display); font-size: 32px; line-height: 1; color: var(--accent); }
+.dm-stats span { color: var(--muted); font-size: 14px; }
+.dm-panel { padding: 8px; }
+.dm-map { height: min(68vh, 560px); min-height: 320px; border-radius: 10px; }
+.dm-state { margin: 10px 8px 4px; }
+.dm-pop { color: #4f6a73; }
+.dm-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.dm-list button, .ms-site, .ms-hit { width: 100%; text-align: left; display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface-2); color: var(--ink); font: inherit; cursor: pointer; }
+.dm-list button:hover, .dm-list button:focus-visible, .ms-site:hover, .ms-site:focus-visible, .ms-hit:hover, .ms-hit:focus-visible { border-color: var(--accent); }
+.dm-list span, .ms-site span, .ms-hit span { color: var(--muted); font-size: 14px; }
+.dm-list em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--accent); }
+
+/* Places I've dived in the Student portal (dive-sites.js) */
+.my-sites[hidden] { display: none !important; }
+.acct.my-sites { padding-top: 0; margin-top: -38px; }
+.ms-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; align-items: start; margin-top: 10px; }
+.ms-map { height: 420px; border-radius: 10px; border: 1px solid var(--line); }
+.ms-form { display: grid; gap: 10px; }
+.ms-form .field { margin: 0; }
+.ms-form textarea { min-height: 64px; }
+.ms-search { display: flex; gap: 8px; }
+.ms-search input { flex: 1; min-width: 0; }
+.ms-results { display: grid; gap: 6px; }
+.ms-results:empty { display: none; }
+.ms-results .hint { margin: 0; }
+.ms-note { margin: 0; font-weight: 600; min-height: 1.3em; }
+.ms-note.ok { color: var(--ok); } .ms-note.bad { color: var(--bad); }
+.ms-h { margin: 20px 0 8px; }
+.ms-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ms-list li { display: flex; gap: 8px; align-items: center; }
+.ms-list li > .ms-site { flex: 1; }
+.ms-notes { font-style: italic; }
+@media (max-width: 760px) { .ms-cols { grid-template-columns: minmax(0, 1fr); } .ms-map { height: 300px; } }
