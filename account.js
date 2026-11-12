@@ -59,7 +59,7 @@
       recover: ""
     }[a];
     return `<section class="acct-auth">
-      <div class="acct-auth-art" aria-hidden="true">${ROSE}<span>Limitless Diving</span><small>Training · Safety · Adventure</small></div>
+      <div class="acct-auth-art"><img class="acct-logo" src="logo-badge.webp" width="480" height="480" alt="Limitless Diving &amp; Technical Training logo"><small>Training · Safety · Adventure</small></div>
       <form class="acct-card" id="auth-form" novalidate>
         <span class="eyebrow">Limitless Diving students</span>
         <h1>${title}</h1>
