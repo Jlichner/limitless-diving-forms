@@ -367,7 +367,7 @@
     const groups = [
       [null, [["account", "Student log in"]]],
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"]]],
-      ["Tools", [["nitrox", "Nitrox calculator"]]],
+      ["Tools", [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]]],
       ["Teams", [["dt6", "Dive Team 6"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"]]],
       allowed("divemaster") && ["Records", [["students", "Students"]].concat(window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
@@ -375,7 +375,7 @@
     ].filter(Boolean);
     // A catalog course without its own nav entry lights up "All courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
-    const LINKS = { account: "account.html", available: "available-classes.html", nitrox: "nitrox.html", dt6: "dive-team-6.html" };  // separate public pages
+    const LINKS = { account: "account.html", available: "available-classes.html", nitrox: "nitrox.html", physics: "diving-physics.html", dt6: "dive-team-6.html" };  // separate public pages
     const EXTERNAL = { teamfinder: "https://www.diveteamfinder.com/", packing: "https://www.divepacking.com/" };  // other websites, new tab
     const btn = ([m, l]) => EXTERNAL[m] ? `<a class="navbtn ext" href="${EXTERNAL[m]}" target="_blank" rel="noopener">${esc(l)} <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></a>` :
       LINKS[m] ? `<a class="navbtn ${m}" href="${LINKS[m]}">${esc(l)}</a>` : `<button class="navbtn${on(m) ? " active" : ""}" data-mode="${m}"${on(m) ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
