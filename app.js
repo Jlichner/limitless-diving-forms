@@ -728,6 +728,8 @@
     return `<div class="rec-head"><h1>Settings — ${esc(sc.fullName || sc.name)}</h1></div>
       <div class="backup-box"><div><b>Backup</b><p class="hint">Your student records, invoices and settings live in this browser. Download a backup now and then, or move them to another computer.</p></div>
         <div class="row-actions"><button class="btn" data-act="export">Download backup</button><button class="btn" data-act="import">Restore from backup…</button></div></div>
+      ${window.LDCalendar && window.LDCalendar.renderTypes ? window.LDCalendar.renderTypes() : ""}
+      <h2 class="sec">Course settings</h2>
       ${picker}
       <p class="hint">These fields fill every ${esc(sc.name)} student's proposal. Changes apply to all of them.</p>
       <h2 class="sec">Cover</h2><div class="grid">

@@ -265,6 +265,9 @@ create table if not exists public.classes (
   notes       text not null default '',
   updated_at  timestamptz not null default now()
 );
+-- Calendar entry types (Class, Event, Exploration, Tour…), added 2026-11-12.
+alter table public.classes add column if not exists event_type text not null default 'class';
+alter table public.classes add column if not exists event_type_name text not null default 'Class';
 alter table public.classes enable row level security;
 
 drop policy if exists "Anyone can read the class calendar" on public.classes;

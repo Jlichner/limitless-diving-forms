@@ -10,7 +10,8 @@
   function money(n) { return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
   function safeEmail(e) { return /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(e || "") ? e : ""; }
   function telHref(p) { const d = String(p || "").replace(/[^\d+]/g, ""); return d.length >= 7 ? "tel:" + d : ""; }
-  function color(k) { return /^k[0-5]$/.test(k.color || "") ? k.color : "k0"; }
+  function color(k) { return /^k\d$/.test(k.color || "") ? k.color : "k0"; }
+  function isClass(k) { return !k.type || k.type === "class" || !!k.course; }
 
   function seatsHtml(k) {
     if (k.seatsLeft == null) return "";
@@ -20,10 +21,10 @@
 
   function card(k) {
     const c = data.contact || {}, email = safeEmail(c.email);
-    const subject = "Class: " + k.title + (k.dates.length ? " (" + G.range(k.dates) + ")" : "");
+    const subject = (isClass(k) ? "Class" : k.typeName || "Event") + ": " + k.title + (k.dates.length ? " (" + G.range(k.dates) + ")" : "");
     const ask = email ? `mailto:${email}?subject=${encodeURIComponent(subject)}` : telHref(c.phone);
     return `<article class="pub-card ${color(k)}" id="class-${esc(k.id)}">
-      <span class="eyebrow">${esc(k.courseName)}</span>
+      <span class="eyebrow">${esc(isClass(k) ? k.courseName : k.typeName || "")}</span>
       <h3>${esc(k.title)}</h3>
       <span class="when">${esc(G.range(k.dates) || "Dates to be announced")}</span>
       ${seatsHtml(k)}
@@ -31,7 +32,7 @@
         ${k.price != null ? `<dt>Price</dt><dd class="money">${money(k.price)}</dd>` : ""}
         ${k.dates.length > 1 ? `<dt>Days</dt><dd>${k.dates.map(d => esc(G.fmt(d, { weekday: "short", year: undefined }))).join(", ")}</dd>` : ""}</dl>
       ${k.notes ? `<p>${esc(k.notes)}</p>` : ""}
-      ${ask ? `<a class="btn primary" href="${esc(ask)}">${k.seatsLeft === 0 ? "Join the waitlist" : "Ask about this class"}</a>` : ""}
+      ${ask ? `<a class="btn primary" href="${esc(ask)}">${k.seatsLeft === 0 ? "Join the waitlist" : isClass(k) ? "Ask about this class" : "Ask about this " + esc(String(k.typeName || "event").toLowerCase())}</a>` : ""}
     </article>`;
   }
 
@@ -73,7 +74,8 @@
       updated: s.updated_at, heading: s.heading, intro: s.intro,
       contact: { instructor: s.instructor, phone: s.phone, email: s.email },
       classes: (rows || []).map(k => ({
-        id: k.id, course: k.course, courseName: k.course_name, title: k.title, color: k.color, dates: k.dates,
+        id: k.id, type: k.event_type || "class", typeName: k.event_type_name || "Class",
+        course: k.course, courseName: k.course_name, title: k.title, color: k.color, dates: k.dates,
         time: k.time, location: k.location, price: k.price == null ? null : Number(k.price),
         seats: k.seats, seatsLeft: k.seats_left, notes: k.notes
       }))
