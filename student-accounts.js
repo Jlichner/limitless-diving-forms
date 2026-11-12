@@ -91,6 +91,13 @@
     v.loading = false;
     if (a.error) v.error = "Couldn't load the accounts: " + C().explain(a.error);
     else v.accounts = a.data || [];
+    // Profile photos are private: get a short-lived link for each one.
+    v.photos = {};
+    const paths = (v.accounts || []).map(x => x.photo_path).filter(Boolean);
+    if (paths.length) {
+      const { data } = await C().client.storage.from("avatars").createSignedUrls(paths, 3600);
+      (data || []).forEach(r => { if (r.signedUrl) v.photos[r.path] = r.signedUrl; });
+    }
     v.staff = st.error ? [] : st.data;
     rerender();
   }
@@ -156,8 +163,11 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     const guess = free.find(x => em && String(x.email || "").trim().toLowerCase() === em) || free.find(x => nm && String(x.name || "").trim().toLowerCase() === nm);
     const dd = (label, val) => val ? `<dt>${label}</dt><dd>${esc(val)}</dd>` : "";
     const emergency = [acc.emergency_name, acc.emergency_relationship ? "(" + acc.emergency_relationship + ")" : "", acc.emergency_phone].filter(Boolean).join(" ");
+    const photo = acc.photo_path && v.photos && v.photos[acc.photo_path];
+    const ini = String(acc.full_name || "?").trim().split(/\s+/).slice(0, 2).map(w => w[0] || "").join("").toUpperCase() || "?";
     return `<article class="sa-row${p ? " linked" : ""}">
-      <div><h3>${esc(acc.full_name || "No name yet")}</h3>
+      <div><div class="sa-who">${photo ? `<img class="avatar photo-sm" src="${esc(photo)}" alt="${esc(acc.full_name || "Student")} profile photo">` : `<span class="avatar photo-sm" aria-hidden="true">${esc(ini)}</span>`}
+        <h3>${esc(acc.full_name || "No name yet")}</h3></div>
         <span class="meta">${esc(acc.email)} ${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span>`}</span>
         <dl>${dd("Phone", acc.phone)}${dd("Address", acc.address)}${dd("Emergency", emergency)}${dd("Certs", certs.map(certText).join("\n"))}
           ${dd("Updated", acc.updated_at ? fmtDate(String(acc.updated_at).slice(0, 10)) : "")}</dl></div>
