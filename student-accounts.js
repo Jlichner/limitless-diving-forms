@@ -398,6 +398,6 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     const n = document.getElementById("dir-count"); if (n && v.members) n.textContent = countText();
   });
 
-  window.LDAccount = { render, personNote, summary, directoryOn, renderDirectory };
+  window.LDAccount = { render, personNote, summary, directoryOn, renderDirectory, applyAccount };
   L().render();
 })();
