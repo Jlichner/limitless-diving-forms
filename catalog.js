@@ -1,0 +1,146 @@
+/* Limitless Diving — the full course catalog: every NAUI, NAUI Technical and TDI class students can enroll in.
+   Load after app.js and courses.js in index.html (each catalog course is registered as a course there), and on
+   account.html before account.js (it only uses the certification lists there).
+
+   NAUI standards (minimum age, prerequisites, required dives, maximum depth) come from the 2026 NAUI Standards
+   and Policies Manual; `page` is the manual page. TDI standards are left blank on purpose: fill them in under
+   Settings for that course. Every value here is only a starting point and can be edited in Settings.
+
+   To give a course a full skill matrix later, register it in courses.js with the same id (like Rescue Diver),
+   and add `app: "<id>"` here if the ids differ. */
+(function () {
+  "use strict";
+
+  const AGENCIES = ["NAUI", "NAUI Technical", "TDI"];
+
+  const JR = " (junior certification 10–14)";
+  const OW = "NAUI Open Water Scuba Diver or equivalent";
+  const AOW = "NAUI Advanced Open Water Scuba Diver or equivalent";
+  const NO_DECO = "; no dives require staged decompression";
+  const GEAR = "Students furnish their own dive equipment, checked by the instructor before open water";
+
+  // id: a short stable key (also the course id in the app). app: the id of an existing full course instead.
+  // name: the course name. cert: the certification it issues, if it differs from the name.
+  // std: { age, prereqs[], dives, depth, page } from the standards, or null when not entered yet.
+  const COURSES = [
+    // ---------------- NAUI ----------------
+    { agency: "NAUI", id: "naui-adaptive", name: "Adaptive Scuba Diver",
+      std: { age: "15" + JR, prereqs: ["No certification required"], dives: 4, depth: "18 m / 60 ft", page: 92 } },
+    { agency: "NAUI", id: "naui-aow", name: "Advanced Open Water Scuba Diver",
+      std: { age: "15" + JR, prereqs: [OW, GEAR], dives: 6, divesNote: "Navigation, night or limited visibility, and deep (130 ft max), plus 3 electives",
+        depth: "40 m / 130 ft" + NO_DECO, page: 116 } },
+    { agency: "NAUI", id: "naui-ai", name: "Assistant Instructor", leadership: true,
+      std: { age: "18 before training starts", prereqs: [
+        "NAUI Open Water, Advanced Open Water, Rescue, Nitrox and Master Scuba Diver (or equivalents)",
+        "Diving First Aid for Divers (DFA) or equivalent",
+        "50 logged open water dives with at least 25 hours bottom time, varied in environment, depth and activity",
+        "Unconditional medical approval for diving from a physician within the last 12 months", GEAR],
+        dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 196 } },
+    { agency: "NAUI", id: "naui-deep", name: "Deep Diver",
+      std: { age: "15", prereqs: [AOW, GEAR], dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 159 } },
+    { agency: "NAUI", id: "naui-drysuit", name: "Drysuit Diver",
+      std: { age: "15" + JR, prereqs: ["Enrolled in a NAUI instructor-led course (e.g. Open Water) or " + OW], dives: 4,
+        depth: "40 m / 130 ft" + NO_DECO, page: 129 } },
+    { agency: "NAUI", id: "naui-experienced", name: "Experienced Scuba Diver",
+      std: { age: "15", prereqs: ["No certification required", "Proof of at least 25 open water scuba dives"], dives: 4,
+        divesNote: "The 4 Open Water course dives; or, if time or conditions don't allow, all Open Water skills in confined water plus at least 2 open water dives",
+        depth: "18 m / 60 ft", page: 100 } },
+    { agency: "NAUI", id: "naui-international", name: "International Diver", cert: "International Diver Recognition",
+      std: { age: "10 (junior restrictions apply)", prereqs: ["Enrolled in a NAUI instructor-led course (e.g. Open Water) or " + OW], dives: 2,
+        depth: "No maximum set; limited by the diver's capability, experience and certification", page: 401 } },
+    { agency: "NAUI", id: "naui-intro", name: "Introduction to Scuba",
+      std: { age: "8 for confined water, 10 for open water", prereqs: ["No certification required", "Novice swimming ability"], dives: 1,
+        divesNote: "1 confined water dive, plus 1 optional open water dive for ages 10 and up",
+        depth: "6 m / 20 ft confined, 12 m / 40 ft open water", page: 64 } },
+    { agency: "NAUI", id: "naui-master", name: "Master Scuba Diver",
+      std: { age: "15", prereqs: [AOW, "NAUI Rescue Scuba Diver or equivalent", GEAR], dives: 8, depth: "40 m / 130 ft" + NO_DECO, page: 125 } },
+    { agency: "NAUI", id: "naui-night", name: "Night & Limited Visibility Diver",
+      std: { age: "15" + JR, prereqs: [OW, GEAR], dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 161 } },
+    { agency: "NAUI", id: "naui-nitrox", name: "Nitrox Diver", cert: "Enriched Air Nitrox (EANx) Diver",
+      std: { age: "15" + JR, prereqs: ["Enrolled in a NAUI instructor-led open water course or " + OW, GEAR], dives: 0,
+        divesNote: "2 open water dives encouraged, not required",
+        depth: "40 m / 130 ft or a PO2 of 1.4 (1.6 contingency), whichever is less" + NO_DECO, page: 112 } },
+    { agency: "NAUI", id: "open-water", app: "open-water", name: "Open Water Scuba Diver",
+      std: { age: "15" + JR, prereqs: ["No certification required"], dives: 4, depth: "18 m / 60 ft", page: 83 } },
+    { agency: "NAUI", id: "naui-dpv", name: "Recreational Diver Propulsion Vehicle", cert: "Recreational DPV Diver",
+      std: { age: "15", prereqs: [AOW, "25 logged dives", GEAR], dives: 4, depth: "18 m / 60 ft" + NO_DECO, page: 135 } },
+    { agency: "NAUI", id: "naui-hookah", name: "Recreational Hookah Diver",
+      std: { age: "15" + JR, prereqs: ["No certification required"], dives: 4, depth: "18 m / 60 ft", page: 75 } },
+    { agency: "NAUI", id: "naui-refresher", name: "Refresher Scuba",
+      std: { age: "15" + JR, prereqs: [OW, "No diving in the last 12 months: water skills evaluation and confined water refresher before open water"],
+        dives: null, divesNote: "No minimum set", depth: "No maximum set; limited by the diver's capability, experience and certification", page: 107 } },
+    { agency: "NAUI", id: "rescue", app: "rescue", name: "Rescue Scuba Diver",
+      std: { age: "15" + JR, prereqs: [OW, "Current CPR / First Aid and Emergency Oxygen (EO2), unless taught in the course", GEAR], dives: 2,
+        depth: "18 m / 60 ft for rescue training" + NO_DECO, page: 120 } },
+    { agency: "NAUI", id: "naui-scuba-diver", name: "Scuba Diver",
+      std: { age: "15" + JR, prereqs: ["Novice swimming ability"], dives: 2, depth: "12 m / 40 ft", page: 68 } },
+    { agency: "NAUI", id: "naui-sar", name: "Search & Recovery Diver",
+      std: { age: "15" + JR, prereqs: [OW, GEAR], dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 167 } },
+    { agency: "NAUI", id: "naui-skin", name: "Skin Diver",
+      std: { age: "12 (junior certification 8–11)", prereqs: ["No certification required"], dives: 2, depth: "10 m / 33 ft", page: 328 } },
+    { agency: "NAUI", id: "naui-skin-instructor", name: "Skin Diving Instructor", leadership: true,
+      std: { age: "18 before training starts", prereqs: ["NAUI Skin Diver or Open Water Scuba Diver or equivalent",
+        "Current Diving First Aid (DFA) or equivalent", "25 logged skin dives, varied in environment, depth and activity",
+        "Unconditional medical approval for diving from a physician within the last 12 months", GEAR],
+        dives: 1, depth: "", page: 358 } },
+    { agency: "NAUI", id: "naui-sas", name: "Supplied Air Snorkeling",
+      std: { age: "No minimum", prereqs: ["No certification required"], dives: 1, divesNote: "1 water session", depth: "Not applicable", page: 74 } },
+    { agency: "NAUI", id: "naui-tandem", name: "Tandem Scuba Diver",
+      std: { age: "10", prereqs: ["No certification required"], dives: 1, depth: "12 m / 40 ft", page: 61 } },
+    { agency: "NAUI", id: "naui-archaeology", name: "Underwater Archaeology",
+      std: { age: "15" + JR, prereqs: [OW, GEAR], dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 172 } },
+    { agency: "NAUI", id: "naui-imaging", name: "Underwater Digital Imaging Diver",
+      std: { age: "15" + JR, prereqs: [OW, GEAR], dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 174 } },
+    { agency: "NAUI", id: "naui-hunter", name: "Underwater Hunting & Collector", cert: "Underwater Hunter and Collector",
+      std: { age: "15" + JR, prereqs: [OW, GEAR], dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 177 } },
+    { agency: "NAUI", id: "naui-naturalist", name: "Underwater Naturalist Diver",
+      std: { age: "15" + JR, prereqs: [OW, GEAR], dives: 3, depth: "40 m / 130 ft" + NO_DECO, page: 179 } },
+    { agency: "NAUI", id: "naui-wreck", name: "Wreck Diver (External Survey)",
+      std: { age: "15" + JR, prereqs: [AOW, GEAR], dives: 2, depth: "40 m / 130 ft" + NO_DECO, page: 182 } },
+    { agency: "NAUI", id: "naui-ice", name: "Ice Diver", cert: "Recreational Ice Diver",
+      std: { age: "18", prereqs: [OW, "50 logged dives in a variety of conditions", GEAR], dives: 3,
+        depth: "12 m / 40 ft, and no more than 30 m / 100 ft horizontally from the hole", page: 163 } },
+    // Already in the app with a full skill matrix (not on the enroll list Jamie sent, kept so nothing disappears).
+    { agency: "NAUI", id: "divemaster", app: "divemaster", name: "Divemaster", leadership: true,
+      std: { age: "18 before training starts", prereqs: [
+        "NAUI Open Water, Advanced Open Water, Rescue, Nitrox and Master Scuba Diver (or equivalents)",
+        "Diving First Aid for Divers (DFA) or equivalent",
+        "60 logged open water dives with at least 30 hours bottom time",
+        "Unconditional medical approval for diving from a physician within the last 12 months", GEAR],
+        dives: 10, divesNote: "20 open water Divemaster activities over at least 10 dives", depth: "40 m / 130 ft" + NO_DECO, page: 200 } },
+
+    // ---------------- NAUI Technical ----------------
+    { agency: "NAUI Technical", id: "naui-tech-intro", name: "Intro to Technical Diving", cert: "Introduction to Technical Diving",
+      std: { age: "15", prereqs: ["NAUI EANx (Nitrox) Diver or equivalent", AOW, "At least 25 logged dives, 10 of them on EANx"], dives: 4,
+        divesNote: "No dives in an overhead environment",
+        depth: "18 m / 60 ft until the NAUI Technical Diver Skills Checklist is complete, then 40 m / 130 ft" + NO_DECO, page: 237 } },
+    { agency: "NAUI Technical", id: "naui-tech-deco", name: "Technical Decompression Diver",
+      std: { age: "18", prereqs: ["NAUI Master Scuba Diver or equivalent", "NAUI Introduction to Technical Diving or equivalent",
+        "At least 50 logged dives, 15 of them on EANx"], dives: 6,
+        divesNote: "Includes an evaluated simulated-decompression dive (4 stops and a gas switch) before any required-stop dives",
+        depth: "18 m / 60 ft until the NAUI Technical Diver Skills Checklist is complete, then 46 m / 150 ft", page: 241 } },
+
+    // ---------------- TDI (standards not entered yet) ----------------
+    { agency: "TDI", id: "tdi-intro-tech", name: "Intro to Technical Diving", std: null },
+    { agency: "TDI", id: "tdi-dpv", name: "Technical Diver Propulsion Vehicle", std: null }
+  ];
+  COURSES.forEach(c => { c.cert = c.cert || c.name; c.app = c.app || c.id; c.fullName = c.agency + " " + c.name; });
+
+  // Certifications people commonly hold that aren't on the course list (offered on every agency).
+  const OTHER_CERTS = ["Divemaster", "Instructor", "First Aid / CPR", "Diving First Aid (DFA)", "Emergency Oxygen Provider (EO2)"];
+  // Agencies a student can pick for a certification they already hold.
+  const CERT_AGENCIES = AGENCIES.concat(["PADI", "SSI", "SDI", "RAID", "GUE", "IANTD", "NASE", "BSAC", "CMAS", "Other"]);
+  const GENERIC = ["Scuba Diver", "Open Water Diver", "Advanced Open Water Diver", "Enriched Air Nitrox Diver", "Rescue Diver",
+    "Master Scuba Diver", "Deep Diver", "Drysuit Diver", "Night Diver", "Wreck Diver", "Divemaster", "Assistant Instructor", "Instructor"];
+
+  function byAgency() { return AGENCIES.map(a => ({ agency: a, courses: COURSES.filter(c => c.agency === a) })); }
+  function find(id) { return COURSES.find(c => c.id === id || c.app === id) || null; }
+  // Certification names to suggest for an agency (the catalog's courses for NAUI / NAUI Technical / TDI).
+  function certNames(agency) {
+    const own = COURSES.filter(c => c.agency === agency).map(c => c.cert);
+    const base = own.length ? own : GENERIC;
+    return base.concat(OTHER_CERTS.filter(x => !base.includes(x)));
+  }
+
+  window.LDCatalog = { AGENCIES, CERT_AGENCIES, COURSES, byAgency, find, certNames };
+})();
