@@ -1,36 +1,64 @@
--- Limitless Diving: student accounts, shared training progress and the public class calendar.
+-- Limitless Diving: student accounts, staff roles, shared training progress and the public class calendar.
 --
 -- Run this whole file once in your Supabase project: Dashboard → SQL Editor → New query → paste → Run.
 -- It is safe to run again; it only creates what's missing and replaces the policies and functions.
 --
--- Who can see what (row-level security):
---   • A student can read and edit only their own profile, and read only their own training progress.
---   • An instructor (a row in public.instructors) can read and edit every profile and write progress.
---   • Anyone, signed in or not, can read the published class calendar. Only instructors can change it.
---   • Nobody can make themselves an instructor from the app. Add instructors here in the SQL Editor:
---       insert into public.instructors (user_id)
---       select id from auth.users where email = 'you@example.com';
+-- Four levels of access (row-level security enforces them in the database, not just on screen):
+--   • Student      everyone who signs up. Reads and edits only their own profile; reads only their own progress.
+--   • Dive Master  also reads every student's profile (contact, emergency contact, certifications) and progress,
+--                  so they have emergency details on dive days. Can't change anything.
+--   • Instructor   also edits student profiles, shares progress with students and publishes the class calendar.
+--   • Admin        also gives and removes staff roles (Dive Master, Instructor, Admin).
+--   Anyone, signed in or not, can read the published class calendar.
+--
+-- Nobody can raise their own level from the website. Make the first Admin here in the SQL Editor:
+--     insert into public.staff_roles (user_id, role)
+--     select id, 'admin' from auth.users where email = 'you@example.com'
+--     on conflict (user_id) do update set role = 'admin';
+-- After that, the Admin gives roles to others from the app (Admin Log in → Staff and roles).
 
--- ---------- instructors ----------
-create table if not exists public.instructors (
+-- ---------- staff roles (no row = Student) ----------
+create table if not exists public.staff_roles (
   user_id    uuid primary key references auth.users (id) on delete cascade,
+  role       text not null check (role in ('divemaster', 'instructor', 'admin')),
   created_at timestamptz not null default now()
 );
-alter table public.instructors enable row level security;
+alter table public.staff_roles enable row level security;
 
-drop policy if exists "Instructors can see their own row" on public.instructors;
-create policy "Instructors can see their own row" on public.instructors
-  for select to authenticated using (user_id = (select auth.uid()));
--- No insert, update or delete policies: instructors are added in the SQL Editor only.
+-- Earlier versions of this file had an instructors table: carry those people over as Admins.
+do $$
+begin
+  if to_regclass('public.instructors') is not null then
+    insert into public.staff_roles (user_id, role) select user_id, 'admin' from public.instructors on conflict (user_id) do nothing;
+    drop table public.instructors cascade;
+  end if;
+end $$;
+drop function if exists public.is_instructor() cascade;
 
-create or replace function public.is_instructor()
+-- Your level: 'student', 'divemaster', 'instructor' or 'admin'.
+create or replace function public.my_role()
+returns text
+language sql stable security definer set search_path = ''
+as $$
+  select coalesce((select role from public.staff_roles where user_id = (select auth.uid())), 'student');
+$$;
+-- True when your level is at least the one named.
+create or replace function public.has_role(min_role text)
 returns boolean
 language sql stable security definer set search_path = ''
 as $$
-  select exists (select 1 from public.instructors where user_id = (select auth.uid()));
+  select array_position(array['student', 'divemaster', 'instructor', 'admin'], public.my_role())
+      >= coalesce(array_position(array['student', 'divemaster', 'instructor', 'admin'], min_role), 99);
 $$;
-revoke all on function public.is_instructor() from public, anon;
-grant execute on function public.is_instructor() to authenticated;
+revoke all on function public.my_role() from public, anon;
+revoke all on function public.has_role(text) from public, anon;
+grant execute on function public.my_role() to authenticated;
+grant execute on function public.has_role(text) to authenticated;
+
+drop policy if exists "Staff see their own role; admins see all" on public.staff_roles;
+create policy "Staff see their own role; admins see all" on public.staff_roles
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.has_role('admin')));
+-- Roles change only through set_staff_role() below (or the SQL Editor), so there are no write policies.
 
 create or replace function public.touch_updated_at()
 returns trigger
@@ -67,9 +95,9 @@ drop trigger if exists student_profiles_touch on public.student_profiles;
 create trigger student_profiles_touch before update on public.student_profiles
   for each row execute function public.touch_updated_at();
 
-drop policy if exists "Students read their own profile; instructors read all" on public.student_profiles;
-create policy "Students read their own profile; instructors read all" on public.student_profiles
-  for select to authenticated using (id = (select auth.uid()) or (select public.is_instructor()));
+drop policy if exists "Students read their own profile; staff read all" on public.student_profiles;
+create policy "Students read their own profile; staff read all" on public.student_profiles
+  for select to authenticated using (id = (select auth.uid()) or (select public.has_role('divemaster')));
 
 drop policy if exists "Students create their own profile" on public.student_profiles;
 create policy "Students create their own profile" on public.student_profiles
@@ -78,8 +106,8 @@ create policy "Students create their own profile" on public.student_profiles
 drop policy if exists "Students edit their own profile; instructors edit all" on public.student_profiles;
 create policy "Students edit their own profile; instructors edit all" on public.student_profiles
   for update to authenticated
-  using (id = (select auth.uid()) or (select public.is_instructor()))
-  with check (id = (select auth.uid()) or (select public.is_instructor()));
+  using (id = (select auth.uid()) or (select public.has_role('instructor')))
+  with check (id = (select auth.uid()) or (select public.has_role('instructor')));
 
 -- Make a profile as soon as someone signs up, using the name they gave on the sign-up form.
 create or replace function public.handle_new_user()
@@ -99,7 +127,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- The instructor's list of accounts, with each student's sign-in email (which lives in auth.users).
+-- Staff's list of student accounts, with each student's sign-in email (which lives in auth.users).
 create or replace function public.student_accounts()
 returns table (
   id uuid, email text, full_name text, address text, phone text,
@@ -109,8 +137,8 @@ returns table (
 language plpgsql stable security definer set search_path = ''
 as $$
 begin
-  if not public.is_instructor() then
-    raise exception 'Only instructors can list student accounts' using errcode = '42501';
+  if not public.has_role('divemaster') then
+    raise exception 'Only staff can list student accounts' using errcode = '42501';
   end if;
   return query
     select p.id, u.email::text, p.full_name, p.address, p.phone,
@@ -118,12 +146,65 @@ begin
            p.certifications, p.created_at, p.updated_at, u.email_confirmed_at is not null
     from public.student_profiles p
     join auth.users u on u.id = p.id
-    where not exists (select 1 from public.instructors i where i.user_id = p.id)
+    where not exists (select 1 from public.staff_roles r where r.user_id = p.id)
     order by p.full_name;
 end;
 $$;
 revoke all on function public.student_accounts() from public, anon;
 grant execute on function public.student_accounts() to authenticated;
+
+-- ---------- managing staff (Admins only) ----------
+create or replace function public.staff_members()
+returns table (id uuid, email text, full_name text, role text)
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if not public.has_role('admin') then
+    raise exception 'Only admins can see the staff list' using errcode = '42501';
+  end if;
+  return query
+    select r.user_id, u.email::text, coalesce(p.full_name, ''), r.role
+    from public.staff_roles r
+    join auth.users u on u.id = r.user_id
+    left join public.student_profiles p on p.id = r.user_id
+    order by array_position(array['admin', 'instructor', 'divemaster'], r.role), p.full_name;
+end;
+$$;
+revoke all on function public.staff_members() from public, anon;
+grant execute on function public.staff_members() to authenticated;
+
+-- Give someone a level by the email they signed up with. new_role 'student' takes their staff role away.
+create or replace function public.set_staff_role(member_email text, new_role text)
+returns text
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  target uuid;
+begin
+  if not public.has_role('admin') then
+    raise exception 'Only admins can change roles' using errcode = '42501';
+  end if;
+  if new_role not in ('student', 'divemaster', 'instructor', 'admin') then
+    raise exception 'Unknown role %', new_role using errcode = '22023';
+  end if;
+  select id into target from auth.users where lower(email) = lower(trim(member_email));
+  if target is null then
+    raise exception 'No account uses that email. Ask them to sign up on the student log in page first.' using errcode = 'P0002';
+  end if;
+  if target = (select auth.uid()) then
+    raise exception 'You can''t change your own role. Ask another admin.' using errcode = '42501';
+  end if;
+  if new_role = 'student' then
+    delete from public.staff_roles where user_id = target;
+  else
+    insert into public.staff_roles (user_id, role) values (target, new_role)
+    on conflict (user_id) do update set role = excluded.role;
+  end if;
+  return new_role;
+end;
+$$;
+revoke all on function public.set_staff_role(text, text) from public, anon;
+grant execute on function public.set_staff_role(text, text) to authenticated;
 
 -- ---------- training progress the instructor shares with each student ----------
 create table if not exists public.student_progress (
@@ -136,15 +217,15 @@ create table if not exists public.student_progress (
 create index if not exists student_progress_student_id on public.student_progress (student_id);
 alter table public.student_progress enable row level security;
 
-drop policy if exists "Students read their own progress; instructors read all" on public.student_progress;
-create policy "Students read their own progress; instructors read all" on public.student_progress
-  for select to authenticated using (student_id = (select auth.uid()) or (select public.is_instructor()));
+drop policy if exists "Students read their own progress; staff read all" on public.student_progress;
+create policy "Students read their own progress; staff read all" on public.student_progress
+  for select to authenticated using (student_id = (select auth.uid()) or (select public.has_role('divemaster')));
 
 drop policy if exists "Instructors write progress" on public.student_progress;
 create policy "Instructors write progress" on public.student_progress
   for all to authenticated
-  using ((select public.is_instructor()))
-  with check ((select public.is_instructor()));
+  using ((select public.has_role('instructor')))
+  with check ((select public.has_role('instructor')));
 
 -- ---------- public class calendar ----------
 create table if not exists public.classes (
@@ -171,8 +252,8 @@ create policy "Anyone can read the class calendar" on public.classes
 drop policy if exists "Instructors manage classes" on public.classes;
 create policy "Instructors manage classes" on public.classes
   for all to authenticated
-  using ((select public.is_instructor()))
-  with check ((select public.is_instructor()));
+  using ((select public.has_role('instructor')))
+  with check ((select public.has_role('instructor')));
 
 -- The public page's heading, introduction and contact details (one row).
 create table if not exists public.calendar_settings (
@@ -193,12 +274,12 @@ create policy "Anyone can read the calendar settings" on public.calendar_setting
 drop policy if exists "Instructors manage the calendar settings" on public.calendar_settings;
 create policy "Instructors manage the calendar settings" on public.calendar_settings
   for all to authenticated
-  using ((select public.is_instructor()))
-  with check ((select public.is_instructor()));
+  using ((select public.has_role('instructor')))
+  with check ((select public.has_role('instructor')));
 
 -- ---------- table access for the API roles (row-level security above still applies) ----------
-revoke all on public.instructors, public.student_profiles, public.student_progress, public.classes, public.calendar_settings from anon;
+revoke all on public.staff_roles, public.student_profiles, public.student_progress, public.classes, public.calendar_settings from anon;
 grant select on public.classes, public.calendar_settings to anon;
-grant select on public.instructors to authenticated;
+grant select on public.staff_roles to authenticated;
 grant select, insert, update on public.student_profiles to authenticated;
 grant select, insert, update, delete on public.student_progress, public.classes, public.calendar_settings to authenticated;

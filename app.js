@@ -324,14 +324,15 @@
   // ---------- render ----------
   function renderNav() {
     const nav = document.getElementById("nav-modes"); if (!nav) return;
-    // The left navigation column. Student account sits on top; the rest is grouped.
+    // The left navigation column. Student log in (a link to account.html) sits on top; the rest is grouped.
+    // Staff sign in with the Admin Log in button in the header (mode "staff", drawn by student-accounts.js).
     const groups = [
-      [null, [["account", "Student account"]]],
+      [null, [["account", "Student log in"]]],
       ["Classes", [["calendar", "Calendar"]]],
       ["Records", [["students", "Students"]].concat(COURSE_ORDER.map(id => [id, COURSES[id].name]))],
       ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
     ];
-    const btn = ([m, l]) => `<button class="navbtn${m === "account" ? " account" : ""}${view.mode === m ? " active" : ""}" data-mode="${m}"${view.mode === m ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
+    const btn = ([m, l]) => m === "account" ? `<a class="navbtn account" href="account.html">${esc(l)}</a>` : `<button class="navbtn${view.mode === m ? " active" : ""}" data-mode="${m}"${view.mode === m ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
     nav.innerHTML = groups.map(([g, items]) => (g ? `<span class="nav-group">${esc(g)}</span>` : "") + items.map(btn).join("")).join("");
   }
   function render() {
@@ -343,8 +344,8 @@
       main.innerHTML = window.LDCalendar ? window.LDCalendar.render() : "";
       return;
     }
-    if (view.mode === "account") {
-      // The student account page is added by its own script (window.LDAccount); until then, a placeholder.
+    if (view.mode === "staff" || view.mode === "account") {
+      // Staff sign-in and student account management, drawn by student-accounts.js (window.LDAccount).
       main.className = "shell full";
       main.innerHTML = window.LDAccount ? window.LDAccount.render() : `<section class="panel"><div class="empty"><h2>Student accounts are coming soon</h2>
         <p>Students will be able to create their own account here and keep their name, address, phone, emergency contact and certifications up to date.</p></div></section>`;

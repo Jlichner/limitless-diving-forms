@@ -23,14 +23,25 @@ A web app for Limitless Diving & Technical Training's courses: Open Water Diver 
 
 ## Student accounts
 
-Students can create their own account at `account.html` (the **Student account** button in the app links to it). On their account page they keep their **name, address, phone number, emergency contact (with phone) and current certifications** up to date, see the training progress you share with them, and see upcoming classes, with the ones they're enrolled in marked.
+Students can create their own account at `account.html` (the **Student log in** button links to it). On their account page they keep their **name, address, phone number, emergency contact (with phone) and current certifications** up to date, see the training progress you share with them, and see upcoming classes, with the ones they're enrolled in marked.
 
-In the app, the **Student account** page is where you, the instructor, sign in to:
+Staff use the **Admin Log in** button in the header (next to the dive flag). Instructors and Admins sign in there to:
 
 - see every student account and **link** it to a student in your Students list (or add them as a new student). Linking copies their details in.
 - **Share progress**: each linked student sees their course dates, skills mastered, dives logged and balance due. Medical notes, your notes and other students are never sent.
 
-**Who can see what.** Row-level security in the database (`supabase/schema.sql`) lets each student read and change only their own record and read only their own progress. Only instructors can see every account, share progress and change the class calendar. Nobody can make themselves an instructor from the website.
+**Four levels of access**, enforced by row-level security in the database (`supabase/schema.sql`), not just on screen:
+
+| Level | Can |
+| --- | --- |
+| **Student** (everyone who signs up) | See and edit only their own details; see only their own progress; see the class calendar. |
+| **Dive Master** | Also see every student's contact, emergency contact, certifications and progress (read only). |
+| **Instructor** | Also edit student details, link accounts, share progress and publish the class calendar. |
+| **Admin** | Also give and remove staff roles (**Admin Log in → Staff and roles**). |
+
+Nobody can raise their own level from the website, and an Admin can't change their own role (another Admin has to).
+
+Your course records, invoices and settings in this app still live only in the browser you use them in, so they aren't behind a login. Only the online data (accounts, shared progress, the online calendar) is.
 
 ### Turning on student accounts (one time, about 15 minutes)
 
@@ -38,14 +49,15 @@ In the app, the **Student account** page is where you, the instructor, sign in t
 2. **Create the tables.** In the project, open **SQL Editor** in the left menu, click **New query**, paste everything from [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. You should see "Success".
 3. **Point sign-in emails at your site.** Open **Authentication → URL Configuration**. Set **Site URL** to `https://jlichner.github.io/limitless-diving-forms/account.html` and add the same address under **Redirect URLs**. This is where the "confirm your email" and "reset password" links send students.
 4. **Connect the website.** Open **Project Settings → API Keys** and copy the **Publishable key**, then **Project Settings → Data API** and copy the **Project URL**. In this repository, edit [`supabase-config.js`](supabase-config.js) on GitHub (pencil icon), paste both between the quotes, and commit. These two values are meant to be public; the security rules protect the data. Never paste the **secret** (service role) key anywhere in this site.
-5. **Make yourself the instructor.** Open `account.html` on your site and create an account with your own email (confirm it from your inbox). Then in the **SQL Editor**, run (with your email):
+5. **Make yourself the Admin.** Open `account.html` on your site and create an account with your own email (confirm it from your inbox). Then in the **SQL Editor**, run (with your email):
 
    ```sql
-   insert into public.instructors (user_id)
-   select id from auth.users where email = 'you@example.com';
+   insert into public.staff_roles (user_id, role)
+   select id, 'admin' from auth.users where email = 'you@example.com'
+   on conflict (user_id) do update set role = 'admin';
    ```
 
-6. In the app, open **Student account** and sign in with that account. Send students the link shown there.
+6. In the app, click **Admin Log in** and sign in with that account. Give Dive Masters and Instructors their roles under **Staff and roles** (they sign up as students first). Send students the link shown there.
 
 Supabase sends the sign-up and password emails itself. Its built-in email is limited to a few emails an hour, which is fine to start. If many students sign up at once, add your own email sender under **Authentication → Emails → SMTP Settings**.
 

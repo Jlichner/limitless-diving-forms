@@ -106,3 +106,22 @@
 .sa-copy { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .sa-copy code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); padding: 4px 8px; border-radius: 6px; overflow-wrap: anywhere; }
 .sa-sql { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; overflow-x: auto; font-family: var(--font-mono); font-size: 13px; }
+
+/* "Admin Log in" in the header, just left of the dive flag (flag: clamp(44px, 6vw, 63px) wide). */
+.topbar .admin-login {
+  position: absolute !important; top: 50%; transform: translateY(-50%);
+  right: calc(max(16px, env(safe-area-inset-right, 0px)) + clamp(44px, 6vw, 63px) + 14px);
+  color: var(--deep-ink); text-decoration: none; font-weight: 600; font-size: 14px; white-space: nowrap;
+  padding: 6px 12px; border: 1.5px solid rgba(230, 244, 245, .55); border-radius: 99px; background: rgba(4, 19, 27, .25);
+}
+.topbar .admin-login:hover { border-color: var(--deep-ink); background: rgba(4, 19, 27, .45); }
+.topbar .admin-login.on { border-color: var(--shallows); }
+/* Narrower screens: the centered title needs the room, so tuck it into the top-right corner above the flag. */
+@media (max-width: 1000px) {
+  .topbar .admin-login { top: 8px; transform: none; right: max(10px, env(safe-area-inset-right, 0px)); font-size: 12px; padding: 3px 9px; }
+}
+.sa-addrole { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-top: 12px; }
+.sa-addrole .field { min-width: 200px; }
+.sa-addrole select, .sa-row select, table.m select { padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+@media (max-width: 760px) { .topbar { padding-top: 44px; } }
+a.navbtn { text-decoration: none; display: flex; align-items: center; }

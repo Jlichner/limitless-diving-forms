@@ -29,9 +29,9 @@
   }
   function renderAuth() {
     const a = view.auth;
-    const title = { signin: "Sign in", signup: "Create your student account", forgot: "Reset your password", recover: "Choose a new password" }[a];
+    const title = { signin: "Student log in", signup: "Create your student account", forgot: "Reset your password", recover: "Choose a new password" }[a];
     const intro = {
-      signin: "Sign in to update your contact details, emergency contact and certifications, and to follow your training.",
+      signin: "Log in to update your contact details, emergency contact and certifications, and to follow your training.",
       signup: "Create an account so your instructor has your up-to-date details, and so you can follow your training progress.",
       forgot: "Enter the email you signed up with and we'll send you a link to choose a new password.",
       recover: "Enter a new password for your account."
@@ -42,17 +42,17 @@
       + field("a-pass", "Password (at least 8 characters)", "password", 'autocomplete="new-password" minlength="8" required');
     if (a === "forgot") form = field("a-email", "Email", "email", 'autocomplete="email" required');
     if (a === "recover") form = field("a-pass", "New password (at least 8 characters)", "password", 'autocomplete="new-password" minlength="8" required');
-    const button = { signin: "Sign in", signup: "Create account", forgot: "Send reset link", recover: "Save new password" }[a];
+    const button = { signin: "Log in", signup: "Create account", forgot: "Send reset link", recover: "Save new password" }[a];
     const links = {
       signin: `<button type="button" class="linkbtn" data-auth="signup">New student? Create an account</button><button type="button" class="linkbtn" data-auth="forgot">Forgot your password?</button>`,
-      signup: `<button type="button" class="linkbtn" data-auth="signin">Already have an account? Sign in</button>`,
-      forgot: `<button type="button" class="linkbtn" data-auth="signin">Back to sign in</button>`,
+      signup: `<button type="button" class="linkbtn" data-auth="signin">Already have an account? Log in</button>`,
+      forgot: `<button type="button" class="linkbtn" data-auth="signin">Back to log in</button>`,
       recover: ""
     }[a];
     return `<section class="acct-auth">
       <div class="acct-auth-art" aria-hidden="true">${ROSE}<span>Limitless Diving</span><small>Training · Safety · Adventure</small></div>
       <form class="acct-card" id="auth-form" novalidate>
-        <span class="eyebrow">Student account</span>
+        <span class="eyebrow">Limitless Diving students</span>
         <h1>${title}</h1>
         <p class="hint">${intro}</p>
         ${note()}
@@ -120,7 +120,7 @@
         <h1>${esc(profile.full_name ? "Welcome, " + profile.full_name.split(/\s+/)[0] : "Welcome")}</h1>
         <p class="hint">Keep these details current. Your instructor uses them for your course paperwork and in an emergency.</p></div>
         <button class="btn" data-act="signout">Sign out</button></section>
-      ${C.instructor ? `<p class="acct-note">You're signed in as an instructor. Manage student accounts in the <a href="index.html">instructor app</a> under <b>Accounts</b>.</p>` : ""}
+      ${C.can("divemaster") ? `<p class="acct-note">You're signed in as ${C.role === "admin" || C.role === "instructor" ? "an" : "a"} ${esc(C.ROLE_NAMES[C.role])}. See every student's account under <a href="index.html#staff">Admin Log in</a>.</p>` : ""}
       ${loadError ? `<p class="acct-note bad" role="alert">${esc(loadError)}</p>` : ""}
       <div class="acct-cols">
       <form class="panel acct-profile" id="profile-form" novalidate>${ROSE.replace("acct-rose", "watermark")}
@@ -253,7 +253,7 @@
     view.busy = false;
     if (res.error) { setNote(C.explain(res.error), "bad"); render(); return; }
     if (a === "signup" && !(res.data && res.data.session)) {
-      view.auth = "signin"; setNote("Almost done: we sent a confirmation link to " + email + ". Open it to finish creating your account, then sign in here.", "ok");
+      view.auth = "signin"; setNote("Almost done: we sent a confirmation link to " + email + ". Open it to finish creating your account, then log in here.", "ok");
     } else if (a === "forgot") {
       view.auth = "signin"; setNote("If there's an account for " + email + ", a reset link is on its way. Check your inbox.", "ok");
     } else if (a === "recover") {

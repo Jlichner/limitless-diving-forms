@@ -1,13 +1,17 @@
-/* Limitless Diving — Student accounts, in the instructor app (index.html, the "Student account" tab).
-   Students sign up on account.html. Here the instructor signs in, sees every account, links each one to a
-   student in the Students tab (copying their details in), and shares course progress so students can follow it.
-   Supabase row-level security (supabase/schema.sql) only lets instructors do this. Load after app.js and cloud.js. */
+/* Limitless Diving — staff sign-in and student account management (index.html, opened with the
+   "Admin Log in" button in the header; mode "staff").
+   Students sign up on account.html. Staff sign in here, and what they see depends on their level:
+     Dive Master  every student account (contact, emergency contact, certifications), read only
+     Instructor   also links accounts to the Students tab, shares course progress and publishes the calendar
+     Admin        also gives and removes staff roles
+   Supabase row-level security (supabase/schema.sql) enforces the same levels. Load after app.js and cloud.js. */
 (function () {
   "use strict";
 
   const L = () => window.LD;
   const C = () => window.LDCloud || { configured: false };
-  const v = { accounts: null, loading: false, error: "", busy: false, note: "", noteKind: "" };
+  const v = { accounts: null, staff: null, loading: false, error: "", busy: false, note: "", noteKind: "" };
+  const roleName = (r) => (window.LDCloud && window.LDCloud.ROLE_NAMES[r]) || "Student";
 
   function accountPageUrl() { return new URL("account.html", location.href).href; }
   function people() { return L().state.students; }
@@ -77,12 +81,16 @@
   }
 
   async function loadAccounts() {
-    if (!C().instructor) return;
+    if (!C().can("divemaster")) return;
     v.loading = true; v.error = ""; rerender();
-    const { data, error } = await C().client.rpc("student_accounts");
+    const [a, st] = await Promise.all([
+      C().client.rpc("student_accounts"),
+      C().can("admin") ? C().client.rpc("staff_members") : Promise.resolve({ data: null })
+    ]);
     v.loading = false;
-    if (error) v.error = "Couldn't load the accounts: " + C().explain(error);
-    else v.accounts = data || [];
+    if (a.error) v.error = "Couldn't load the accounts: " + C().explain(a.error);
+    else v.accounts = a.data || [];
+    v.staff = st.error ? [] : st.data;
     rerender();
   }
 
@@ -91,40 +99,57 @@
     const url = accountPageUrl(), { esc } = L();
     return `<h2 class="sec">For students</h2>
       <p class="hint">Students create their own account and keep their details current: name, address, phone, emergency contact and certifications. Share this link with them.</p>
-      <div class="sa-copy"><code>${esc(url)}</code><a class="btn primary" href="account.html" target="_blank" rel="noopener">Student sign in / create account</a><button class="btn" data-sa="copy">Copy link</button></div>`;
+      <div class="sa-copy"><code>${esc(url)}</code><a class="btn primary" href="account.html" target="_blank" rel="noopener">Student log in / create account</a><button class="btn" data-sa="copy">Copy link</button></div>`;
   }
   function setupBox() {
-    return `<h2 class="sec">Turn on student accounts</h2>
+    return `<h2 class="sec">Turn on logins</h2>
       <p class="hint">Student accounts need a free Supabase project (an online database with sign-in). It takes about 15 minutes, once:</p>
       <ol class="cal-steps">
         <li>Create a project at <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">supabase.com</a>.</li>
         <li>In its <b>SQL Editor</b>, run the file <code>supabase/schema.sql</code> from this repository.</li>
         <li>Paste the project URL and publishable key into <code>supabase-config.js</code> and commit it.</li>
-        <li>Sign up on the student page with your own email, then make yourself the instructor (one line of SQL).</li>
+        <li>Sign up on the Student log in page with your own email, then make yourself the Admin (one line of SQL).</li>
       </ol>
-      <p class="hint">The README has every step, with screenshots of where to click.</p>`;
+      <p class="hint">The README has every step and where to click.</p>`;
   }
   function signInBox() {
-    return `<h2 class="sec">Instructor sign in</h2>
-      <p class="hint">Sign in with your instructor account to see student accounts, link them to your Students list and share progress.</p>
+    return `<h2 class="sec">Staff log in</h2>
+      <p class="hint">For Dive Masters, Instructors and Admins. Students log in on the <a href="account.html">Student log in</a> page.</p>
       ${note()}
       <form class="sa-auth" id="sa-signin" novalidate>
         <div class="field"><label for="sa-email">Email</label><input id="sa-email" type="email" autocomplete="email" required></div>
         <div class="field"><label for="sa-pass">Password</label><input id="sa-pass" type="password" autocomplete="current-password" required></div>
         <div class="row-actions"><button class="btn primary" type="submit"${v.busy ? " disabled" : ""}>${v.busy ? "Signing in…" : "Sign in"}</button></div>
-        <p class="hint">No instructor account yet? Create one on the <a href="account.html" target="_blank" rel="noopener">student page</a> with your own email, then follow "Make yourself the instructor" in the README.</p>
+        <p class="hint">Staff use the same kind of account as students. Create one on the <a href="account.html">Student log in</a> page, then an Admin gives it a staff role.</p>
       </form>`;
   }
-  function notInstructorBox() {
+  function notStaffBox() {
     const { esc } = L(), email = C().user.email || "";
-    return `<h2 class="sec">Almost there</h2>
-      <p class="hint">You're signed in as <b>${esc(email)}</b>, but this account isn't an instructor yet. In Supabase, open <b>SQL Editor</b>, paste this, and click <b>Run</b>:</p>
-      <pre class="sa-sql"><code>insert into public.instructors (user_id)
-select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</code></pre>
-      <div class="row-actions"><button class="btn primary" data-sa="recheck">I've done it, check again</button><button class="btn" data-sa="signout">Sign out</button></div>`;
+    return `<h2 class="sec">This is a student account</h2>
+      <p class="hint">You're signed in as <b>${esc(email)}</b>, which doesn't have a staff role. An Admin can give it one under <b>Staff and roles</b>. Students manage their details on the <a href="account.html">Student log in</a> page.</p>
+      <details><summary>Setting up the very first Admin?</summary>
+      <p class="hint">In Supabase, open <b>SQL Editor</b>, paste this, and click <b>Run</b>:</p>
+      <pre class="sa-sql"><code>insert into public.staff_roles (user_id, role)
+select id, 'admin' from auth.users where email = '${esc(email.replace(/'/g, "''"))}'
+on conflict (user_id) do update set role = 'admin';</code></pre></details>
+      <div class="row-actions"><button class="btn primary" data-sa="recheck">Check again</button><button class="btn" data-sa="signout">Sign out</button></div>`;
+  }
+  function staffBox() {
+    const { esc } = L(), list = v.staff || [], me = C().user.id;
+    const opts = (cur) => ["divemaster", "instructor", "admin", "student"].map(r => `<option value="${r}"${r === cur ? " selected" : ""}>${r === "student" ? "Remove staff role" : roleName(r)}</option>`).join("");
+    return `<h2 class="sec">Staff and roles</h2>
+      <p class="hint"><b>Dive Master:</b> sees every student's contact, emergency contact, certifications and progress. <b>Instructor:</b> also links accounts, shares progress and publishes the calendar. <b>Admin:</b> also gives and removes roles. Everyone else is a Student.</p>
+      ${list.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Name</th><th>Email</th><th>Role</th></tr></thead><tbody>
+        ${list.map(m => `<tr><td>${esc(m.full_name || "No name yet")}</td><td>${esc(m.email)}</td><td>${m.id === me ? `${esc(roleName(m.role))} <span class="hint">(you)</span>`
+          : `<label class="sr-only" for="sa-role-${esc(m.id)}">Role for ${esc(m.email)}</label><select id="sa-role-${esc(m.id)}" data-sa-role="${esc(m.email)}">${opts(m.role)}</select>`}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      <form class="sa-addrole" id="sa-addrole" novalidate>
+        <div class="field"><label for="sa-new-email">Add staff by email</label><input id="sa-new-email" type="email" placeholder="They sign up as a student first" autocomplete="off"></div>
+        <div class="field"><label for="sa-new-role">Role</label><select id="sa-new-role">${opts("divemaster").replace(/<option value="student">.*?<\/option>/, "")}</select></div>
+        <button class="btn primary" type="submit">Give role</button>
+      </form>`;
   }
   function accountRow(acc) {
-    const { esc, fmtDate } = L(), p = linkedPerson(acc), certs = certsOf(acc);
+    const { esc, fmtDate } = L(), p = linkedPerson(acc), certs = certsOf(acc), edit = C().can("instructor");
     const free = people().filter(x => !x.accountId).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     const em = String(acc.email || "").toLowerCase(), nm = String(acc.full_name || "").trim().toLowerCase();
     const guess = free.find(x => em && String(x.email || "").trim().toLowerCase() === em) || free.find(x => nm && String(x.name || "").trim().toLowerCase() === nm);
@@ -135,7 +160,7 @@ select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</co
         <span class="meta">${esc(acc.email)} ${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span>`}</span>
         <dl>${dd("Phone", acc.phone)}${dd("Address", acc.address)}${dd("Emergency", emergency)}${dd("Certs", certs.map(certText).join("\n"))}
           ${dd("Updated", acc.updated_at ? fmtDate(String(acc.updated_at).slice(0, 10)) : "")}</dl></div>
-      <div class="sa-link">${p
+      <div class="sa-link">${!edit ? "" : p
         ? `<span><span class="sa-badge">Linked</span> to <b>${esc(p.name || "Unnamed student")}</b> in Students</span>
            <div class="row-actions"><button class="btn small" data-sa="open" data-id="${esc(p.id)}">Open student</button>
              <button class="btn small" data-sa="pull" data-acc="${esc(acc.id)}">Copy their latest details in</button>
@@ -147,17 +172,18 @@ select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</co
            ${guess ? `<span class="hint">Suggested by matching ${String(guess.email || "").trim().toLowerCase() === em ? "email" : "name"}.</span>` : ""}`}
       </div></article>`;
   }
-  function instructorBox() {
-    const { esc } = L(), list = v.accounts || [], n = sharedEnrollments().length;
+  function signedInBox() {
+    const { esc } = L(), list = v.accounts || [], n = sharedEnrollments().length, edit = C().can("instructor");
     const at = L().state.progressSharedAt ? new Date(L().state.progressSharedAt) : null;
     const unlinked = list.filter(a => !linkedPerson(a)).length;
-    return `<div class="sa-status"><span class="hint">Signed in as <b>${esc(C().user.email || "")}</b> (instructor)</span>
+    return `<div class="sa-status"><span class="hint">Signed in as <b>${esc(C().user.email || "")}</b> · <span class="sa-badge">${esc(roleName(C().role))}</span></span>
         <button class="btn small" data-sa="refresh">Refresh</button><button class="btn small" data-sa="signout">Sign out</button></div>
       ${note()}
-      <h2 class="sec">Share progress with students</h2>
+      ${C().can("admin") ? staffBox() : ""}
+      ${!edit ? `<p class="hint">As a Dive Master you can see every student's details below. Instructors make changes.</p>` : `<h2 class="sec">Share progress with students</h2>
       <p class="hint">Sends each linked student their course schedule, skills mastered, dives logged and balance due, so they see it on their account page. Medical notes, instructor notes and other students are never sent. Share again after you update their records.</p>
       <div class="row-actions"><button class="btn primary" data-sa="share"${v.busy || !n ? " disabled" : ""}>${v.busy ? "Sharing…" : `Share progress (${n} course record${n === 1 ? "" : "s"})`}</button>
-        <span class="hint" style="align-self:center;margin:0">${at && !isNaN(at) ? "Last shared " + esc(at.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })) : "Not shared yet"}${n ? "" : ". Link an account to a student first."}</span></div>
+        <span class="hint" style="align-self:center;margin:0">${at && !isNaN(at) ? "Last shared " + esc(at.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })) : "Not shared yet"}${n ? "" : ". Link an account to a student first."}</span></div>`}
       <h2 class="sec">Accounts${list.length ? ` <span class="hint">(${list.length}${unlinked ? ", " + unlinked + " not linked yet" : ""})</span>` : ""}</h2>
       ${v.error ? `<p class="acct-note bad" role="alert">${esc(v.error)}</p>` : ""}
       ${v.loading && !v.accounts ? `<p class="hint">Loading accounts…</p>`
@@ -170,10 +196,11 @@ select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</co
     if (!c.configured) body = setupBox();
     else if (!c.available) body = `<p class="acct-note bad">The sign-in service couldn't be loaded. Check your connection and reload the page.</p>`;
     else if (!c.user) body = signInBox();
-    else if (!c.instructor) body = notInstructorBox();
-    else body = instructorBox();
-    return `<section class="panel" id="sa-panel"><div class="rec-head"><div class="who"><span class="eyebrow">Student accounts</span><h1>Student account</h1></div></div>
-      ${studentBox()}${body}</section>`;
+    else if (!c.can("divemaster")) body = notStaffBox();
+    else body = signedInBox();
+    const title = c.user && c.can("divemaster") ? "Student accounts" : "Admin log in";
+    return `<section class="panel" id="sa-panel"><div class="rec-head"><div class="who"><span class="eyebrow">Staff</span><h1>${title}</h1></div></div>
+      ${body}${studentBox()}</section>`;
   }
   function rerender() { if (L().state && document.getElementById("sa-panel")) L().render(); }
 
@@ -181,9 +208,9 @@ select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</co
   function personNote(p) {
     const { esc } = L();
     if (!C().configured) return "";
-    if (!p.accountId) return `<p class="hint">No student account linked. Link one under <button class="linkbtn" data-mode="account">Student account</button>.</p>`;
+    if (!p.accountId) return `<p class="hint">No student account linked. Link one under <button class="linkbtn" data-mode="staff">Admin Log in</button>.</p>`;
     const acc = (v.accounts || []).find(a => a.id === p.accountId);
-    return `<p class="hint"><span class="sa-badge">Account linked</span> ${acc ? esc(acc.email) : ""} · <button class="linkbtn" data-mode="account">Manage</button></p>`;
+    return `<p class="hint"><span class="sa-badge">Account linked</span> ${acc ? esc(acc.email) : ""} · <button class="linkbtn" data-mode="staff">Manage</button></p>`;
   }
 
   // ---------- events ----------
@@ -197,6 +224,24 @@ select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</co
     v.busy = false;
     if (error) { setNote(C().explain(error), "bad"); rerender(); }
   });
+  async function setRole(email, role) {
+    const { error } = await C().client.rpc("set_staff_role", { member_email: email, new_role: role });
+    if (error) { setNote(C().explain(error), "bad"); rerender(); return false; }
+    setNote(role === "student" ? email + " is a Student again." : email + " is now " + (role === "admin" ? "an " : "a ") + roleName(role) + ".", "ok");
+    await loadAccounts();
+    return true;
+  }
+  document.addEventListener("change", (e) => {
+    const el = e.target; if (!el.dataset || !el.dataset.saRole) return;
+    setRole(el.dataset.saRole, el.value);
+  });
+  document.addEventListener("submit", async (e) => {
+    if (e.target.id !== "sa-addrole") return;
+    e.preventDefault();
+    const email = document.getElementById("sa-new-email").value.trim(), role = document.getElementById("sa-new-role").value;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setNote("Enter the email they signed up with.", "bad"); rerender(); return; }
+    await setRole(email, role);
+  });
   document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-sa]"); if (!b) return;
     const acc = (v.accounts || []).find(a => a.id === b.dataset.acc);
@@ -204,8 +249,8 @@ select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</co
       case "copy":
         try { await navigator.clipboard.writeText(accountPageUrl()); L().toast("Link copied"); } catch (err) { L().toast("Couldn't copy. Select the link and copy it."); }
         break;
-      case "signout": await C().signOut(); v.accounts = null; setNote(""); rerender(); break;
-      case "recheck": await C().refreshRole(); if (C().instructor) loadAccounts(); else { setNote(""); rerender(); L().toast("Not an instructor yet. Run the SQL above, then try again."); } break;
+      case "signout": await C().signOut(); v.accounts = null; v.staff = null; setNote(""); rerender(); break;
+      case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast("Still a student account. Ask an Admin for a staff role."); } break;
       case "refresh": setNote(""); loadAccounts(); break;
       case "link": {
         const sel = document.getElementById("sa-pick-" + acc.id), p = sel && L().personById(sel.value);
@@ -230,10 +275,25 @@ select id from auth.users where email = '${esc(email.replace(/'/g, "''"))}';</co
     }
   });
 
+  // The "Admin Log in" button in the header shows who is signed in once staff log in.
+  function headerButton() {
+    const b = document.getElementById("admin-login"); if (!b) return;
+    const staff = C().user && C().can("divemaster");
+    b.textContent = staff ? "✓ " + roleName(C().role) : "Admin Log in";
+    b.title = staff ? "Signed in as " + (C().user.email || "") + ". Open staff tools." : "Log in as staff";
+    b.classList.toggle("on", !!staff);
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("#admin-login"); if (!b || !L()) return;
+    e.preventDefault(); L().go("staff");
+  });
+  if (location.hash === "#staff") L().go("staff");
+
   if (window.LDCloud && window.LDCloud.available) {
     window.LDCloud.onChange((event) => {
-      if (!C().user) v.accounts = null;
-      if (C().instructor && !v.accounts && !v.loading) loadAccounts();
+      if (!C().user) { v.accounts = null; v.staff = null; }
+      headerButton();
+      if (C().can("divemaster") && !v.accounts && !v.loading) loadAccounts();
       // Redraw for sign-in changes (not hourly token refreshes, which would interrupt typing).
       if (/^(INITIAL_SESSION|SIGNED_IN|SIGNED_OUT|USER_UPDATED)$/.test(event)) L().render();
     });
