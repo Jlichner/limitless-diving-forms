@@ -69,10 +69,18 @@
     };
   }
 
+  // ---------- who can add and change classes ----------
+  // Only Instructors and Admins add, edit, enroll and publish. Everyone else (signed out, students,
+  // Dive Masters) sees a read-only month with published classes only. When online logins aren't set up
+  // (no supabase-config.js values) the calendar stays open, as before. The database has the same rule.
+  function canEdit() { const C = window.LDCloud; return !C || !C.configured || C.can("instructor"); }
+  function shown() { return canEdit() ? data().classes : data().classes.filter(k => k.published); }
+
   // ---------- render ----------
   function render() {
     data();
     if (!v.ym) v.ym = G().ym(G().today());
+    if (!canEdit()) { v.sel = null; v.publish = false; }
     // One wide panel: the month with upcoming classes below it, or a class, or the publish page.
     const back = `<div class="row-actions" style="margin:0 0 10px"><button class="btn small" data-cact="back">‹ Calendar</button></div>`;
     const body = v.publish ? back + renderPublish() : cur() ? renderClass(cur()) : renderMonth();
@@ -81,9 +89,13 @@
 
   function renderList() {
     const { esc } = L();
-    const all = sorted(data().classes), up = all.filter(k => !isPast(k)), past = all.filter(isPast).reverse();
+    const all = sorted(shown()), up = all.filter(k => !isPast(k)), past = all.filter(isPast).reverse();
+    const edit = canEdit();
     const item = (k) => {
       const left = seatsLeft(k), n = roster(k).length;
+      if (!edit) return `<li><div class="cal-ro"><span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
+        <span class="meta">${esc(G().range(k.dates) || "No dates yet")}</span>
+        <span class="meta">${left === null ? "" : left ? left + " open seat" + (left === 1 ? "" : "s") : "Full"}</span></div></li>`;
       return `<li><button data-cact="pick" data-id="${k.id}" class="${k.id === v.sel && !v.publish ? "sel" : ""}">
         <span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
         <span class="meta">${esc(G().range(k.dates) || "No dates yet")}</span>
@@ -97,31 +109,34 @@
   }
 
   function renderMonth() {
-    const { esc } = L();
+    const { esc } = L(), edit = canEdit(), C = window.LDCloud;
     const events = [];
-    data().classes.forEach(k => {
+    shown().forEach(k => {
       const ds = (k.dates || []).filter(Boolean).sort();
       ds.forEach((d, i) => events.push({
         date: d,
-        html: `<button class="cal-ev ${colorOf(k)}${k.published ? "" : " draft"}" data-cact="pick" data-id="${k.id}" title="${esc(titleOf(k) + (k.published ? "" : " (draft)"))}">
+        html: !edit ? `<span class="cal-ev ${colorOf(k)}" title="${esc(titleOf(k))}">${esc(titleOf(k))}${ds.length > 1 ? ` <small>${i + 1}/${ds.length}</small>` : ""}</span>` : `<button class="cal-ev ${colorOf(k)}${k.published ? "" : " draft"}" data-cact="pick" data-id="${k.id}" title="${esc(titleOf(k) + (k.published ? "" : " (draft)"))}">
           ${esc(titleOf(k))}${ds.length > 1 ? ` <small>${i + 1}/${ds.length}</small>` : ""}</button>`
       }));
     });
     (v.reqs || []).forEach(r => r.dates.forEach(d => events.push({
       date: d, html: `<button class="req-tag request" data-cact="req-show" title="${esc("Requested: " + (r.course_name || r.course) + " by " + (r.student_name || r.student_email))}">Request: ${esc(r.student_name || r.student_email)}</button>`
     })));
-    const used = L().COURSE_ORDER.filter(id => data().classes.some(k => k.course === id));
+    const used = L().COURSE_ORDER.filter(id => shown().some(k => k.course === id));
+    const signedIn = C && C.user;
+    const lockNote = `<p class="acct-note" style="margin-top:12px">Only Instructors and Admins can add or change classes.${signedIn ? ` You're logged in as ${esc(C.ROLE_NAMES[C.role] || "Student")}.` : ""}
+        ${signedIn ? "" : `<button class="btn small" data-mode="staff">Admin Log in</button>`} Want a class on a certain day? <a href="request.html">Request a class</a>.</p>`;
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Class calendar</span><h1>${esc(G().monthName(v.ym))}</h1></div>
-        <div class="cal-tools no-print"><button class="btn primary" data-cact="new">+ New class</button>
-        <button class="btn" data-cact="publish">Publish calendar…</button></div>
+        ${edit ? `<div class="cal-tools no-print"><button class="btn primary" data-cact="new">+ New class</button>
+        <button class="btn" data-cact="publish">Publish calendar…</button></div>` : ""}
         <div class="cal-nav"><button class="btn" data-cact="month" data-n="-1" aria-label="Previous month">‹</button>
         <button class="btn" data-cact="month" data-n="0">Today</button>
         <button class="btn" data-cact="month" data-n="1" aria-label="Next month">›</button></div></div>
       ${requestsBox()}
-      ${G().month(v.ym, events, { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` })}
+      ${G().month(v.ym, events, edit ? { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` } : {})}
       <div class="cal-legend">${used.map(id => `<span><i class="cal-dot ${colorOf({ course: id })}" aria-hidden="true"></i>${esc(L().COURSES[id].name)}</span>`).join("")}
-        ${data().classes.some(k => !k.published) ? `<span><i class="cal-dot draft" aria-hidden="true"></i>Draft (not published)</span>` : ""}</div>
-      <p class="hint" style="margin-top:12px">Click a day to add a class on it, or a class to edit it and enroll students. Published classes appear on the public calendar after you publish.</p>
+        ${shown().some(k => !k.published) ? `<span><i class="cal-dot draft" aria-hidden="true"></i>Draft (not published)</span>` : ""}</div>
+      ${edit ? `<p class="hint" style="margin-top:12px">Click a day to add a class on it, or a class to edit it and enroll students. Published classes appear on the public calendar after you publish.</p>` : lockNote}
       <div class="roster cal-upcoming" id="cal-list">${renderList()}</div>`;
   }
 
@@ -334,6 +349,8 @@
   document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-cact]"); if (!b) return;
     const k = cur(), i = Number(b.dataset.i);
+    // Looking around is open to all; anything that adds or changes a class is for Instructors and Admins.
+    if (!canEdit() && !["month", "past", "back", "req-show"].includes(b.dataset.cact)) { L().toast("Only Instructors and Admins can add or change classes."); return; }
     switch (b.dataset.cact) {
       case "new": case "new-on": {
         const n = blank(L().COURSE_ORDER[0], b.dataset.date || "");
