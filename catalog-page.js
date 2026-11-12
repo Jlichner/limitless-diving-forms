@@ -68,8 +68,6 @@
   // ---------- the All courses page ----------
   function render() {
     const { esc, COURSES } = L();
-    const count = (id) => L().state.enrollments.filter(e => e.course === id).length;
-    const classes = (id) => (L().state.classes || []).filter(k => k.course === id).length;
     const prereqText = (c, pr) => {
       const list = (pr.prereqs || []).filter(x => x && !/^minimum age$/i.test(String(x.item || "").trim())).map(x => x.detail || x.item).filter(Boolean);
       // Own-equipment lines are in every proposal; they'd only crowd this table.
@@ -77,7 +75,7 @@
     };
     const row = (c) => {
       const def = COURSES[c.app]; if (!def) return "";
-      const pr = L().program(c.app), n = count(c.app), k = classes(c.app), pq = prereqText(c, pr);
+      const pr = L().program(c.app), pq = prereqText(c, pr);
       const missing = !pr.minAge && !pr.minDives && !pr.maxDepth && !pq.length;
       return `<tr>
         <td><b>${esc(c.name)}</b>${def.basic ? "" : ` <span class="cat-full">Skill matrix</span>`}
@@ -86,22 +84,19 @@
         <td>${esc(pr.minAge || "")}</td>
         <td>${pq.length ? `<ul class="cat-pre">${pq.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</td>
         <td>${esc(pr.minDives || "")}</td><td>${esc(pr.maxDepth || "")}</td>`}
-        <td class="cat-n">${n}${k ? `<br><small class="meta">${k} class${k === 1 ? "" : "es"}</small>` : ""}</td>
-        <td class="cat-acts"><button class="btn small" data-catact="open" data-id="${c.app}">Students</button>
-          <button class="btn small" data-catact="std" data-id="${c.app}">Settings</button></td></tr>`;
+        <td class="cat-acts"><button class="btn small" data-catact="std" data-id="${c.app}">Settings</button></td></tr>`;
     };
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Course catalog</span><h1>All courses</h1></div></div>
-      <p class="hint">Every NAUI, NAUI Technical and TDI course you can enroll students in. Pick any of them when you add a class to the calendar or enroll a student.
+      <p class="hint">Every NAUI, NAUI Technical and TDI course you teach. Pick any of them when you add a class to the calendar.
         NAUI standards are from the 2026 NAUI Standards and Policies Manual; TDI standards are yours to fill in. Edit any course's standards, price and proposal text under <b>Settings</b>.
         Courses marked <span class="cat-full">Skill matrix</span> have a full skill matrix; others can get one later, one course at a time.</p>
       ${CAT.byAgency().map(g => `<h2 class="sec">${esc(g.agency)} <small class="meta">${g.courses.length} course${g.courses.length === 1 ? "" : "s"}</small></h2>
-        <div class="tablewrap"><table class="m cat-table"><thead><tr><th>Course</th><th>Minimum age</th><th>Prerequisites</th><th>Open water dives</th><th>Maximum depth</th><th>Students</th><th></th></tr></thead>
+        <div class="tablewrap"><table class="m cat-table"><thead><tr><th>Course</th><th>Minimum age</th><th>Prerequisites</th><th>Open water dives</th><th>Maximum depth</th><th></th></tr></thead>
         <tbody>${g.courses.map(row).join("")}</tbody></table></div>`).join("")}`;
   }
 
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-catact]"); if (!b) return;
-    if (b.dataset.catact === "open") L().go(b.dataset.id);
     if (b.dataset.catact === "std") { L().go("program", { settingsCourse: b.dataset.id }); window.scrollTo(0, 0); }
   });
 

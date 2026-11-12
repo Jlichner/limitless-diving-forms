@@ -368,8 +368,7 @@
       [null, [["account", "Student log in"]]],
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"]]],
-      allowed("divemaster") && ["Records", [["students", "Students"]].concat(COURSE_ORDER.filter(id => !COURSES[id].basic).map(id => [id, COURSES[id].name]),
-        window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
+      allowed("divemaster") && ["Records", [["students", "Students"]].concat(window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
       allowed("instructor") && ["Business", [["invoices", "Invoices"], ["program", "Settings"]]]
     ].filter(Boolean);
     // A catalog course without its own nav entry lights up "All courses".
