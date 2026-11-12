@@ -207,3 +207,8 @@ a.course-card:hover, a.course-card:focus-visible { border-color: var(--accent); 
 .nl-fb.bad { color: var(--bad); }
 .nl-fb.shown { color: var(--ip); }
 .nl-work .nx-result { margin-top: 0; }
+
+/* Read-only calendar for anyone who isn't an Instructor or Admin. */
+.cal-upcoming li .cal-ro { border: 1px solid var(--line); background: var(--surface-2); border-radius: var(--radius); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; height: 100%; }
+span.cal-ev { cursor: default; }
+span.cal-ev:hover { filter: none; }
