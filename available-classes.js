@@ -58,7 +58,25 @@
     });
     main.innerHTML = `<section class="pub-hero"><h1>Available classes</h1>
         <p>Every course Limitless Diving teaches. Open one to see what it covers, what you need to start, and when it runs next.</p></section>
-      ${sections.join("")}${foot()}`;
+      ${specials()}${sections.join("")}${foot()}`;
+  }
+
+  // Coaching and tours, shown at the top of the list. They aren't certification courses, so they have no
+  // detail page: each card links to ask about it, and tours to the class calendar for scheduled dates.
+  const SPECIALS = [
+    { id: "coaching", icon: "◎", name: "Coaching sessions", fullName: "Coaching session", ask: "Ask about coaching", tag: "With an instructor",
+      about: "Work one on one or in a small group with an instructor to hone the skill of your choice." },
+    { id: "hydra", icon: "≈", name: "Lake Hydra tours", fullName: "Lake Hydra tour", ask: "Ask about a tour", tag: "Led by a divemaster",
+      about: "Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day.",
+      cal: true }
+  ];
+  function specials() {
+    return `<section aria-labelledby="g-specials"><div class="course-group"><h2 id="g-specials">Coaching and tours</h2>
+        <p>Not a certification course? Sharpen a skill with an instructor, or spend a day exploring with a divemaster.</p></div>
+      <div class="pub-list special-list">${SPECIALS.map(c => { const ask = askHref(c); return `<div class="pub-card course-card special-card" id="special-${c.id}">
+        <span class="eyebrow">${esc(c.tag)}</span><h3><span class="special-icon" aria-hidden="true">${c.icon}</span>${esc(c.name)}</h3><p>${esc(c.about)}</p>
+        <div class="course-actions">${ask ? `<a class="btn primary" href="${esc(ask)}">${esc(c.ask)}</a>` : ""}${c.cal ? `<a class="btn" href="classes.html">Tour dates</a>` : ""}</div>
+      </div>`; }).join("")}</div></section>`;
   }
 
   function detail(c) {

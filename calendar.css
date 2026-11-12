@@ -316,3 +316,10 @@ span.cal-ev:hover { filter: none; }
 .pm-land { margin: 16px 0 0; padding: 14px 18px; border-left: 5px solid var(--shallows); background: var(--accent-soft); border-radius: 8px; font-family: var(--font-display); font-size: clamp(18px, 3vw, 22px); font-weight: 600; line-height: 1.4; }
 .pm-which .pm-quiz { margin-top: 10px; }
 .pm-more-h { margin: 10px 0 -6px; font-size: clamp(22px, 3.6vw, 28px); }
+
+/* Coaching and tours cards at the top of Available classes */
+.special-card { border-top: 5px solid var(--shallows); }
+.special-card h3 { display: flex; align-items: center; gap: 10px; }
+.special-icon { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--thermo); color: #fff; font-size: 18px; }
+.special-card .course-actions { margin-top: auto; padding-top: 6px; }
+.special-card .btn:not(.primary) { color: var(--accent); }
