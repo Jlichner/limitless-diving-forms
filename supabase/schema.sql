@@ -454,6 +454,66 @@ select * from (values
 ) v(id, name, tag, about, cal_type, sort)
 where not exists (select 1 from public.offerings);
 
+-- ---------- members' dive sites and the dive map ----------
+-- Each member keeps a list of places they've dived (Student portal → Places I've dived). Members see and change
+-- only their own; Dive Masters and up can read all. The public Dive map (dive-map.html) reads dive_map(), which
+-- returns pins only: the site, its rounded location and how many members dived there, never who.
+create table if not exists public.dive_sites (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name       text not null check (char_length(name) between 1 and 120),
+  place      text not null default '' check (char_length(place) <= 200),
+  lat        double precision not null check (lat between -90 and 90),
+  lng        double precision not null check (lng between -180 and 180),
+  dived_on   date,
+  notes      text not null default '' check (char_length(notes) <= 500),
+  created_at timestamptz not null default now()
+);
+create index if not exists dive_sites_user_idx on public.dive_sites (user_id);
+alter table public.dive_sites enable row level security;
+
+drop policy if exists "Members see their own dive sites; staff see all" on public.dive_sites;
+create policy "Members see their own dive sites; staff see all" on public.dive_sites
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.has_role('divemaster')));
+
+drop policy if exists "Members add their own dive sites" on public.dive_sites;
+create policy "Members add their own dive sites" on public.dive_sites
+  for insert to authenticated with check (user_id = (select auth.uid())
+    and (select count(*) from public.dive_sites d where d.user_id = (select auth.uid())) < 500);
+
+drop policy if exists "Members change their own dive sites" on public.dive_sites;
+create policy "Members change their own dive sites" on public.dive_sites
+  for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+drop policy if exists "Members remove their own dive sites" on public.dive_sites;
+create policy "Members remove their own dive sites" on public.dive_sites
+  for delete to authenticated using (user_id = (select auth.uid()));
+
+revoke all on public.dive_sites from anon;
+grant select, insert, update, delete on public.dive_sites to authenticated;
+
+-- Pins for the public map: sites within about 1 km of each other are one pin, named by the most common name.
+create or replace function public.dive_map()
+returns table (lat double precision, lng double precision, name text, place text, divers integer, entries integer)
+language sql stable security definer set search_path = ''
+as $$
+  select round(s.lat::numeric, 2)::double precision, round(s.lng::numeric, 2)::double precision,
+         mode() within group (order by s.name), mode() within group (order by s.place),
+         count(distinct s.user_id)::integer, count(*)::integer
+  from public.dive_sites s
+  group by round(s.lat::numeric, 2), round(s.lng::numeric, 2);
+$$;
+revoke all on function public.dive_map() from public;
+grant execute on function public.dive_map() to anon, authenticated;
+
+-- How many members have added at least one dive site (for the map's headline).
+create or replace function public.dive_map_members()
+returns integer
+language sql stable security definer set search_path = ''
+as $$ select count(distinct user_id)::integer from public.dive_sites; $$;
+revoke all on function public.dive_map_members() from public;
+grant execute on function public.dive_map_members() to anon, authenticated;
+
 -- ---------- table access for the API roles (row-level security above still applies) ----------
 revoke all on public.staff_roles, public.student_profiles, public.student_progress, public.classes, public.calendar_settings from anon;
 grant select on public.classes, public.calendar_settings to anon;
