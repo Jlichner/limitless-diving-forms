@@ -291,3 +291,19 @@ select.st[data-v="R"]  { background: var(--bad-bg); color: var(--bad); }
   .tablewrap { overflow: visible; }
   @page { size: letter; margin: 0.6in; }
 }
+
+/* ---------- Header banner (header.jpg: compass rose, topo map and the "Limitless Diving & Technical Training" title) ----------
+   The picture carries the title, so the drawn compass, title and contour lines are hidden on screen but stay
+   readable for screen readers. The banner keeps the picture's shape (1024 × 191) between 120px and 280px tall;
+   "cover" trims the sides on narrow screens so the title in the middle stays large enough to read. */
+.topbar {
+  background: #0a1821 url("header.jpg") center / cover no-repeat;
+  height: clamp(120px, calc(100vw * 191 / 1024), 280px);
+  padding-block: 0 !important;
+}
+/* Phones: slide the picture so the title sits left of the Admin Log in button and the dive flag. */
+@media (max-width: 560px) { .topbar { background-position: 62% center; } }
+.topbar .topo { display: none; }
+.topbar .brand { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+body::before { background: #10232f; }
+.wave { fill: #0a1821; }
