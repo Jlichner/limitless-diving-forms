@@ -14,15 +14,22 @@
   const C = {
     configured,                  // URL and key are filled in
     available: configured && hasLib,
-    client: null, session: null, user: null, instructor: false,
+    client: null, session: null, user: null,
+    role: "student",             // "student" | "divemaster" | "instructor" | "admin"
+    instructor: false,           // role is Instructor or Admin
+    ROLES: ["student", "divemaster", "instructor", "admin"],
+    ROLE_NAMES: { student: "Student", divemaster: "Dive Master", instructor: "Instructor", admin: "Admin" },
+    // True when the signed-in person's level is at least minRole.
+    can(minRole) { return !!C.user && C.ROLES.indexOf(C.role) >= C.ROLES.indexOf(minRole); },
     url, key,
     onChange(fn) { listeners.push(fn); },
     async refreshRole() {
-      C.instructor = false;
-      if (!C.client || !C.user) return false;
-      const { data, error } = await C.client.rpc("is_instructor");
-      C.instructor = !error && data === true;
-      return C.instructor;
+      C.role = "student"; C.instructor = false;
+      if (!C.client || !C.user) return C.role;
+      const { data, error } = await C.client.rpc("my_role");
+      if (!error && C.ROLES.includes(data)) C.role = data;
+      C.instructor = C.can("instructor");
+      return C.role;
     },
     signOut() { return C.client ? C.client.auth.signOut() : Promise.resolve(); },
     // A plain-language message for a Supabase error.
@@ -54,7 +61,7 @@
       // Don't call Supabase inside this callback (it can deadlock); finish the work afterwards.
       setTimeout(async () => {
         if (first || (C.user && C.user.id) !== prev || event === "SIGNED_IN") await C.refreshRole();
-        if (!C.user) C.instructor = false;
+        if (!C.user) { C.role = "student"; C.instructor = false; }
         if (first) { first = false; resolveReady(C); }
         emit(event);
       }, 0);
