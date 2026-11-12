@@ -24,9 +24,9 @@
     repeating-radial-gradient(circle at 85% 15%, transparent 0 30px, rgba(95, 196, 207, .1) 30px 31.5px),
     linear-gradient(170deg, #0f4a5c 0%, var(--deep) 75%);
 }
-.acct-auth-art .acct-rose { width: min(190px, 60%); height: auto; fill: var(--shallows); stroke: var(--shallows); opacity: .9; }
+.acct-auth-art .acct-logo { width: min(320px, 85%); height: auto; filter: drop-shadow(0 10px 24px rgba(0, 0, 0, .45)); }
 .acct-auth-art span { font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: .08em; text-transform: uppercase; margin-top: 10px; }
-.acct-auth-art small { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--deep-muted); }
+.acct-auth-art small { margin-top: 12px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--deep-muted); }
 .acct-card { padding: 32px 30px; display: flex; flex-direction: column; gap: 12px; }
 .acct-card h1 { font-size: 30px; }
 .acct-card .hint { margin: 0; }
@@ -37,9 +37,8 @@
 .acct-note.bad { background: var(--bad-bg); color: var(--bad); }
 @media (max-width: 760px) {
   .acct-auth { grid-template-columns: minmax(0, 1fr); min-height: 0; }
-  .acct-auth-art { flex-direction: row; padding: 16px; gap: 12px; }
-  .acct-auth-art .acct-rose { width: 54px; }
-  .acct-auth-art span { font-size: 20px; margin: 0; }
+  .acct-auth-art { padding: 18px; }
+  .acct-auth-art .acct-logo { width: min(180px, 55%); }
   .acct-auth-art small { display: none; }
   .acct-card { padding: 22px 18px; }
 }
