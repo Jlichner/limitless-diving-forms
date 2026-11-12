@@ -4,6 +4,6 @@
    Find them in Supabase: Project Settings → API Keys (the "Publishable key"), and Project Settings → Data API (the "Project URL").
    Leave them empty to keep the app working only in this browser, as before. */
 window.LD_SUPABASE = {
-  url: "",   // e.g. "https://abcdefghijklmnop.supabase.co"
-  key: ""    // e.g. "sb_publishable_..." (or the older "anon public" key)
+  url: "https://tohabfygfsvcntarmfck.supabase.co/rest/v1/",   // e.g. "https://abcdefghijklmnop.supabase.co"
+  key: "sb_publishable_hLYAAHHOgtSbTIjOjr9GaQ_DxkefCDZ"    // e.g. "sb_publishable_..." (or the older "anon public" key)
 };
