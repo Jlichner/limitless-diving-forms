@@ -346,6 +346,8 @@
     } catch (err) { res = { error: err }; }
     view.busy = false;
     if (res.error) { setNote(C.explain(res.error), "bad"); render(); return; }
+    // Came here from another page to log in (e.g. Request a class): go back there.
+    if (a === "signin" && /^#then=request$/.test(location.hash)) { location.href = "request.html"; return; }
     if (a === "signup" && !(res.data && res.data.session)) {
       view.auth = "signin"; setNote("Almost done: we sent a confirmation link to " + email + ". Open it to finish creating your account, then log in here.", "ok");
     } else if (a === "forgot") {

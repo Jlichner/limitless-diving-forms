@@ -10,6 +10,7 @@
 --   • Instructor   also edits student profiles, shares progress with students and publishes the class calendar.
 --   • Admin        also gives and removes staff roles (Dive Master, Instructor, Admin).
 --   Anyone, signed in or not, can read the published class calendar.
+--   Students can request a class on open dates; Instructors and Admins schedule or decline requests.
 --
 -- Nobody can raise their own level from the website. Make the first Admin here in the SQL Editor:
 --     insert into public.staff_roles (user_id, role)
@@ -297,6 +298,89 @@ create policy "Instructors manage the calendar settings" on public.calendar_sett
   for all to authenticated
   using ((select public.has_role('instructor')))
   with check ((select public.has_role('instructor')));
+
+-- ---------- class requests ----------
+-- A signed-in student asks for a course on dates they pick. Students see and withdraw only their own requests;
+-- Dive Masters and up see all of them; Instructors and Admins schedule or decline them.
+create table if not exists public.class_requests (
+  id            uuid primary key default gen_random_uuid(),
+  student_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  student_name  text not null default '' check (char_length(student_name) <= 200),
+  student_email text not null default '' check (char_length(student_email) <= 320),
+  course        text not null check (char_length(course) between 1 and 80),
+  course_name   text not null default '' check (char_length(course_name) <= 200),
+  dates         jsonb not null check (jsonb_typeof(dates) = 'array' and jsonb_array_length(dates) between 1 and 30),
+  notes         text not null default '' check (char_length(notes) <= 2000),
+  status        text not null default 'pending' check (status in ('pending', 'scheduled', 'declined')),
+  staff_note    text not null default '' check (char_length(staff_note) <= 1000),
+  class_id      text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+alter table public.class_requests enable row level security;
+
+-- Days that can't be requested: published class days, and days already asked for or scheduled.
+-- Returns dates only (never who asked), so anyone can see which days are free.
+create or replace function public.taken_dates()
+returns setof text
+language sql stable security definer set search_path = ''
+as $$
+  select distinct d from (
+    select jsonb_array_elements_text(dates) as d from public.classes
+    union all
+    select jsonb_array_elements_text(dates) from public.class_requests where status in ('pending', 'scheduled')
+  ) x where d >= to_char(current_date, 'YYYY-MM-DD');
+$$;
+revoke all on function public.taken_dates() from public;
+grant execute on function public.taken_dates() to anon, authenticated;
+
+-- New requests are always the student's own and pending, on free days from tomorrow on, and a student
+-- can have at most 5 pending at once.
+create or replace function public.check_class_request()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare bad text;
+begin
+  new.student_id := (select auth.uid());
+  new.status := 'pending'; new.staff_note := ''; new.class_id := null;
+  new.created_at := now(); new.updated_at := now();
+  if (select count(*) from public.class_requests where student_id = new.student_id and status = 'pending') >= 5 then
+    raise exception 'You already have 5 requests waiting. Please wait for an answer or withdraw one first.';
+  end if;
+  select d into bad from jsonb_array_elements_text(new.dates) d
+    where d !~ '^\d{4}-\d{2}-\d{2}$' or d <= to_char(current_date, 'YYYY-MM-DD')
+       or d in (select public.taken_dates()) limit 1;
+  if bad is not null then
+    raise exception 'The date % is no longer open. Please pick another day.', bad;
+  end if;
+  return new;
+end $$;
+drop trigger if exists class_requests_check on public.class_requests;
+create trigger class_requests_check before insert on public.class_requests
+  for each row execute function public.check_class_request();
+
+drop policy if exists "Students see their own requests; staff see all" on public.class_requests;
+create policy "Students see their own requests; staff see all" on public.class_requests
+  for select to authenticated using (student_id = (select auth.uid()) or (select public.has_role('divemaster')));
+
+drop policy if exists "Students make their own requests" on public.class_requests;
+create policy "Students make their own requests" on public.class_requests
+  for insert to authenticated with check (student_id = (select auth.uid()));
+
+drop policy if exists "Students withdraw their pending requests; instructors remove any" on public.class_requests;
+create policy "Students withdraw their pending requests; instructors remove any" on public.class_requests
+  for delete to authenticated
+  using ((student_id = (select auth.uid()) and status = 'pending') or (select public.has_role('instructor')));
+
+drop policy if exists "Instructors answer requests" on public.class_requests;
+create policy "Instructors answer requests" on public.class_requests
+  for update to authenticated
+  using ((select public.has_role('instructor')))
+  with check ((select public.has_role('instructor')));
+
+revoke all on public.class_requests from anon;
+grant select, insert, update, delete on public.class_requests to authenticated;
 
 -- ---------- table access for the API roles (row-level security above still applies) ----------
 revoke all on public.staff_roles, public.student_profiles, public.student_progress, public.classes, public.calendar_settings from anon;
