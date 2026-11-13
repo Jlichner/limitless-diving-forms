@@ -127,7 +127,14 @@
     } catch (x) { err = x; }
     st.busy = false; btn.disabled = false; btn.textContent = "Send";
     if (err) { setNote(await explain(err), "bad"); return; }
-    const n = (res.data && res.data.sent) || st.to.length;
+    // Only our send-email code answers with { sent: <number> }. Anything else (Supabase's sample code,
+    // for example) means nothing was sent, so don't say it was.
+    const data = res && res.data;
+    if (!data || typeof data !== "object" || typeof data.sent !== "number") {
+      setNote("Not sent. Something answered at send-email, but it isn't the Limitless Diving code. In Supabase, open Edge Functions → send-email → Code, replace everything with the code from the README link, and deploy.", "bad");
+      return;
+    }
+    const n = data.sent;
     close();
     const msg = `Sent to ${n} ${n === 1 ? "person" : "people"}. Replies go to jamie@limitless-diving.com.`;
     if (window.LD && window.LD.toast) window.LD.toast(msg); else alert(msg);
