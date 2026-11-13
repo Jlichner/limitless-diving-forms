@@ -201,11 +201,11 @@
       if (!edit) return `<li><div class="cal-ro"><span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
         <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
         <span class="meta">${left === null ? "" : left ? left + " open seat" + (left === 1 ? "" : "s") : "Full"}</span>
-        ${minCertOf(k) ? `<span class="meta">Minimum certification: ${esc(minCertOf(k))}</span>` : ""}</div></li>`;
+        ${minCertOf(k) ? `<span class="meta">Min Cert: ${esc(minCertOf(k))}</span>` : ""}</div></li>`;
       return `<li><button data-cact="pick" data-id="${k.id}" class="${k.id === v.sel && !v.publish ? "sel" : ""}">
         <span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
         <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
-        ${minCertOf(k) ? `<span class="meta">Needs ${esc(minCertOf(k))}</span>` : ""}
+        ${minCertOf(k) ? `<span class="meta">Min Cert: ${esc(minCertOf(k))}</span>` : ""}
         <span class="meta">${esc([isCourseType(k) ? n + " enrolled" : "", left === null ? "" : left ? left + " open" : "full"].filter(Boolean).join(" · "))}
           <span class="cal-status${k.published ? " on" : ""}">${k.published ? "Published" : "Draft"}</span></span></button></li>`;
     };
@@ -377,7 +377,7 @@
       ${missingNote()}
       <h2 class="sec">1. Check what goes out</h2>
       ${d.classes.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Class</th><th>Dates</th><th>Price</th><th>Seats open</th></tr></thead><tbody>
-        ${d.classes.map(k => `<tr><td><i class="cal-dot ${k.color}" aria-hidden="true"></i> ${esc(k.title)}${k.minCertName ? `<br><span class="hint" style="margin:0">Needs ${esc(k.minCertName)}</span>` : ""}</td><td>${esc(G().range(k.dates) || "TBD")}</td>
+        ${d.classes.map(k => `<tr><td><i class="cal-dot ${k.color}" aria-hidden="true"></i> ${esc(k.title)}${k.minCertName ? `<br><span class="hint" style="margin:0">Min Cert: ${esc(k.minCertName)}</span>` : ""}</td><td>${esc(G().range(k.dates) || "TBD")}</td>
           <td class="money">${k.price == null ? "" : money(k.price)}</td><td>${k.seatsLeft == null ? "Open" : k.seatsLeft || "Full"}</td></tr>`).join("")}</tbody></table></div>`
         : `<p class="hint"><b>No classes are marked to show yet.</b> Publishing now empties the public calendar.</p>`}
       <h2 class="sec">Page heading and contact</h2>
