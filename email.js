@@ -1,5 +1,6 @@
 /* Limitless Diving — write and send an email to students from the site (Instructors and Admins).
-   LDEmail.open({ to: [{ name, email }], subject, about }) shows the compose box. Sending goes through the
+   LDEmail.open({ to: [{ name, email }], subject, message, about, onSent(n) }) shows the compose box; onSent runs
+   once the function confirms it sent. Sending goes through the
    Supabase Edge Function "send-email" (supabase/functions/send-email), which checks the sender's level and
    sends each person their own copy through Resend, so nobody sees the other addresses. Replies go to
    jamie@limitless-diving.com. Load after cloud.js. */
@@ -10,7 +11,7 @@
   const C = () => window.LDCloud || {};
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const EMAIL_RE = /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/;
-  const st = { to: [], about: "", busy: false, note: "", kind: "" };
+  const st = { to: [], about: "", busy: false, note: "", kind: "", onSent: null };
 
   function canSend() { return !!(C().available && C().user && C().can && C().can("instructor")); }
 
@@ -56,7 +57,7 @@
     st.to = (opts.to || []).filter(r => r && EMAIL_RE.test(String(r.email || "").trim()))
       .map(r => ({ name: String(r.name || "").trim(), email: String(r.email).trim() }))
       .filter(r => !seen.has(r.email.toLowerCase()) && seen.add(r.email.toLowerCase()));
-    st.about = opts.about || ""; st.busy = false;
+    st.about = opts.about || ""; st.busy = false; st.onSent = typeof opts.onSent === "function" ? opts.onSent : null;
     const d = dlg();
     const me = (C().user && C().user.email) || "";
     if (!canSend()) {
@@ -136,6 +137,7 @@
     }
     const n = data.sent;
     close();
+    if (st.onSent) { try { st.onSent(n); } catch (x) { console.error(x); } }
     const msg = `Sent to ${n} ${n === 1 ? "person" : "people"}. Replies go to jamie@limitless-diving.com.`;
     if (window.LD && window.LD.toast) window.LD.toast(msg); else alert(msg);
   }

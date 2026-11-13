@@ -1,7 +1,8 @@
 /* Limitless Diving — the student account page (account.html).
    Students create an account, sign in, and keep their own details up to date: name, address, phone,
    emergency contact and current certifications. They also see the training progress the instructor
-   shares with them and the upcoming classes. Supabase row-level security (supabase/schema.sql) makes
+   shares with them and the upcoming classes, and read, sign and print the learning agreements the instructor
+   sends them (agreements table; the email links to account.html#agreement=<id>). Supabase row-level security (supabase/schema.sql) makes
    sure each student can only read and change their own record. */
 (function () {
   "use strict";
@@ -22,7 +23,10 @@
 
   // view.auth: "signin" | "signup" | "forgot" | "recover" (set a new password after the email link)
   const view = { auth: "signin", note: "", noteKind: "", busy: false, vals: {} };  // vals: what was typed in the sign-in form (not passwords)
-  let profile = null, progress = [], classes = [], loadError = "", lastUser = null;
+  let profile = null, progress = [], classes = [], agreements = [], loadError = "", lastUser = null;
+  // The agreement being read (from the email link, account.html#agreement=<id>, or "Read and sign").
+  function hashAgreement() { const m = /^#agreement=([^&]+)$/.exec(location.hash); return m ? decodeURIComponent(m[1]) : ""; }
+  view.agree = hashAgreement();
 
   let toastTimer;
   function toast(msg) { const t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600); }
@@ -40,7 +44,7 @@
     const a = view.auth;
     const title = { signin: "Student portal", signup: "Create your student account", forgot: "Reset your password", recover: "Choose a new password" }[a];
     const intro = {
-      signin: "Log in to update your contact details, emergency contact and certifications, and to follow your training.",
+      signin: view.agree ? "Log in to read and sign your learning agreement." : "Log in to update your contact details, emergency contact and certifications, and to follow your training.",
       signup: "Create an account so your instructor has your up-to-date details, and so you can follow your training progress.",
       forgot: "Enter the email you signed up with and we'll send you a link to choose a new password.",
       recover: "Enter a new password for your account."
@@ -125,12 +129,15 @@
     const mineIds = new Set(progress.map(r => r.summary && r.summary.classId).filter(Boolean));
     const t = G.today();
     const upcoming = classes.filter(k => !k.dates.length || G.lastDate(k.dates) >= t);
+    const toSign = agreements.filter(x => !x.signed_at);
     return `<section class="acct-hero">${avatar("photo-sm")}<div class="acct-hero-text"><span class="eyebrow">Signed in as ${esc(email)}</span>
         <h1>${esc(profile.full_name ? "Welcome, " + profile.full_name.split(/\s+/)[0] : "Welcome")}</h1>
         <p class="hint">Keep these details current. Your instructor uses them for your course paperwork and in an emergency.</p></div>
         <button class="btn" data-act="signout">Sign out</button></section>
       ${C.can("divemaster") ? `<p class="acct-note">You're signed in as ${C.role === "admin" || C.role === "instructor" ? "an" : "a"} ${esc(C.ROLE_NAMES[C.role])}. See every student's account under <a href="index.html#staff">Admin Log in</a>.</p>` : ""}
       ${loadError ? `<p class="acct-note bad" role="alert">${esc(loadError)}</p>` : ""}
+      ${toSign.length ? `<section class="acct-sign-banner" aria-label="Agreements to sign"><div><b>Please sign your learning agreement${toSign.length > 1 ? "s" : ""}</b>
+        <ul>${toSign.map(x => `<li>${esc(x.title || "Learning agreement")} <button class="btn small primary" data-act="agr-open" data-id="${esc(x.id)}">Read and sign</button></li>`).join("")}</ul></div></section>` : ""}
       <div class="acct-cols">
       <form class="panel acct-profile" id="profile-form" novalidate>${ROSE.replace("acct-rose", "watermark")}
         <h2 class="sec">Your details</h2>
@@ -160,10 +167,37 @@
       <div class="acct-side">
         <section class="panel"><h2 class="sec">My training</h2>
           ${progress.length ? progress.map(progressCard).join("") : `<p class="hint">Once you're enrolled, your instructor shares your course schedule, skills and progress here.</p>`}</section>
+        ${agreements.length ? `<section class="panel"><h2 class="sec">My agreements</h2><ul class="acct-agrs">${agreements.map(x => `<li>
+          <div><b>${esc(x.title || "Learning agreement")}</b><span>${x.signed_at ? "Signed " + esc(fmtWhen(x.signed_at)) : "Waiting for your signature"}</span></div>
+          <button class="btn small${x.signed_at ? "" : " primary"}" data-act="agr-open" data-id="${esc(x.id)}">${x.signed_at ? "View or print" : "Read and sign"}</button></li>`).join("")}</ul></section>` : ""}
         <section class="panel"><h2 class="sec">Upcoming classes</h2>
           ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">No classes are scheduled right now.</p>`}
           <p class="hint"><a href="classes.html">See the full class calendar</a></p></section>
       </div></div>`;
+  }
+
+  function fmtWhen(iso) { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+  function renderAgreement(x) {
+    const m = x.meta || {}, signed = !!x.signed_at, D = window.LDAgreementDoc;
+    const doc = D ? D.html(m, signed ? x.signed_body : x.body, signed ? { name: x.signed_name, guardian: x.guardian_name, at: x.signed_at } : null) : "";
+    const guardian = m.minor === true ? "required" : m.minor === false ? "" : "optional";
+    return `<section class="agr-view">
+      <div class="agr-bar no-print"><button class="btn" data-act="agr-back">← Back to my account</button>
+        <button class="btn${signed ? " primary" : ""}" data-act="agr-print">Print / save as PDF</button></div>
+      <p class="acct-note${signed ? " ok" : ""} no-print" role="status">${signed
+        ? `You signed this agreement on ${esc(fmtWhen(x.signed_at))}. Print a copy or save it as a PDF for your records.`
+        : `Please read the whole agreement, then sign at the bottom. Questions? Email <a href="mailto:jamie@limitless-diving.com">jamie@limitless-diving.com</a> before you sign.`}</p>
+      <div class="agr-doc">${doc}</div>
+      ${signed ? "" : `<form class="panel agr-sign no-print" id="sign-form" novalidate><h2 class="sec">Sign this agreement</h2>
+        <p class="hint">Typing your name and pressing Sign is your signature, the same as signing on paper.</p>
+        <div class="grid"><div class="field"><label for="sg-name">Your full name</label><input id="sg-name" autocomplete="name" maxlength="200" value="${esc(view.signName != null ? view.signName : profile.full_name || "")}" required></div>
+          ${guardian ? `<div class="field"><label for="sg-guardian">Parent or legal guardian's full name${guardian === "optional" ? " (only if you're under 18)" : ""}</label>
+            <input id="sg-guardian" maxlength="200" value="${esc(view.signGuardian || "")}"${guardian === "required" ? " required" : ""}></div>` : ""}</div>
+        <label class="chk"><input type="checkbox" id="sg-ok"> I have read this learning agreement, had my questions answered, and agree to its terms.</label>
+        ${note()}
+        <div class="row-actions"><button class="btn primary" type="submit"${view.busy ? " disabled" : ""}>${view.busy ? "Signing…" : "Sign the agreement"}</button></div>
+      </form>`}
+    </section>`;
   }
 
   function render() {
@@ -175,7 +209,14 @@
     if (!C.available) { main.innerHTML = `<div class="msg">The sign-in service couldn't be loaded. Check your connection and refresh the page.</div>`; return; }
     if (!C.user || view.auth === "recover") { main.innerHTML = renderAuth(); return; }
     if (!profile) { main.innerHTML = `<div class="msg">Loading your account…</div>`; return; }
-    main.innerHTML = renderAccount();
+    const agr = view.agree && agreements.find(x => x.id === view.agree);
+    document.body.classList.toggle("reading-agreement", !!agr);
+    if (view.agree && !agr) {
+      main.innerHTML = `<div class="msg"><h1>Agreement not found</h1><p>That learning agreement isn't in this account. Check you're logged in with the email it was sent to, or ask your instructor to send it again.</p>
+        <p><button class="btn primary" data-act="agr-back">Go to my account</button></p></div>`;
+      return;
+    }
+    main.innerHTML = agr ? renderAgreement(agr) : renderAccount();
   }
 
   // ---------- profile photo ----------
@@ -242,11 +283,13 @@
   async function loadAll() {
     const C = window.LDCloud, sb = C.client, uid = C.user.id;
     loadError = "";
-    const [p, pr, cl] = await Promise.all([
+    const [p, pr, cl, ag] = await Promise.all([
       sb.from("student_profiles").select("*").eq("id", uid).maybeSingle(),
       sb.from("student_progress").select("*").eq("student_id", uid).order("updated_at", { ascending: false }),
-      sb.from("classes").select("*")
+      sb.from("classes").select("*"),
+      sb.from("agreements").select("*").eq("student_id", uid).order("sent_at", { ascending: false })
     ]);
+    agreements = ag.error ? [] : ag.data || [];
     if (p.error) loadError = "Your details couldn't be loaded: " + C.explain(p.error);
     profile = Object.assign(blankProfile(uid), p.data || {});
     if (!Array.isArray(profile.certifications)) profile.certifications = [];
@@ -290,13 +333,24 @@
         dirty(); break;
       }
       case "rm-photo": removePhoto(); break;
+      case "agr-open": openAgreement(b.dataset.id); break;
+      case "agr-back": openAgreement(""); break;
+      case "agr-print": window.print(); break;
       case "rm-cert": profile.certifications.splice(Number(b.dataset.i), 1); render(); dirty(); break;
     }
   });
+  function openAgreement(id) {
+    view.agree = id || ""; view.signName = null; view.signGuardian = ""; setNote("");
+    try { history.replaceState(null, "", id ? "#agreement=" + encodeURIComponent(id) : location.pathname + location.search); } catch (e) { /* ignore */ }
+    render(); window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", () => { const id = hashAgreement(); if (id !== view.agree) { view.agree = id; setNote(""); if (profile) render(); } });
   function dirty() { const s = document.getElementById("save-state"); if (s) s.textContent = "You have unsaved changes."; }
   main.addEventListener("input", (e) => {
     const el = e.target;
     if (el.closest("#auth-form")) { if (el.type !== "password") view.vals[el.id] = el.value; return; }
+    if (el.id === "sg-name") { view.signName = el.value; return; }
+    if (el.id === "sg-guardian") { view.signGuardian = el.value; return; }
     if (!profile) return;
     if (el.dataset.p) { profile[el.dataset.p] = el.value; dirty(); }
     if (el.dataset.c) {
@@ -316,6 +370,24 @@
   main.addEventListener("submit", async (e) => {
     e.preventDefault();
     const C = window.LDCloud, sb = C.client;
+    if (e.target.id === "sign-form") {
+      const name = document.getElementById("sg-name").value.trim(), g = document.getElementById("sg-guardian");
+      const guardian = g ? g.value.trim() : "", ok = document.getElementById("sg-ok").checked;
+      view.signName = name; view.signGuardian = guardian;
+      if (name.length < 2) { setNote("Type your full name to sign.", "bad"); render(); document.getElementById("sg-name").focus(); return; }
+      if (g && g.required && guardian.length < 2) { setNote("You're under 18, so a parent or legal guardian needs to type their full name too.", "bad"); render(); document.getElementById("sg-guardian").focus(); return; }
+      if (!ok) { setNote("Tick the box to confirm you've read the agreement and agree to it.", "bad"); render(); return; }
+      view.busy = true; setNote(""); render();
+      let res;
+      try { res = await sb.rpc("sign_agreement", { agreement_id: view.agree, signer_name: name, guardian }); } catch (err) { res = { error: err }; }
+      view.busy = false;
+      if (res.error) { setNote("Not signed: " + C.explain(res.error), "bad"); render(); return; }
+      const row = Array.isArray(res.data) ? res.data[0] : res.data;
+      agreements = agreements.map(x => x.id === row.id ? row : x);
+      render(); window.scrollTo(0, 0);
+      toast("Signed. Thank you! You can print it now.");
+      return;
+    }
     if (e.target.id === "profile-form") {
       if (!String(profile.full_name || "").trim()) { toast("Please enter your full name."); document.getElementById("p-full_name").focus(); return; }
       view.busy = true; render();
@@ -365,7 +437,7 @@
     if (event === "PASSWORD_RECOVERY") { view.auth = "recover"; setNote(""); render(); return; }
     const uid = C.user && C.user.id;
     if (uid !== lastUser) {
-      lastUser = uid; profile = null; progress = []; classes = [];
+      lastUser = uid; profile = null; progress = []; classes = []; agreements = [];
       render();
       if (uid) { setNote(""); try { await loadAll(); } catch (err) { loadError = C.explain(err); profile = profile || blankProfile(uid); render(); } }
     }

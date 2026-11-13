@@ -96,6 +96,15 @@ Each person gets their own copy, so nobody sees anyone else's address. Up to 50 
 
 To change the sender or reply address later, add the secrets `FROM_EMAIL` (for example `Jamie at Limitless Diving <jamie@limitless-diving.com>`) and `REPLY_TO`. The sender must be on the domain verified in Resend.
 
+### Learning agreements students sign online
+
+In **Business → Scheduling**, once a learning agreement is made for a student, step **4 · Student signs it** has **Send to <name> to sign**. It puts the agreement in the student's **Student portal** and opens a ready-written email (from jamie@limitless-diving.com) with a link straight to it. The student logs in, reads it, types their name (and a parent or guardian's name if they're under 18), ticks the box and presses **Sign**. Then they can print it or save it as a PDF. Scheduling shows "Waiting for signature" and then "Signed", and its preview and printout show the signature.
+
+- The student needs a portal account linked to their Students record (pick their account in Scheduling step 1, or link it under Admin Log in → Student accounts).
+- Change the wording after sending? Press **Send the updated agreement**. **Email again** sends a reminder. **Take it back** removes it from their portal.
+- Once signed, the wording they signed is locked; nobody, staff included, can change it or the signature.
+- Needs the latest `supabase/schema.sql` (the `agreements` table and `sign_agreement`).
+
 ### The class calendar, online
 
 Once you're signed in as the instructor, **Publish calendar…** shows **Publish online now**. It updates the public page right away, with no `classes.json` to upload. The public page reads the online calendar once you've published there, and uses `classes.json` until then.

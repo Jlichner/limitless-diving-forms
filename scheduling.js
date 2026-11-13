@@ -13,6 +13,10 @@
      the Coaching and tours listings, or anything) and optionally one course. The most specific template is picked
      for you. Template text uses {{placeholders}} (PLACEHOLDERS below) filled from the student, the event and the
      course standards. Lines starting "## " are headings and lines starting "- " are bullet points.
+   - Sending for signature: "Send to <student> to sign" copies the agreement to the Supabase agreements table
+     (supabase/schema.sql), where the student reads, signs and prints it in the Student portal (account.js), and
+     opens an email to them (email.js) with a link straight to it. The student needs a portal account linked to
+     their Students record. Once signed, the signed wording is locked and shown here with their signature.
    window.LDScheduling = { render } */
 (function () {
   "use strict";
@@ -21,7 +25,9 @@
   const G = () => window.LDCalGrid;
   const C = () => window.LDCloud;
   const $ = (s, r) => (r || document).querySelector(s);
-  const v = { sel: null, tpl: false, tplSel: null, q: "", accounts: null, accBusy: false, offers: null, offBusy: false };
+  const v = { sel: null, tpl: false, tplSel: null, q: "", accounts: null, accBusy: false, offers: null, offBusy: false,
+    signs: null, signsAt: 0, signBusy: false, signErr: "", sending: false };
+  const PORTAL_URL = "https://limitless-diving.com/account.html";
 
   // ---------- starter templates (used until Jamie's own templates are dropped in) ----------
   const STUDENT_DUTIES = `- Complete the Medical History Form and the Waiver and Release Agreement before any in-water training. If the medical form shows a condition that could affect diving, I will get a physician's approval before training continues. If I am under 18, my parent or legal guardian signs these forms and this agreement.
@@ -316,21 +322,6 @@ ${STUDENT_DUTIES}`
   function make(a, tpl) {
     a.agreement = { templateId: tpl.id, name: tpl.name, text: fill(tpl.body, values(a)), made: new Date().toISOString() };
   }
-  // The printed agreement. Text lines: "## " heading, "- " bullet, blank line between paragraphs.
-  function textHtml(text) {
-    const esc = L().esc, out = []; let list = null;
-    const close = () => { if (list) { out.push("<ul>" + list.join("") + "</ul>"); list = null; } };
-    const inline = (s) => esc(s).replace(/\[([a-z ]+)\]/g, '<span class="ph">[$1]</span>');
-    String(text || "").split(/\r?\n/).forEach(line => {
-      const t = line.trim();
-      if (!t) { close(); return; }
-      if (t.startsWith("## ")) { close(); out.push("<h3>" + inline(t.slice(3)) + "</h3>"); return; }
-      if (/^[-•]\s+/.test(t)) { (list = list || []).push("<li>" + inline(t.replace(/^[-•]\s+/, "")) + "</li>"); return; }
-      close(); out.push("<p>" + inline(t) + "</p>");
-    });
-    close();
-    return out.join("");
-  }
   function minorOn(a) {
     const p = person(a), ev = eventOf(a); if (!p || !p.dob) return null;
     const on = (ev && ev.dates[0]) || G().today(), b = new Date(p.dob + "T12:00:00"), d = new Date(on + "T12:00:00");
@@ -339,26 +330,121 @@ ${STUDENT_DUTIES}`
     if (d.getMonth() < b.getMonth() || (d.getMonth() === b.getMonth() && d.getDate() < b.getDate())) age--;
     return age < 18;
   }
+  // What goes at the top of the agreement (here and in the Student portal).
+  function metaOf(a) {
+    const vals = values(a);
+    return { business: vals.business, contact: [vals.instructor, vals.instructor_phone, vals.instructor_email].filter(Boolean).join("  ·  "),
+      instructor: vals.instructor, student_name: vals.student_name, student_dob: vals.student_dob,
+      event_type: vals.event_type, event_title: vals.event_title, dates: vals.dates, minor: minorOn(a) };
+  }
+  // The printed agreement (agreement-doc.js). Once the student has signed, it's the wording they signed, with their signature.
   function docHtml(a) {
-    const esc = L().esc, vals = values(a), minor = minorOn(a);
-    const sig = (who) => `<div class="la-sig"><div class="la-line"></div><div class="la-sl"><span>${esc(who)}</span><span>Date</span></div></div>`;
-    return `<article class="ladoc">
-      <header class="la-h"><div><div class="la-b">${esc(vals.business)}</div><div class="la-sub">${esc([vals.instructor, vals.instructor_phone, vals.instructor_email].filter(Boolean).join("  ·  "))}</div></div>
-        <div class="la-t">Learning Agreement</div></header>
-      <div class="la-meta"><div><b>Student:</b> ${esc(vals.student_name) || '<span class="ph">[student name]</span>'}${vals.student_dob ? " · DOB " + esc(vals.student_dob) : ""}</div>
-        <div><b>${esc(vals.event_type || "Event")}:</b> ${esc(vals.event_title) || '<span class="ph">[event]</span>'}${vals.dates ? " · " + esc(vals.dates) : ""}</div></div>
-      <div class="la-body">${textHtml(a.agreement ? a.agreement.text : "")}</div>
-      <h3>Signatures</h3>
-      <p class="la-ack">By signing, I confirm that I have read this agreement, had my questions answered, and agree to its terms.</p>
-      <div class="la-sigs">${sig("Student: " + (vals.student_name || ""))}
-        ${minor === false ? "" : sig("Parent or legal guardian" + (minor ? " (student is under 18)" : " (if the student is under 18)"))}
-        ${sig("Instructor: " + (vals.instructor || ""))}</div>
-    </article>`;
+    const row = cloudOf(a), signed = row && row.signed_at;
+    return window.LDAgreementDoc.html(metaOf(a), signed ? row.signed_body : (a.agreement ? a.agreement.text : ""),
+      signed ? { name: row.signed_name, guardian: row.guardian_name, at: row.signed_at } : null);
+  }
+
+  // ---------- sending it to the student to sign (Student portal) ----------
+  function canSendOnline() { return !!(C() && C().available && C().client && C().can && C().can("instructor")); }
+  function loadSigns(force) {
+    if (v.signBusy || !canSendOnline()) return;
+    if (!force && v.signs && Date.now() - v.signsAt < 60000) return;
+    v.signBusy = true;
+    C().client.from("agreements").select("id,student_id,sent_at,signed_at,signed_name,guardian_name,signed_body,body").then(r => {
+      v.signBusy = false; v.signsAt = Date.now();
+      if (r.error) { v.signs = v.signs || {}; v.signErr = C().explain(r.error); }
+      else { v.signs = {}; (r.data || []).forEach(x => { v.signs[x.id] = x; }); v.signErr = ""; }
+      rerender();
+    }, (err) => { v.signBusy = false; v.signsAt = Date.now(); v.signs = v.signs || {}; v.signErr = C().explain(err); rerender(); });
+  }
+  function cloudOf(a) { return (a && v.signs && v.signs[a.id]) || null; }
+  function signState(a) {
+    const row = cloudOf(a);
+    return !a.agreement ? "none" : row && row.signed_at ? "signed" : row ? "sent" : "made";
+  }
+  function accountEmail(p) {
+    const acc = p && p.accountId && (v.accounts || []).find(x => x.id === p.accountId);
+    return (acc && acc.email) || (p && p.email) || "";
+  }
+  function firstName(p) { return String((p && p.name) || "").trim().split(/\s+/)[0] || "there"; }
+  function emailText(a, p, ev) {
+    const vals = values(a), link = PORTAL_URL + "#agreement=" + encodeURIComponent(a.id);
+    const when = ev.dates.length ? " (" + vals.dates + ")" : "";
+    const by = ev.dates[0] && ev.dates[0] > G().today() ? " before " + L().fmtDate(ev.dates[0]) : "";
+    return {
+      subject: "Please sign your learning agreement: " + ev.title,
+      message: `Hi ${firstName(p)},
+
+Your learning agreement for ${ev.title}${when} is ready in your Limitless Diving Student portal.
+
+Please log in, read it over, and sign it${by}:
+${link}
+
+Once it's signed you can print it or save it as a PDF from the same page.
+
+If you have any questions, just reply to this email.
+
+${vals.instructor || "Jamie"}
+${vals.business}`
+    };
+  }
+  function portalBlock(a, p, ev) {
+    const { esc, fmtDate } = L(), row = cloudOf(a), first = esc(firstName(p));
+    const on = (iso) => esc(fmtDate(String(iso || "").slice(0, 10)));
+    if (!canSendOnline()) return `<p class="hint">To send this to the student to sign online, sign in with <b>Admin Log in</b> as an Instructor or Admin. You can still print it for them to sign on paper.</p>`;
+    if (!v.signs && !v.signErr) return `<p class="hint">Checking the Student portal…</p>`;
+    if (v.signErr) return `<p class="acct-note bad" role="alert">Couldn't check the Student portal: ${esc(v.signErr)}</p>`;
+    if (row && row.signed_at) {
+      return `<p class="acct-note ok">Signed by <b>${esc(row.signed_name)}</b>${row.guardian_name ? " and parent or guardian <b>" + esc(row.guardian_name) + "</b>" : ""} on ${on(row.signed_at)} in the Student portal.
+        The preview and the printout show the wording they signed, with their signature.</p>`;
+    }
+    if (!p) return "";
+    if (!p.accountId) {
+      return `<p class="hint">${esc(p.name || "This student")} doesn't have a Student portal account linked, so they can't sign online yet. Ask them to sign up at
+        <a href="${PORTAL_URL}" target="_blank" rel="noopener">limitless-diving.com/account.html</a>, then link their account under <b>Admin Log in → Student accounts</b>. You can still print it for them to sign on paper.</p>`;
+    }
+    const busy = v.sending ? " disabled" : "";
+    if (!row) {
+      return `<div class="sch-sign"><button class="btn primary" data-sact="send-sign"${busy}>${v.sending ? "Sending…" : "Send to " + first + " to sign"}</button>
+        <p class="hint">Puts the agreement in ${first}'s Student portal and opens an email asking them to log in, sign it and print a copy.</p></div>`;
+    }
+    const changed = row.body !== a.agreement.text || row.student_id !== p.accountId;
+    return `<div class="sch-sign"><p class="acct-note">Sent ${on(row.sent_at)}${a.agreement.emailed ? "" : " (no email confirmed yet)"}. Waiting for ${first} to sign.${changed ? " <b>You've changed it since then.</b>" : ""}</p>
+      <div class="row-actions"><button class="btn${changed ? " primary" : ""}" data-sact="send-sign"${busy}>${v.sending ? "Sending…" : changed ? "Send the updated agreement" : "Email " + first + " again"}</button>
+        <button class="btn danger" data-sact="unsend">Take it back…</button><span id="sch-unsend-confirm"></span></div></div>`;
+  }
+  async function sendForSigning(a) {
+    const p = person(a), ev = eventOf(a);
+    if (!a || !a.agreement || !p || !p.accountId || !ev || v.sending || !canSendOnline()) return;
+    const prev = cloudOf(a);
+    if (prev && prev.signed_at) return;
+    v.sending = true; rerender();
+    const row = { id: a.id, student_id: p.accountId, title: String(ev.title || "").slice(0, 300), body: a.agreement.text,
+      meta: metaOf(a), sent_at: new Date().toISOString() };
+    let r;
+    try { r = await C().client.from("agreements").upsert(row).select("id,student_id,sent_at,signed_at,signed_name,guardian_name,signed_body,body").single(); }
+    catch (err) { r = { error: err }; }
+    v.sending = false;
+    if (r.error) { rerender(); L().toast("Not sent: " + C().explain(r.error)); return; }
+    v.signs = v.signs || {}; v.signs[a.id] = r.data; rerender();
+    const email = accountEmail(p);
+    if (!window.LDEmail || !email) { L().toast("It's in " + firstName(p) + "'s Student portal. Add their email address to send them a note."); return; }
+    const m = emailText(a, p, ev);
+    window.LDEmail.open({ to: [{ name: p.name, email }], about: (p.name || "student") + ": learning agreement", subject: m.subject, message: m.message,
+      onSent: () => { a.agreement.emailed = new Date().toISOString(); L().save(); rerender(); } });
+  }
+  async function unsend(a) {
+    let r;
+    try { r = await C().client.from("agreements").delete().eq("id", a.id); } catch (err) { r = { error: err }; }
+    if (r.error) { L().toast("Couldn't take it back: " + C().explain(r.error)); return; }
+    if (v.signs) delete v.signs[a.id];
+    if (a.agreement) a.agreement.emailed = "";
+    L().save(); rerender(); L().toast("Taken back. It's no longer in their Student portal.");
   }
 
   // ---------- render ----------
   function render() {
-    data(); loadOffers(); loadAccounts();
+    data(); loadOffers(); loadAccounts(); loadSigns();
     if (v.sel && !cur()) v.sel = null;
     if (!v.sel && !v.tpl && data().assignments.length) v.sel = sortedList()[0].id;
     return `<aside class="roster no-print">${renderList()}</aside>
@@ -377,11 +463,15 @@ ${STUDENT_DUTIES}`
       <ul>${rows.map(({ a, p, ev }) => `<li><button data-sact="pick" data-id="${a.id}" class="${a.id === v.sel && !v.tpl ? "sel" : ""}">
           <span class="nm">${esc((p && p.name) || "No student yet")}</span>
           <span class="meta">${esc(ev ? ev.title : "Nothing picked yet")}${ev && ev.dates[0] ? " · " + esc(fmtDate(ev.dates[0])) : ""}</span>
-          <span class="la-status ${a.agreement ? "done" : ""}">${a.agreement ? "Agreement made" : "No agreement yet"}</span></button></li>`).join("")
+          ${statusPill(a)}</button></li>`).join("")
         || `<li class="meta" style="padding:8px 10px">${data().assignments.length ? "No matches." : "No one scheduled yet."}</li>`}</ul>
       <button class="btn ${v.tpl ? "active" : ""}" data-sact="templates">Agreement templates</button>`;
   }
 
+  function statusPill(a) {
+    const st = signState(a), txt = { none: "No agreement yet", made: "Agreement made", sent: "Waiting for signature", signed: "Signed" }[st];
+    return `<span class="la-status ${st === "signed" ? "done" : st === "sent" ? "wait" : st === "made" ? "made" : ""}">${txt}</span>`;
+  }
   function targetSelect(a) {
     const { esc, fmtDate } = L(), ev = eventOf(a);
     const entries = (L().state.classes || []).filter(k => isUpcoming(k) || "k:" + k.id === a.target)
@@ -420,7 +510,7 @@ ${STUDENT_DUTIES}`
         Students scheduled on a class are enrolled in it, just like Enroll on the Calendar.</p>
         <button class="btn primary" data-sact="new">+ Schedule a student</button></div>`;
     }
-    const p = person(a), ev = eventOf(a), tplList = templates(), best = bestTemplate(ev);
+    const p = person(a), ev = eventOf(a), tplList = templates(), best = bestTemplate(ev), signed = signState(a) === "signed";
     const pickT = (a.agreement && tplList.find(t => t.id === a.agreement.templateId)) || best;
     const enrolled = ev && ev.isClass && p && L().state.enrollments.some(e => e.studentId === p.id && e.classId === ev.entry.id);
     let details = "";
@@ -467,12 +557,14 @@ ${STUDENT_DUTIES}`
 
       <h2 class="sec">3 · Learning agreement</h2>
       ${building ? `<p class="hint">Save the ${esc(ev.typeName.toLowerCase())} above first, then make the agreement.</p>` : !ev ? `<p class="hint">Pick what the student is scheduled for, then make the agreement.</p>` : `
-        <div class="sch-pick"><label for="sch-tpl">Template</label>
+        ${signed ? "" : `<div class="sch-pick"><label for="sch-tpl">Template</label>
           <select id="sch-tpl">${tplList.map(t => `<option value="${t.id}"${pickT && t.id === pickT.id ? " selected" : ""}>${esc(t.name)} — ${esc(forLabel(t.for))}${t.course ? " · " + esc((L().COURSES[t.course] || {}).name || t.course) : ""}</option>`).join("")}</select>
-          <button class="btn primary" data-sact="make">${a.agreement ? "Make it again" : "Make agreement"}</button></div>
-        <p class="hint">${best ? `Suggested for this ${esc(ev.typeName.toLowerCase())}: <b>${esc(best.name)}</b>. ` : ""}It's filled in from the student's details, the event and the course standards. ${a.agreement ? "Making it again replaces your edits below." : ""}</p>
-        ${a.agreement ? `<div class="grid"><div class="field wide"><label for="sch-text">Agreement text (edit freely, only for this student)</label>
-          <textarea id="sch-text" rows="14">${esc(a.agreement.text)}</textarea></div></div>
+          <button class="btn primary" data-sact="make">${a.agreement ? "Make it again" : "Make agreement"}</button></div>`}
+        ${signed ? "" : `<p class="hint">${best ? `Suggested for this ${esc(ev.typeName.toLowerCase())}: <b>${esc(best.name)}</b>. ` : ""}It's filled in from the student's details, the event and the course standards. ${a.agreement ? "Making it again replaces your edits below." : ""}</p>`}
+        ${a.agreement ? `${signed ? "" : `<div class="grid"><div class="field wide"><label for="sch-text">Agreement text (edit freely, only for this student)</label>
+          <textarea id="sch-text" rows="14">${esc(a.agreement.text)}</textarea></div></div>`}
+          <h2 class="sec">4 · Student signs it</h2>
+          <div id="sch-portal">${portalBlock(a, p, ev)}</div>
           <div class="doc-actions"><button class="btn primary" data-sact="print">Print / save as PDF</button>
           ${enrolled ? `<button class="btn" data-sact="proposal">Full proposal with skill matrix</button>` : ""}
           <span class="hint" style="margin:0">Made ${esc(fmtDate(a.agreement.made.slice(0, 10)))} from “${esc(a.agreement.name)}”.</span></div>` : ""}`}
@@ -507,7 +599,10 @@ ${STUDENT_DUTIES}`
 
   // ---------- updates ----------
   function rerender() { if (document.getElementById("sch-panel")) L().render(); }
-  function refreshDoc() { const a = cur(), d = $("#sch-doc"); if (a && d && a.agreement) d.innerHTML = docHtml(a); }
+  function refreshDoc() {
+    const a = cur(), d = $("#sch-doc"); if (a && d && a.agreement) d.innerHTML = docHtml(a);
+    const pb = $("#sch-portal"); if (a && pb && a.agreement && cloudOf(a)) pb.innerHTML = portalBlock(a, person(a), eventOf(a));
+  }
   function refreshList() {
     const r = $(".roster"); if (!r || !$("#sch-panel")) return;
     const q = $("#sch-q"), had = document.activeElement === q;
@@ -584,7 +679,9 @@ ${STUDENT_DUTIES}`
         if (!a) break;
         const sel = $("#sch-tpl"), t = templates().find(x => x.id === (sel && sel.value)) || bestTemplate(eventOf(a));
         if (!t) { L().toast("Add a template first (Agreement templates)."); break; }
-        make(a, t); L().save(); rerender(); L().toast("Learning agreement made from “" + t.name + "”");
+        if (signState(a) === "signed") break;
+        make(a, t); L().save(); rerender();
+        { const p = person(a); L().toast("Learning agreement made from “" + t.name + "”." + (p && p.accountId && canSendOnline() ? " Check it over, then send it to " + firstName(p) + " to sign." : "")); }
         const d = $("#sch-doc"); if (d && d.scrollIntoView) d.scrollIntoView({ behavior: "smooth", block: "start" });
         break;
       }
@@ -604,6 +701,9 @@ ${STUDENT_DUTIES}`
         break;
       }
       case "print": window.print(); break;
+      case "send-sign": if (a) sendForSigning(a); break;
+      case "unsend": $("#sch-unsend-confirm").innerHTML = ` Take it out of their Student portal? <button class="btn small danger" data-sact="unsend-yes">Take it back</button>`; break;
+      case "unsend-yes": if (a) unsend(a); break;
       case "proposal": {
         // The student's course record, on its Proposal tab (skill matrix, dive log, remediation and sign-off).
         const ev = a && eventOf(a), en = ev && ev.isClass && L().state.enrollments.find(x => x.studentId === a.studentId && x.classId === ev.entry.id);
@@ -616,7 +716,12 @@ ${STUDENT_DUTIES}`
         $("#sch-del-confirm").innerHTML = `Remove this from the schedule?${ev && ev.isClass ? " Their course record stays; take them off the class on the Calendar if needed." : ""} <button class="btn small danger" data-sact="del-yes">Remove</button>`;
         break;
       }
-      case "del-yes": data().assignments = data().assignments.filter(x => x.id !== a.id); v.sel = null; L().save(); rerender(); L().toast("Removed from the schedule"); break;
+      case "del-yes": {
+        // An agreement waiting in their portal goes too; a signed one stays there as their record.
+        const row = cloudOf(a);
+        if (row && !row.signed_at && canSendOnline()) C().client.from("agreements").delete().eq("id", a.id).then(() => { if (v.signs) delete v.signs[a.id]; });
+        data().assignments = data().assignments.filter(x => x.id !== a.id); v.sel = null; L().save(); rerender(); L().toast("Removed from the schedule"); break;
+      }
       case "tpl-new": { const t = { id: newId("t"), name: "New learning agreement", for: "any", course: "", body: "This learning agreement is between {{student_name}} and {{business}} for {{event_title}} on {{dates}}.\n\n## Terms\n- " }; templates().push(t); v.tplSel = t.id; L().save(); rerender(); break; }
       case "tpl-dup": { const t = curTpl(); if (!t) break; const n = Object.assign({}, t, { id: newId("t"), name: t.name + " (copy)" }); templates().push(n); v.tplSel = n.id; L().save(); rerender(); break; }
       case "tpl-file": { const f = $("#sch-tpl-file"); if (f) f.click(); break; }
