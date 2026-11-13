@@ -58,6 +58,16 @@
     if (k.type && !isCourseType(k)) return /^k\d$/.test(typeOf(k).color || "") ? typeOf(k).color : "k5";
     const i = L().COURSE_ORDER.indexOf(k.course); return "k" + ((i < 0 ? 5 : i) % 6);
   }
+  // Minimum certification to join (Events, Explorations, Tours…: a Class uses its course's own prerequisites).
+  function minCertOf(k) { if (isCourseType(k)) return ""; return k.pub ? (k.minCertName || "") : (window.LDCatalog && window.LDCatalog.minCertName(k.minCert)) || ""; }
+  function minCertSelect(k) {
+    const { esc } = L(), CAT = window.LDCatalog; if (!CAT) return "";
+    const opt = (c) => `<option value="${esc(c.id)}"${k.minCert === c.id ? " selected" : ""}>${esc(c.cert + (c.agency && c.agency !== "NAUI" ? " (" + c.agency + ")" : ""))}</option>`;
+    return `<div class="field"><label for="cal-mincert">Minimum certification to join</label><select id="cal-mincert">
+        <option value=""${k.minCert ? "" : " selected"}>None required</option>
+        ${CAT.minCertGroups().map(g => `<optgroup label="${esc(g.label)}">${g.courses.map(opt).join("")}</optgroup>`).join("")}</select>
+        <span class="hint" style="margin:0">Shown on the public calendar. Logged-in students see whether their account lists it (or an equivalent).</span></div>`;
+  }
   function roster(k) { return L().state.enrollments.filter(e => e.classId === k.id); }
   function seatsLeft(k) { if (k.pub) return k.seatsLeft == null ? null : Number(k.seatsLeft); const n = Number(k.seats); return n > 0 ? Math.max(0, n - roster(k).length) : null; }
   function isPast(k) { const last = G().lastDate(k.dates); return !!last && last < G().today(); }
@@ -86,7 +96,8 @@
       id: k.id, type: typeOf(k).id, typeName: typeOf(k).name, course: isCourseType(k) ? k.course : "", courseName: courseName(k), title: titleOf(k), color: colorOf(k),
       dates: (k.dates || []).filter(Boolean).sort(), time: k.time || "", location: k.location || "",
       price: k.price === "" || k.price == null ? null : Number(k.price),
-      seats: Number(k.seats) > 0 ? Number(k.seats) : null, seatsLeft: seatsLeft(k), notes: k.notes || ""
+      seats: Number(k.seats) > 0 ? Number(k.seats) : null, seatsLeft: seatsLeft(k), notes: k.notes || "",
+      minCert: isCourseType(k) ? "" : k.minCert || "", minCertName: minCertOf(k)
     }));
     return {
       updated: new Date().toISOString(),
@@ -124,7 +135,7 @@
       if (!t.some(x => x.id === type)) t.push({ id: type, name: p.typeName || "Event", about: "", course: false, color: /^k\d$/.test(p.color || "") ? p.color : "" });
       data().classes.push({
         id: p.id, type, course: p.course || "", title: p.title || "", dates: p.dates.slice(), time: p.time || "", location: p.location || "",
-        price: p.price == null || p.price === "" ? "" : Number(p.price), seats: Number(p.seats) > 0 ? Number(p.seats) : "", notes: p.notes || "",
+        price: p.price == null || p.price === "" ? "" : Number(p.price), seats: Number(p.seats) > 0 ? Number(p.seats) : "", notes: p.notes || "", minCert: p.minCert || "",
         published: true, created: new Date().toISOString()
       });
     });
@@ -153,7 +164,7 @@
         if (Array.isArray(set) && set.length) rows = (list || []).map(k => ({
           id: k.id, type: k.event_type || "class", typeName: k.event_type_name || "Class", course: k.course, title: k.title,
           color: k.color, dates: k.dates, time: k.time, location: k.location, seatsLeft: k.seats_left,
-          price: k.price, seats: k.seats, notes: k.notes
+          price: k.price, seats: k.seats, notes: k.notes, minCert: k.min_cert || "", minCertName: k.min_cert_name || ""
         }));
       }
     } catch (e) { console.warn("Online calendar not available:", e); }
@@ -189,10 +200,12 @@
       const left = seatsLeft(k), n = roster(k).length;
       if (!edit) return `<li><div class="cal-ro"><span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
         <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
-        <span class="meta">${left === null ? "" : left ? left + " open seat" + (left === 1 ? "" : "s") : "Full"}</span></div></li>`;
+        <span class="meta">${left === null ? "" : left ? left + " open seat" + (left === 1 ? "" : "s") : "Full"}</span>
+        ${minCertOf(k) ? `<span class="meta">Minimum certification: ${esc(minCertOf(k))}</span>` : ""}</div></li>`;
       return `<li><button data-cact="pick" data-id="${k.id}" class="${k.id === v.sel && !v.publish ? "sel" : ""}">
         <span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
         <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
+        ${minCertOf(k) ? `<span class="meta">Needs ${esc(minCertOf(k))}</span>` : ""}
         <span class="meta">${esc([isCourseType(k) ? n + " enrolled" : "", left === null ? "" : left ? left + " open" : "full"].filter(Boolean).join(" · "))}
           <span class="cal-status${k.published ? " on" : ""}">${k.published ? "Published" : "Draft"}</span></span></button></li>`;
     };
@@ -326,6 +339,7 @@
         ${isClass ? `<div class="field"><label for="cal-course">Course</label><select id="cal-course"${ros.length ? " disabled" : ""}>
           ${L().courseOptions(k.course)}</select>
           ${ros.length ? `<span class="hint" style="margin:0">Remove the students to change the course.</span>` : ""}</div>` : ""}
+        ${isClass ? "" : minCertSelect(k)}
         ${f("title", isClass ? "Title (blank = course name)" : "Title")}${f("time", "Time")}${f("location", "Location")}
         ${f("price", "Price ($)", "number")}${f("seats", "Seats (blank = no limit)", "number")}
         ${f("notes", "Description for the public calendar", "area", "wide")}</div>
@@ -359,11 +373,11 @@
     const sf = (k, label, type, extra) => `<div class="field${extra ? " " + extra : ""}"><label for="cal-s-${k}">${label}</label>${type === "area"
       ? `<textarea id="cal-s-${k}" data-cs="${k}">${esc(s[k])}</textarea>` : `<input id="cal-s-${k}" type="${type || "text"}" data-cs="${k}" value="${esc(s[k])}">`}</div>`;
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Public calendar</span><h1>Publish your classes</h1></div></div>
-      <p class="hint">The public calendar page shows the classes you mark <b>Show on the public calendar</b> that haven't ended yet: the course, dates, time, location, price, open seats and description. Student names and records are never included.</p>
+      <p class="hint">The public calendar page shows the classes you mark <b>Show on the public calendar</b> that haven't ended yet: the course, dates, time, location, price, open seats, minimum certification and description. Student names and records are never included.</p>
       ${missingNote()}
       <h2 class="sec">1. Check what goes out</h2>
       ${d.classes.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Class</th><th>Dates</th><th>Price</th><th>Seats open</th></tr></thead><tbody>
-        ${d.classes.map(k => `<tr><td><i class="cal-dot ${k.color}" aria-hidden="true"></i> ${esc(k.title)}</td><td>${esc(G().range(k.dates) || "TBD")}</td>
+        ${d.classes.map(k => `<tr><td><i class="cal-dot ${k.color}" aria-hidden="true"></i> ${esc(k.title)}${k.minCertName ? `<br><span class="hint" style="margin:0">Needs ${esc(k.minCertName)}</span>` : ""}</td><td>${esc(G().range(k.dates) || "TBD")}</td>
           <td class="money">${k.price == null ? "" : money(k.price)}</td><td>${k.seatsLeft == null ? "Open" : k.seatsLeft || "Full"}</td></tr>`).join("")}</tbody></table></div>`
         : `<p class="hint"><b>No classes are marked to show yet.</b> Publishing now empties the public calendar.</p>`}
       <h2 class="sec">Page heading and contact</h2>
@@ -399,7 +413,7 @@
     const rows = d.classes.map(k => ({
       id: k.id, course: k.course, course_name: k.courseName, title: k.title, color: k.color, dates: k.dates,
       time: k.time, location: k.location, price: k.price, seats: k.seats, seats_left: k.seatsLeft, notes: k.notes,
-      event_type: k.type, event_type_name: k.typeName, updated_at: d.updated
+      event_type: k.type, event_type_name: k.typeName, min_cert: k.minCert, min_cert_name: k.minCertName, updated_at: d.updated
     }));
     const set = await sb.from("calendar_settings").upsert({ id: 1, heading: d.heading, intro: d.intro,
       instructor: d.contact.instructor, phone: d.contact.phone, email: d.contact.email, updated_at: d.updated });
@@ -409,10 +423,14 @@
     const keep = new Set(rows.map(r => r.id)), stale = (old.data || []).map(r => r.id).filter(id => !keep.has(id));
     if (rows.length) {
       let up = await sb.from("classes").upsert(rows);
-      // Database not updated for event types yet (supabase/schema.sql): publish without them.
+      // Database not updated yet (supabase/schema.sql): publish without the newer columns.
+      if (up.error && /min_cert|PGRST204|schema cache/i.test(up.error.message || "")) {
+        up = await sb.from("classes").upsert(rows.map(r => { const x = Object.assign({}, r); delete x.min_cert; delete x.min_cert_name; return x; }));
+        if (!up.error) setTimeout(() => L().toast("Published. Run the latest supabase/schema.sql so the public calendar shows minimum certifications."), 2500);
+      }
       if (up.error && /event_type|PGRST204|schema cache/i.test(up.error.message || "")) {
-        up = await sb.from("classes").upsert(rows.map(r => { const x = Object.assign({}, r); delete x.event_type; delete x.event_type_name; return x; }));
-        if (!up.error) setTimeout(() => L().toast("Published. Run the latest supabase/schema.sql so the public calendar shows event types."), 2500);
+        up = await sb.from("classes").upsert(rows.map(r => { const x = Object.assign({}, r); delete x.event_type; delete x.event_type_name; delete x.min_cert; delete x.min_cert_name; return x; }));
+        if (!up.error) setTimeout(() => L().toast("Published. Run the latest supabase/schema.sql so the public calendar shows event types and minimum certifications."), 2500);
       }
       if (up.error) throw up.error;
     }
@@ -486,6 +504,7 @@
       if (!wasClass && isCourseType(k)) { const fresh = blank(k.course, G().firstDate(k.dates)); k.dates = fresh.dates; k.price = fresh.price; if (!k.time) k.time = fresh.time; }
       L().save(); rerender(); const x = document.getElementById(isCourseType(k) ? "cal-type" : "cal-f-title"); if (x) x.focus(); return;
     }
+    if (el.id === "cal-mincert") { const k = cur(); if (k) { k.minCert = el.value; L().save(); refresh(); } return; }
     if (el.dataset && el.dataset.ct) { typeInput(el); return; }
     if (el.id === "cal-course") {
       const k = cur(); if (!k) return;
