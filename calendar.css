@@ -381,3 +381,29 @@ span.cal-ev:hover { filter: none; }
 .ms-list li > .ms-site { flex: 1; }
 .ms-notes { font-style: italic; }
 @media (max-width: 760px) { .ms-cols { grid-template-columns: minmax(0, 1fr); } .ms-map { height: 300px; } }
+
+/* Event information page (event.html): the entry's card, then joining or signing up, then the course. */
+.evt { max-width: 760px; }
+.evt-card { scroll-margin-top: 0; }
+.evt-card h1 { font-size: clamp(26px, 5vw, 36px); }
+.evt-card .when { font-size: 15px; }
+.evt-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.evt-badges:empty { display: none; }
+.evt-badges .seats { margin: 0; }
+.evt-act p, .evt-course p { margin: 0 0 10px; }
+.evt-act .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.evt-act .btn { text-decoration: none; }
+.evt-act .field textarea { min-height: 70px; }
+.evt-course h3 { font-size: 16px; margin: 12px 0 4px; }
+.evt-course ul { margin: 0 0 10px; padding-left: 20px; }
+.evt-course a, .evt-act a:not(.btn) { color: var(--accent); }
+/* Staff Calendar: website sign-ups for an entry. */
+.cal-signups .req-list li { align-items: center; }
+.pub-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.pub-acts .btn { margin-top: 0; }
+a.cal-ro { color: inherit; text-decoration: none; }
+a.cal-ro:hover, a.cal-ro:focus-visible { border-color: var(--accent); }
+.cal-ro .more { color: var(--accent); font-weight: 600; }
+a.cal-ev { text-decoration: none; box-sizing: border-box; }
+.panel a.cal-ev { color: #fff; }
+.evt-act a.btn:not(.primary) { color: var(--ink); }

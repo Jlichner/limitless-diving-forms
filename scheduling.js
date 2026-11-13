@@ -737,5 +737,29 @@ ${vals.business}`
     }
   });
 
-  window.LDScheduling = { render, DEFAULT_TEMPLATES, PLACEHOLDERS, fill, bestTemplate };
+  // A sign-up from an event's information page (event.html, table event_signups): find or add the member in
+  // Students (linked to their account), put them on that calendar entry here (a Class also enrolls them), and
+  // open it, ready for the learning agreement. Returns false when the entry isn't saved in this browser.
+  async function fromSignup(su) {
+    const k = entry(su.class_id);
+    if (!k) { L().toast("“" + (su.title || "This entry") + "” isn't saved in this browser. Use “Copy into this browser” on the Calendar, then try again."); return false; }
+    let p = L().state.students.find(x => x.accountId && x.accountId === su.student_id);
+    if (!p) {
+      if (!(v.accounts || []).some(x => x.id === su.student_id) && online()) {
+        const r = await Promise.resolve(C().client.rpc("member_directory")).catch(() => null);
+        if (r && !r.error && r.data) v.accounts = r.data;
+      }
+      if ((v.accounts || []).some(x => x.id === su.student_id)) p = addFromAccount(su.student_id);
+      else { p = L().addStudent(); p.name = su.student_name || su.student_email || ""; p.email = su.student_email || ""; p.accountId = su.student_id; }
+    }
+    let a = data().assignments.find(x => x.studentId === p.id && x.target === "k:" + k.id);
+    if (!a) { a = blank(); a.studentId = p.id; a.target = "k:" + k.id; data().assignments.push(a); }
+    const en = enrollIfClass(a);
+    L().save(); v.sel = a.id; v.tpl = false;
+    L().go("scheduling");
+    L().toast((p.name || "The student") + (en ? " enrolled in " : " is on ") + (k.title || eventOf(a).title) + ". Make their learning agreement below.");
+    return true;
+  }
+
+  window.LDScheduling = { render, DEFAULT_TEMPLATES, PLACEHOLDERS, fill, bestTemplate, fromSignup };
 })();

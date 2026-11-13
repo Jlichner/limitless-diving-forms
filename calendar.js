@@ -7,7 +7,8 @@
 
   const L = () => window.LD;
   const G = () => window.LDCalGrid;
-  const v = { ym: null, sel: null, past: false, publish: false, reqs: null, reqsBusy: false, reqsErr: "", pub: null, pubBusy: false };
+  const v = { ym: null, sel: null, past: false, publish: false, reqs: null, reqsBusy: false, reqsErr: "", pub: null, pubBusy: false,
+    signups: null, suBusy: false, suErr: "" };
   const UPLOAD_URL = "https://github.com/jlichner/limitless-diving-forms/upload/main";
   const PUBLIC_URL = "https://limitless-diving.com/classes.html";
 
@@ -70,6 +71,8 @@
   }
   function roster(k) { return L().state.enrollments.filter(e => e.classId === k.id); }
   function seatsLeft(k) { if (k.pub) return k.seatsLeft == null ? null : Number(k.seatsLeft); const n = Number(k.seats); return n > 0 ? Math.max(0, n - roster(k).length) : null; }
+  // The information page anyone who isn't an Instructor or Admin opens from the calendar (event.html, event.js).
+  function eventUrl(k) { return "event.html?id=" + encodeURIComponent(k.id); }
   function isPast(k) { const last = G().lastDate(k.dates); return !!last && last < G().today(); }
   function sorted(list) { return list.slice().sort((a, b) => (G().firstDate(a.dates) || "9999").localeCompare(G().firstDate(b.dates) || "9999")); }
 
@@ -198,10 +201,11 @@
     const edit = canEdit();
     const item = (k) => {
       const left = seatsLeft(k), n = roster(k).length;
-      if (!edit) return `<li><div class="cal-ro"><span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
+      if (!edit) return `<li><a class="cal-ro" href="${eventUrl(k)}"><span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
         <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
         <span class="meta">${left === null ? "" : left ? left + " open seat" + (left === 1 ? "" : "s") : "Full"}</span>
-        ${minCertOf(k) ? `<span class="meta">Min Cert: ${esc(minCertOf(k))}</span>` : ""}</div></li>`;
+        ${minCertOf(k) ? `<span class="meta">Min Cert: ${esc(minCertOf(k))}</span>` : ""}
+        <span class="meta more">${isCourseType(k) ? "Details and sign up ›" : "Details and join ›"}</span></a></li>`;
       return `<li><button data-cact="pick" data-id="${k.id}" class="${k.id === v.sel && !v.publish ? "sel" : ""}">
         <span class="nm"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i>${esc(titleOf(k))}</span>
         <span class="meta">${isCourseType(k) ? "" : esc(typeOf(k).name) + " · "}${esc(G().range(k.dates) || "No dates yet")}</span>
@@ -222,7 +226,7 @@
       const ds = (k.dates || []).filter(Boolean).sort();
       ds.forEach((d, i) => events.push({
         date: d,
-        html: !edit ? `<span class="cal-ev ${colorOf(k)}" title="${esc(titleOf(k))}">${esc(titleOf(k))}${ds.length > 1 ? ` <small>${i + 1}/${ds.length}</small>` : ""}</span>` : `<button class="cal-ev ${colorOf(k)}${k.published ? "" : " draft"}" data-cact="pick" data-id="${k.id}" title="${esc(titleOf(k) + (k.published ? "" : " (draft)"))}">
+        html: !edit ? `<a class="cal-ev ${colorOf(k)}" href="${eventUrl(k)}" title="${esc(titleOf(k) + " · details and sign-up")}">${esc(titleOf(k))}${ds.length > 1 ? ` <small>${i + 1}/${ds.length}</small>` : ""}</a>` : `<button class="cal-ev ${colorOf(k)}${k.published ? "" : " draft"}" data-cact="pick" data-id="${k.id}" title="${esc(titleOf(k) + (k.published ? "" : " (draft)"))}">
           ${esc(titleOf(k))}${ds.length > 1 ? ` <small>${i + 1}/${ds.length}</small>` : ""}</button>`
       }));
     });
@@ -234,7 +238,7 @@
       : shown().filter(k => !isCourseType(k)).map(typeOf).filter((t, i, a) => a.findIndex(x => x.name === t.name) === i);
     const signedIn = C && C.user;
     const lockNote = `<p class="acct-note" style="margin-top:12px">Only Instructors and Admins can add or change classes.${signedIn ? ` You're logged in as ${esc(C.ROLE_NAMES[C.role] || "Student")}.` : ""}
-        ${signedIn ? "" : `<button class="btn small" data-mode="staff">Admin Log in</button>`} Want a class on a certain day? <a href="request.html">Request a class</a>.</p>`;
+        ${signedIn ? "" : `<button class="btn small" data-mode="staff">Admin Log in</button>`} Click anything on the calendar to see its details and join or sign up. Want a class on a certain day? <a href="request.html">Request a class</a>.</p>`;
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Class calendar</span><h1>${esc(G().monthName(v.ym))}</h1></div>
         ${edit ? `<div class="cal-tools no-print"><button class="btn primary" data-cact="new">+ Add to calendar</button>
         <button class="btn" data-cact="publish">Publish calendar…</button></div>` : ""}
@@ -243,6 +247,7 @@
         <button class="btn" data-cact="month" data-n="1" aria-label="Next month">›</button></div></div>
       ${edit ? missingNote() : ""}
       ${requestsBox()}
+      ${signupsBox()}
       ${G().month(v.ym, events, edit ? { dayAct: (d) => `data-cact="new-on" data-date="${d}" title="Add a class on this day"` } : {})}
       <div class="cal-legend">${used.map(id => `<span><i class="cal-dot ${colorOf({ course: id })}" aria-hidden="true"></i>${esc(L().COURSES[id].name)}</span>`).join("")}
         ${usedTypes.map(t => `<span><i class="cal-dot ${t.color && /^k\d$/.test(t.color) && !edit ? t.color : colorOf({ type: t.id })}" aria-hidden="true"></i>${esc(t.name)}</span>`).join("")}
@@ -304,7 +309,78 @@
     if (k) { data().classes.push(k); open(k.id); L().save(); L().go("calendar"); L().toast("Draft class made from the request. Enroll the student, then publish."); }
     else { rerender(); L().toast("Request declined"); }
   }
-  if (window.LDCloud) window.LDCloud.onChange(() => { v.reqs = null; v.reqsErr = ""; v.pub = null; });
+  // ---------- sign-ups from the event information page (event.html), when student accounts are set up ----------
+  // Joins (Events, Explorations, Tours) are in straight away; Class sign-ups wait here until an Instructor uses
+  // "Schedule…", which opens Business → Scheduling with the student on that class (enrolled), ready for the
+  // learning agreement, and marks the sign-up enrolled.
+  const SU_STATUS = { joined: ["Joined", "ok"], pending: ["Waiting", "wait"], enrolled: ["Enrolled", "ok"], declined: ["Declined", "no"] };
+  async function loadSignups() {
+    if (v.suBusy || !canSeeReqs()) return;
+    v.suBusy = true;
+    const { data: rows, error } = await window.LDCloud.client.from("event_signups").select("*").order("created_at");
+    v.suBusy = false;
+    v.suErr = error ? window.LDCloud.explain(error) : "";
+    v.signups = rows || [];
+    if (L().view().mode === "calendar" && !v.publish) rerender();
+  }
+  function signupsReady() { if (v.signups == null) { setTimeout(loadSignups, 0); return false; } return true; }
+  function entryTitle(id, fallback) { const k = shown().find(x => x.id === id) || (v.pub || []).find(x => x.id === id); return k ? titleOf(k) : fallback || "A calendar entry"; }
+  function signupRow(su, withEntry) {
+    const { esc } = L(), st = SU_STATUS[su.status] || SU_STATUS.pending, boss = window.LDCloud.can("instructor");
+    return `<li><div>${withEntry ? `<b>${esc(entryTitle(su.class_id, su.title))}</b>` : ""}
+        <span><b>${esc(su.student_name || "Member")}</b>${su.student_email ? ` · <a href="mailto:${esc(su.student_email)}" data-email-to="${esc(su.student_email)}" data-email-name="${esc(su.student_name || "")}">${esc(su.student_email)}</a>` : ""}
+          <span class="req-status ${st[1]}">${esc(st[0])}</span></span>
+        ${su.notes ? `<span class="hint">“${esc(su.notes)}”</span>` : ""}
+        <span class="hint">${su.kind === "class" ? "Signed up" : "Joined"} ${esc(new Date(su.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }))}</span></div>
+      ${boss ? `<div class="req-acts">
+        ${su.status === "pending" ? `<input id="su-note-${esc(su.id)}" maxlength="1000" placeholder="Note to the student if you decline (optional)" aria-label="Note to ${esc(su.student_name || "the student")}">` : ""}
+        ${su.status !== "declined" ? `<button class="btn small${su.status === "pending" ? " primary" : ""}" data-cact="su-schedule" data-id="${esc(su.id)}">${su.kind === "class" ? (su.status === "enrolled" ? "Open in Scheduling" : "Schedule and enroll…") : "Scheduling / agreement…"}</button>` : ""}
+        ${su.status === "pending" ? `<button class="btn small" data-cact="su-decline" data-id="${esc(su.id)}">Decline</button>` : ""}
+        <button class="btn small danger" data-cact="su-remove" data-id="${esc(su.id)}">Remove</button></div>` : ""}</li>`;
+  }
+  function signupsBox() {
+    if (!canSeeReqs() || !signupsReady()) return "";
+    const { esc } = L();
+    if (v.suErr) return window.LDCloud.can("instructor") ? `<p class="acct-note bad" role="alert">Website sign-ups couldn't be loaded: ${esc(v.suErr)}</p>` : "";
+    // Waiting class sign-ups, plus anyone who joined something in the last 14 days.
+    const since = new Date(Date.now() - 14 * 864e5).toISOString();
+    const list = v.signups.filter(su => su.status === "pending" || (su.status === "joined" && su.created_at >= since)).slice().reverse();
+    if (!list.length) return "";
+    const waiting = list.filter(su => su.status === "pending").length;
+    return `<section class="cal-reqs cal-signups" aria-label="Website sign-ups"><h2 class="sec">Website sign-ups ${waiting ? `<span class="req-status wait">${waiting} waiting</span>` : ""}</h2>
+      <ul class="req-list">${list.map(su => signupRow(su, true)).join("")}</ul>
+      <p class="hint">People sign up from each entry's information page. Class sign-ups wait for you: <b>Schedule and enroll</b> opens Scheduling with them on the class, ready for the learning agreement. Joins for events and explorations are in straight away. Open an entry to see everyone on it.</p></section>`;
+  }
+  function entrySignups(k) {
+    if (!canSeeReqs() || !signupsReady()) return "";
+    const list = v.signups.filter(su => su.class_id === k.id);
+    return `<h2 class="sec">Signed up on the website</h2>
+      ${list.length ? `<ul class="req-list cal-signups">${list.map(su => signupRow(su, false)).join("")}</ul>` : `<p class="hint">No one yet. ${k.published ? `People join or sign up from this entry's <a href="${eventUrl(k)}" target="_blank" rel="noopener">information page</a>.` : "Publish this entry so people can join or sign up from its information page."}</p>`}`;
+  }
+  async function answerSignup(id, act) {
+    const su = (v.signups || []).find(x => x.id === id); if (!su) return;
+    const sb = window.LDCloud.client;
+    if (act === "remove") {
+      const { error } = await sb.from("event_signups").delete().eq("id", id);
+      if (error) { L().toast("Not removed: " + window.LDCloud.explain(error)); return; }
+      v.signups = v.signups.filter(x => x.id !== id); rerender(); L().toast("Sign-up removed"); return;
+    }
+    if (act === "decline") {
+      const noteEl = document.getElementById("su-note-" + id), note = noteEl ? noteEl.value.trim().slice(0, 1000) : "";
+      const { error } = await sb.from("event_signups").update({ status: "declined", staff_note: note, updated_at: new Date().toISOString() }).eq("id", id);
+      if (error) { L().toast("Not saved: " + window.LDCloud.explain(error)); return; }
+      Object.assign(su, { status: "declined", staff_note: note }); rerender(); L().toast("Sign-up declined. They'll see it on the information page."); return;
+    }
+    if (act === "schedule") {
+      if (!window.LDScheduling || !window.LDScheduling.fromSignup) return;
+      const ok = await window.LDScheduling.fromSignup(su);
+      if (ok && su.kind === "class" && su.status === "pending") {
+        const { error } = await sb.from("event_signups").update({ status: "enrolled", updated_at: new Date().toISOString() }).eq("id", id);
+        if (!error) su.status = "enrolled";
+      }
+    }
+  }
+  if (window.LDCloud) window.LDCloud.onChange(() => { v.reqs = null; v.reqsErr = ""; v.pub = null; v.signups = null; v.suErr = ""; });
 
   function f(path, label, type, extra) {
     const k = cur(), val = path.split(".").reduce((o, x) => (o == null ? undefined : o[x]), k), id = "cal-f-" + path.replace(/\./g, "-");
@@ -367,6 +443,7 @@
         <button class="btn" data-cact="enroll-new">+ New student</button>
         ${ros.some(e => (L().personById(e.studentId) || {}).email) ? `<button class="btn" data-cact="email-class">✉ Email this class</button>` : ""}</div>` : ""}
 
+      ${embedded ? "" : entrySignups(k)}
       ${embedded ? "" : `<div class="row-actions" style="margin-top:28px"><button class="btn" data-cact="dup">Duplicate</button>
         <button class="btn danger" data-cact="del">Delete…</button><span id="cal-del-confirm"></span></div>`}`;
   }
@@ -552,6 +629,9 @@
         break;
       }
       case "pick": open(b.dataset.id); L().go("calendar"); break;
+      case "su-schedule": answerSignup(b.dataset.id, "schedule"); break;
+      case "su-decline": answerSignup(b.dataset.id, "decline"); break;
+      case "su-remove": answerSignup(b.dataset.id, "remove"); break;
       case "type-add": {
         const list = types(), taken = new Set(list.map(t => t.color));
         list.push({ id: "t" + Date.now().toString(36), name: "New type", about: "", course: false, color: (TYPE_COLORS.find(([c]) => !taken.has(c)) || TYPE_COLORS[0])[0] });

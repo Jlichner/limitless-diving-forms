@@ -418,6 +418,96 @@ create policy "Instructors answer requests" on public.class_requests
 revoke all on public.class_requests from anon;
 grant select, insert, update, delete on public.class_requests to authenticated;
 
+-- ---------- sign-ups from the event information page (event.html), added 2026-11-13 ----------
+-- Clicking an entry on the calendar opens event.html, where a logged-in member joins an Event, Exploration or
+-- Tour ('join': they're in straight away, up to the seats left), or starts signing up for a Class ('class': it
+-- waits as 'pending' until an Instructor schedules them with Business → Scheduling, which marks it 'enrolled').
+-- class_id is the calendar entry's id. It isn't a foreign key on purpose: Publish calendar rewrites the
+-- classes table, and sign-ups must survive that.
+create table if not exists public.event_signups (
+  id            uuid primary key default gen_random_uuid(),
+  class_id      text not null check (char_length(class_id) between 1 and 80),
+  student_id    uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  student_name  text not null default '' check (char_length(student_name) <= 200),
+  student_email text not null default '' check (char_length(student_email) <= 320),
+  title         text not null default '' check (char_length(title) <= 300),
+  kind          text not null default 'join' check (kind in ('join', 'class')),
+  status        text not null default 'pending' check (status in ('joined', 'pending', 'enrolled', 'declined')),
+  notes         text not null default '' check (char_length(notes) <= 1000),
+  staff_note    text not null default '' check (char_length(staff_note) <= 1000),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  unique (class_id, student_id)
+);
+alter table public.event_signups enable row level security;
+
+-- New sign-ups are always the member's own, for a published entry that hasn't ended. The server decides the
+-- kind and status, fills in the name and email from the account, and keeps joins within the seats left.
+create or replace function public.check_event_signup()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare k public.classes%rowtype; going integer;
+begin
+  new.student_id := (select auth.uid());
+  select * into k from public.classes where id = new.class_id;
+  if not found then
+    raise exception 'This is no longer on the calendar.';
+  end if;
+  if exists (select 1 from jsonb_array_elements_text(k.dates) d) and
+     (select max(d) from jsonb_array_elements_text(k.dates) d) < to_char(current_date, 'YYYY-MM-DD') then
+    raise exception 'This has already finished.';
+  end if;
+  new.title := left(coalesce(nullif(k.title, ''), k.course_name, ''), 300);
+  new.kind := case when k.event_type = 'class' or k.course <> '' then 'class' else 'join' end;
+  new.status := case when new.kind = 'class' then 'pending' else 'joined' end;
+  new.staff_note := ''; new.created_at := now(); new.updated_at := now();
+  new.student_email := left(coalesce((select u.email::text from auth.users u where u.id = new.student_id), ''), 320);
+  new.student_name := left(coalesce(nullif((select p.full_name from public.student_profiles p where p.id = new.student_id), ''), new.student_name, ''), 200);
+  if new.kind = 'join' and k.seats_left is not null then
+    select count(*) into going from public.event_signups where class_id = new.class_id and status = 'joined';
+    if going >= k.seats_left then
+      raise exception 'Sorry, this is full. Get in touch to go on the waiting list.';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists event_signups_check on public.event_signups;
+create trigger event_signups_check before insert on public.event_signups
+  for each row execute function public.check_event_signup();
+
+drop policy if exists "Members see their own sign-ups; staff see all" on public.event_signups;
+create policy "Members see their own sign-ups; staff see all" on public.event_signups
+  for select to authenticated using (student_id = (select auth.uid()) or (select public.has_role('divemaster')));
+
+drop policy if exists "Members sign themselves up" on public.event_signups;
+create policy "Members sign themselves up" on public.event_signups
+  for insert to authenticated with check (student_id = (select auth.uid()));
+
+drop policy if exists "Members leave or withdraw; instructors remove any" on public.event_signups;
+create policy "Members leave or withdraw; instructors remove any" on public.event_signups
+  for delete to authenticated
+  using ((student_id = (select auth.uid()) and status in ('joined', 'pending', 'declined')) or (select public.has_role('instructor')));
+
+drop policy if exists "Instructors answer sign-ups" on public.event_signups;
+create policy "Instructors answer sign-ups" on public.event_signups
+  for update to authenticated
+  using ((select public.has_role('instructor')))
+  with check ((select public.has_role('instructor')));
+
+revoke all on public.event_signups from anon;
+grant select, insert, update, delete on public.event_signups to authenticated;
+
+-- How many people have joined an event (a number only, never who), for the event page.
+create or replace function public.event_going(p_class_id text)
+returns integer
+language sql stable security definer set search_path = ''
+as $$
+  select count(*)::integer from public.event_signups where class_id = p_class_id and status = 'joined';
+$$;
+revoke all on function public.event_going(text) from public;
+grant execute on function public.event_going(text) to anon, authenticated;
+
 -- ---------- coaching and tours listings ----------
 -- The cards at the top of Available classes (coaching sessions, Lake Hydra tours, ...). Anyone can read them;
 -- Instructors and Admins edit them in the staff app (Settings → Coaching and tours listings). Students ask for
