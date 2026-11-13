@@ -80,6 +80,11 @@
 .pub-card .seats { align-self: flex-start; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 1px 9px; border-radius: 99px; background: var(--ok-bg); color: var(--ok); }
 .pub-card .seats.low { background: var(--ip-bg); color: var(--ip); }
 .pub-card .seats.full { background: var(--bad-bg); color: var(--bad); }
+.pub-card .cert-req { margin: 0; font-size: 14px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2, rgba(0,0,0,.04)); }
+.pub-card .cert-check { display: inline-block; margin-top: 4px; font-size: 13px; color: var(--muted, inherit); }
+.pub-card .cert-check a { color: inherit; }
+.pub-card .cert-check.ok { color: var(--ok); font-weight: 600; }
+.pub-card .cert-check.no { color: var(--bad); }
 .pub-card .btn { align-self: flex-start; margin-top: auto; text-decoration: none; }
 .pub-month { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .pub-month h2 { font-size: 24px; }

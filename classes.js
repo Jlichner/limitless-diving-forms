@@ -6,6 +6,8 @@
   const G = window.LDCalGrid, esc = G.esc;
   const main = document.getElementById("pub");
   let data = null, ym = G.ym(G.today());
+  // The logged-in student's certifications from their account (null: not logged in or not loaded).
+  let myCerts = null;
 
   function money(n) { return "$" + Number(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
   function safeEmail(e) { return /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(e || "") ? e : ""; }
@@ -17,6 +19,16 @@
     if (k.seatsLeft == null) return "";
     if (k.seatsLeft <= 0) return `<span class="seats full">Class full · waitlist</span>`;
     return `<span class="seats${k.seatsLeft <= 2 ? " low" : ""}">${k.seatsLeft} seat${k.seatsLeft === 1 ? "" : "s"} open</span>`;
+  }
+
+  // Minimum certification to join an event, and whether the logged-in student's account lists it.
+  function certHtml(k) {
+    if (!k.minCertName) return "";
+    const CAT = window.LDCatalog, ok = myCerts && CAT ? CAT.meetsCert(k.minCert, myCerts) : null;
+    const check = ok === true ? `<span class="cert-check ok">✓ The certifications on your account meet this.</span>`
+      : ok === false ? `<span class="cert-check no">Your account doesn't list this certification or an equivalent yet. Add it on your <a href="account.html">Student portal</a> page, or ask us before signing up.</span>`
+      : window.LDCloud && window.LDCloud.configured ? `<span class="cert-check">Log in to the <a href="account.html">Student portal</a> to check your certifications.</span>` : "";
+    return `<p class="cert-req"><b>Minimum certification:</b> ${esc(k.minCertName)}${check ? "<br>" + check : ""}</p>`;
   }
 
   function card(k) {
@@ -31,6 +43,7 @@
       <dl>${k.time ? `<dt>Time</dt><dd>${esc(k.time)}</dd>` : ""}${k.location ? `<dt>Where</dt><dd>${esc(k.location)}</dd>` : ""}
         ${k.price != null ? `<dt>Price</dt><dd class="money">${money(k.price)}</dd>` : ""}
         ${k.dates.length > 1 ? `<dt>Days</dt><dd>${k.dates.map(d => esc(G.fmt(d, { weekday: "short", year: undefined }))).join(", ")}</dd>` : ""}</dl>
+      ${certHtml(k)}
       ${k.notes ? `<p>${esc(k.notes)}</p>` : ""}
       ${ask ? `<a class="btn primary" href="${esc(ask)}">${k.seatsLeft === 0 ? "Join the waitlist" : isClass(k) ? "Ask about this class" : "Ask about this " + esc(String(k.typeName || "event").toLowerCase())}</a>` : ""}
     </article>`;
@@ -41,7 +54,7 @@
     const events = [];
     list.forEach(k => k.dates.forEach((d, i) => events.push({
       date: d,
-      html: `<a class="cal-ev ${color(k)}" href="#class-${esc(k.id)}" title="${esc(k.title)}">${esc(k.title)}${k.dates.length > 1 ? ` <small>${i + 1}/${k.dates.length}</small>` : ""}</a>`
+      html: `<a class="cal-ev ${color(k)}" href="#class-${esc(k.id)}" title="${esc(k.title + (k.minCertName ? " · needs " + k.minCertName : ""))}">${esc(k.title)}${k.dates.length > 1 ? ` <small>${i + 1}/${k.dates.length}</small>` : ""}</a>`
     })));
     const c = data.contact || {}, email = safeEmail(c.email), tel = telHref(c.phone);
     const contact = [c.instructor ? esc(c.instructor) : "", email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : "", tel ? `<a href="${esc(tel)}">${esc(c.phone)}</a>` : ""].filter(Boolean).join(" · ");
@@ -77,12 +90,25 @@
         id: k.id, type: k.event_type || "class", typeName: k.event_type_name || "Class",
         course: k.course, courseName: k.course_name, title: k.title, color: k.color, dates: k.dates,
         time: k.time, location: k.location, price: k.price == null ? null : Number(k.price),
-        seats: k.seats, seatsLeft: k.seats_left, notes: k.notes
+        seats: k.seats, seatsLeft: k.seats_left, notes: k.notes,
+        minCert: k.min_cert || "", minCertName: k.min_cert_name || ""
       }))
     };
   }
   function fromFile() {
     return fetch("classes.json", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  }
+
+  // When a student is logged in, read their own certifications so each event can say whether they meet it.
+  async function loadMyCerts() {
+    const C = window.LDCloud;
+    if (!C || !C.available || !data || !data.classes.some(k => k.minCertName)) return;
+    await C.ready;
+    if (!C.user) return;
+    const { data: row, error } = await C.client.from("student_profiles").select("certifications").eq("id", C.user.id).maybeSingle();
+    if (error) { console.warn("Certifications not loaded:", error); return; }
+    myCerts = (row && Array.isArray(row.certifications)) ? row.certifications : [];
+    render();
   }
 
   const acct = document.getElementById("pubnav");  // shown once student accounts are set up
@@ -101,6 +127,7 @@
       const first = data.classes.map(k => G.firstDate(k.dates)).filter(Boolean).sort()[0];
       if (first && first > t) ym = G.ym(first);
       render();
+      loadMyCerts();
     })
     .catch(() => { main.innerHTML = `<div class="msg">The class calendar couldn't be loaded. Please try again later.</div>`; });
 })();

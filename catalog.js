@@ -186,5 +186,61 @@
     return base.concat(OTHER_CERTS.filter(x => !base.includes(x)));
   }
 
-  window.LDCatalog = { AGENCIES, AGENCY_SITES, CERT_AGENCIES, COURSES, DIVES_PER_DAY, minDays, byAgency, find, certNames };
+  // ---------- minimum certification to join a calendar event (Event, Exploration, Tour…) ----------
+  // The core path is a ladder: holding a higher level counts for a lower one (Rescue covers Advanced Open Water).
+  // Students type their own certifications on their account, from any agency, so matching goes by the
+  // certification's name ("or equivalent"), not by agency. It is only a guide: staff still check cards.
+  const LADDER = [
+    { id: "naui-scuba-diver", re: /\bscuba diver\b/ },
+    { id: "open-water", re: /open ?water|\bow\b|experienced scuba|junior open/ },
+    { id: "naui-aow", re: /advanced|\baow\b/ },
+    { id: "rescue", re: /rescue/ },
+    { id: "naui-master", re: /master scuba|\bmsd\b/ },
+    { id: "divemaster", re: /dive ?master|\bdm\b/ },
+    { id: "naui-ai", re: /assistant instructor|\bai\b/ },
+    { id: "instructor", re: /instructor/ }
+  ];
+  // Other ways students write a specialty, beyond its catalog name.
+  const ALIASES = {
+    "naui-nitrox": /nitrox|eanx|enriched air/, "naui-deep": /\bdeep\b/, "naui-drysuit": /dry ?suit/, "naui-night": /\bnight\b/,
+    "naui-wreck": /wreck/, "naui-ice": /\bice\b/, "naui-sar": /search (and|&) recovery/, "naui-dpv": /\bdpv\b|scooter|propulsion/,
+    "naui-tech-intro": /intro(duction)? to tech|tech(nical)? intro/, "naui-tech-deco": /decompression|\bdeco\b/,
+    "tdi-intro-tech": /intro(duction)? to tech|tech(nical)? intro/, "tdi-dpv": /\bdpv\b|scooter|propulsion/
+  };
+  // Holding the first counts for the second too.
+  const IMPLIES = { "naui-tech-deco": ["naui-tech-intro", "tdi-intro-tech"] };
+  const norm = (x) => String(x || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const INSTRUCTOR = { id: "instructor", agency: "", name: "Instructor", cert: "Instructor", fullName: "Instructor" };
+  function certById(id) { return id === "instructor" ? INSTRUCTOR : find(id); }
+  function rankOf(text) {
+    const t = norm(text).replace(/skin diving instructor/, "skin");
+    for (let i = LADDER.length - 1; i >= 0; i--) if (LADDER[i].re.test(t)) return i;
+    return -1;
+  }
+  // What a requirement is called on the calendar ("Advanced Open Water Scuba Diver").
+  function minCertName(id) { const c = id && certById(id); return c ? c.cert : ""; }
+  // Choices for the "Minimum certification" menu: the core path in order, then specialties and technical by agency.
+  function minCertGroups() {
+    const core = LADDER.map(l => certById(l.id)).filter(Boolean);
+    const coreIds = new Set(core.map(c => c.id));
+    const rest = AGENCIES.map(a => ({ label: a === "NAUI" ? "NAUI specialties" : a,
+      courses: COURSES.filter(c => c.agency === a && !coreIds.has(c.id) && !(c.std && /No certification required/.test((c.std.prereqs || [])[0] || "")) && !["naui-skin-instructor", "naui-international", "naui-refresher"].includes(c.id)) }))
+      .filter(g => g.courses.length);
+    return [{ label: "Core path (a higher level also counts)", courses: core }].concat(rest);
+  }
+  // Does this list of {agency, level} certifications meet the requirement? Returns true, false, or null when nothing is required.
+  function meetsCert(id, certs) {
+    const req = id && certById(id); if (!req) return null;
+    const held = (Array.isArray(certs) ? certs : []).map(c => norm(c && (c.level || "")) ).filter(Boolean);
+    const step = LADDER.findIndex(l => l.id === req.id);
+    if (step >= 0) return held.some(h => rankOf(h) >= step);
+    const names = [req.cert, req.name].map(norm), alias = ALIASES[req.id];
+    const has = (cid) => { const c = certById(cid); if (!c) return false; const ns = [c.cert, c.name].map(norm), a = ALIASES[cid];
+      return held.some(h => ns.some(n => h === n || h.includes(n)) || (a && a.test(h))); };
+    if (held.some(h => names.some(n => h === n || h.includes(n)) || (alias && alias.test(h)))) return true;
+    return Object.keys(IMPLIES).some(hi => IMPLIES[hi].includes(req.id) && has(hi));
+  }
+
+  window.LDCatalog = { AGENCIES, AGENCY_SITES, CERT_AGENCIES, COURSES, DIVES_PER_DAY, minDays, byAgency, find, certNames,
+    minCertName, minCertGroups, meetsCert };
 })();

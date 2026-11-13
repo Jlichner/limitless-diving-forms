@@ -298,6 +298,9 @@ create table if not exists public.classes (
 -- Calendar entry types (Class, Event, Exploration, Tour…), added 2026-11-12.
 alter table public.classes add column if not exists event_type text not null default 'class';
 alter table public.classes add column if not exists event_type_name text not null default 'Class';
+-- Minimum certification to join an event (a catalog course id like 'naui-aow', or '' for none), added 2026-11-13.
+alter table public.classes add column if not exists min_cert text not null default '' check (length(min_cert) <= 60);
+alter table public.classes add column if not exists min_cert_name text not null default '' check (length(min_cert_name) <= 200);
 alter table public.classes enable row level security;
 
 drop policy if exists "Anyone can read the class calendar" on public.classes;
