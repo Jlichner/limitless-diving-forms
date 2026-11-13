@@ -215,6 +215,8 @@
     saveTimer = setTimeout(() => {
       try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
       catch (e) { toast("Couldn't save in this browser. Use Export to keep a copy."); }
+      // Lets student-accounts.js keep what students see in their portal up to date.
+      document.dispatchEvent(new CustomEvent("ld:saved"));
     }, 300);
   }
   function flush() { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} } }

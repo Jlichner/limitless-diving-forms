@@ -548,6 +548,7 @@ ${vals.business}`
       <div class="sch-pick">${studentSelect(a)}${p ? `<button class="btn small" data-sact="open-student">Open their record</button>` : ""}</div>
       ${v.accBusy ? `<p class="hint">Loading student portal accounts…</p>` : ""}
       ${p ? `<p class="hint">${esc([p.phone, p.email, p.dob ? "DOB " + fmtDate(p.dob) : ""].filter(Boolean).join(" · ") || "No contact details on file yet.")}</p>` : ""}
+      ${p && !p.accountId && online() ? `<p class="hint"><b>${esc(p.name || "This student")} isn't linked to a Student portal account</b>, so this won't show under “My training” when they log in. Pick their account under “Student portal accounts” above, or link it under <b>Admin Log in → Student accounts</b>.</p>` : ""}
 
       <h2 class="sec">2 · Class, event, tour or coaching</h2>
       ${building ? "" : `<div class="sch-pick">${targetSelect(a)}${canBuild ? `<span class="sch-or">or</span>
