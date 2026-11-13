@@ -23,7 +23,7 @@
 
   // view.auth: "signin" | "signup" | "forgot" | "recover" (set a new password after the email link)
   const view = { auth: "signin", note: "", noteKind: "", busy: false, vals: {} };  // vals: what was typed in the sign-in form (not passwords)
-  let profile = null, progress = [], classes = [], agreements = [], loadError = "", lastUser = null;
+  let profile = null, progress = [], classes = [], agreements = [], signups = [], loadError = "", lastUser = null;
   // The agreement being read (from the email link, account.html#agreement=<id>, or "Read and sign").
   function hashAgreement() { const m = /^#agreement=([^&]+)$/.exec(location.hash); return m ? decodeURIComponent(m[1]) : ""; }
   view.agree = hashAgreement();
@@ -118,9 +118,12 @@
       ${updated && !isNaN(updated) ? `<p class="acct-updated">Updated ${esc(updated.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }))}</p>` : ""}
     </article>`;
   }
+  // Each entry links to its information page (event.html) to join or sign up; the member's own sign-up shows as a badge.
+  const SIGNUP_BADGE = { joined: "You're going", pending: "Sign-up sent", enrolled: "You're enrolled" };
   function classCard(k, mine) {
-    return `<li class="acct-class${mine ? " mine" : ""}"><i class="cal-dot ${/^k[0-5]$/.test(k.color || "") ? k.color : "k0"}" aria-hidden="true"></i>
-      <div><b>${esc(k.title || k.course_name)}</b>${mine ? ` <span class="seats">You're enrolled</span>` : ""}
+    const su = signups.find(x => x.class_id === k.id), badge = mine ? "You're enrolled" : su && SIGNUP_BADGE[su.status];
+    return `<li class="acct-class${badge ? " mine" : ""}"><i class="cal-dot ${/^k[0-5]$/.test(k.color || "") ? k.color : "k0"}" aria-hidden="true"></i>
+      <div><a href="event.html?id=${encodeURIComponent(k.id)}"><b>${esc(k.title || k.course_name)}</b></a>${badge ? ` <span class="seats">${esc(badge)}</span>` : ""}
       <span>${esc(G.range(k.dates) || "Dates to be announced")}${k.location ? " · " + esc(k.location) : ""}</span></div></li>`;
   }
   function renderAccount() {
@@ -170,9 +173,9 @@
         ${agreements.length ? `<section class="panel"><h2 class="sec">My agreements</h2><ul class="acct-agrs">${agreements.map(x => `<li>
           <div><b>${esc(x.title || "Learning agreement")}</b><span>${x.signed_at ? "Signed " + esc(fmtWhen(x.signed_at)) : "Waiting for your signature"}</span></div>
           <button class="btn small${x.signed_at ? "" : " primary"}" data-act="agr-open" data-id="${esc(x.id)}">${x.signed_at ? "View or print" : "Read and sign"}</button></li>`).join("")}</ul></section>` : ""}
-        <section class="panel"><h2 class="sec">Upcoming classes</h2>
-          ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">No classes are scheduled right now.</p>`}
-          <p class="hint"><a href="classes.html">See the full class calendar</a></p></section>
+        <section class="panel"><h2 class="sec">Upcoming events</h2>
+          ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">Nothing is scheduled right now.</p>`}
+          <p class="hint">Click one for its details, to join or to sign up. <a href="classes.html">See the full class calendar</a></p></section>
       </div></div>`;
   }
 
@@ -283,12 +286,14 @@
   async function loadAll() {
     const C = window.LDCloud, sb = C.client, uid = C.user.id;
     loadError = "";
-    const [p, pr, cl, ag] = await Promise.all([
+    const [p, pr, cl, ag, su] = await Promise.all([
       sb.from("student_profiles").select("*").eq("id", uid).maybeSingle(),
       sb.from("student_progress").select("*").eq("student_id", uid).order("updated_at", { ascending: false }),
       sb.from("classes").select("*"),
-      sb.from("agreements").select("*").eq("student_id", uid).order("sent_at", { ascending: false })
+      sb.from("agreements").select("*").eq("student_id", uid).order("sent_at", { ascending: false }),
+      sb.from("event_signups").select("class_id,status").eq("student_id", uid)
     ]);
+    signups = su.error ? [] : su.data || [];
     agreements = ag.error ? [] : ag.data || [];
     if (p.error) loadError = "Your details couldn't be loaded: " + C.explain(p.error);
     profile = Object.assign(blankProfile(uid), p.data || {});
@@ -420,6 +425,8 @@
     if (res.error) { setNote(C.explain(res.error), "bad"); render(); return; }
     // Came here from another page to log in (e.g. Request a class): go back there.
     { const m = /^#then=(request|nitrox|diving-physics)$/.exec(location.hash); if (a === "signin" && m) { location.href = m[1] + ".html"; return; } }
+    // ...or the information page of a calendar entry (event.html), to join it or sign up.
+    { const m = /^#then=event-([A-Za-z0-9_-]{1,80})$/.exec(location.hash); if (a === "signin" && m) { location.href = "event.html?id=" + encodeURIComponent(m[1]); return; } }
     if (a === "signup" && !(res.data && res.data.session)) {
       view.auth = "signin"; setNote("Almost done: we sent a confirmation link to " + email + ". Open it to finish creating your account, then log in here.", "ok");
     } else if (a === "forgot") {
@@ -437,7 +444,7 @@
     if (event === "PASSWORD_RECOVERY") { view.auth = "recover"; setNote(""); render(); return; }
     const uid = C.user && C.user.id;
     if (uid !== lastUser) {
-      lastUser = uid; profile = null; progress = []; classes = []; agreements = [];
+      lastUser = uid; profile = null; progress = []; classes = []; agreements = []; signups = [];
       render();
       if (uid) { setNote(""); try { await loadAll(); } catch (err) { loadError = C.explain(err); profile = profile || blankProfile(uid); render(); } }
     }

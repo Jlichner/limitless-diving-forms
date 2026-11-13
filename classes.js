@@ -1,5 +1,6 @@
 /* Limitless Diving — public class calendar. Reads the classes the instructor app's "Publish calendar"
-   puts online (Supabase), or classes.json. Shows a month calendar and a card for each upcoming class. */
+   puts online (Supabase), or classes.json. Shows a month calendar and a card for each upcoming class.
+   Clicking an entry (on the month or its card) opens its information page, event.html, to join or sign up. */
 (function () {
   "use strict";
 
@@ -45,7 +46,8 @@
         ${k.dates.length > 1 ? `<dt>Days</dt><dd>${k.dates.map(d => esc(G.fmt(d, { weekday: "short", year: undefined }))).join(", ")}</dd>` : ""}</dl>
       ${certHtml(k)}
       ${k.notes ? `<p>${esc(k.notes)}</p>` : ""}
-      ${ask ? `<a class="btn primary" href="${esc(ask)}">${k.seatsLeft === 0 ? "Join the waitlist" : isClass(k) ? "Ask about this class" : "Ask about this " + esc(String(k.typeName || "event").toLowerCase())}</a>` : ""}
+      <div class="pub-acts"><a class="btn primary" href="event.html?id=${encodeURIComponent(k.id)}">${isClass(k) ? "Details and sign up" : "Details and join"}</a>
+      ${ask ? `<a class="btn" href="${esc(ask)}">${k.seatsLeft === 0 ? "Join the waitlist" : "Ask a question"}</a>` : ""}</div>
     </article>`;
   }
 
@@ -54,7 +56,7 @@
     const events = [];
     list.forEach(k => k.dates.forEach((d, i) => events.push({
       date: d,
-      html: `<a class="cal-ev ${color(k)}" href="#class-${esc(k.id)}" title="${esc(k.title + (k.minCertName ? " · Min Cert: " + k.minCertName : ""))}">${esc(k.title)}${k.dates.length > 1 ? ` <small>${i + 1}/${k.dates.length}</small>` : ""}</a>`
+      html: `<a class="cal-ev ${color(k)}" href="event.html?id=${encodeURIComponent(k.id)}" title="${esc(k.title + (k.minCertName ? " · Min Cert: " + k.minCertName : ""))}">${esc(k.title)}${k.dates.length > 1 ? ` <small>${i + 1}/${k.dates.length}</small>` : ""}</a>`
     })));
     const c = data.contact || {}, email = safeEmail(c.email), tel = telHref(c.phone);
     const contact = [c.instructor ? esc(c.instructor) : "", email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : "", tel ? `<a href="${esc(tel)}">${esc(c.phone)}</a>` : ""].filter(Boolean).join(" · ");
