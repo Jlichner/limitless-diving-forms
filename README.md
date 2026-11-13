@@ -92,6 +92,8 @@ Each person gets their own copy, so nobody sees anyone else's address. Up to 50 
 5. **Update the database:** run the latest `supabase/schema.sql` (adds the `email_log` table that keeps count of the daily limit; it stores only the subject and how many people, never addresses or messages).
 6. Test: sign in with **Admin Log in**, open your own account in Records → Students, click **Email**, and send yourself a short message.
 
+**If it says "Not sent":** open `https://tohabfygfsvcntarmfck.supabase.co/functions/v1/send-email` in a browser tab. `{"error":"Use POST."}` means the function is running fine. "Requested function was not found" means the name isn't exactly `send-email`. "Missing authorization header" or "Invalid JWT" means Verify JWT is still on. "BOOT_ERROR" or "WORKER_ERROR" means the pasted code didn't load, so paste it again and deploy. The function's **Logs** tab in Supabase shows the details of each send.
+
 To change the sender or reply address later, add the secrets `FROM_EMAIL` (for example `Jamie at Limitless Diving <jamie@limitless-diving.com>`) and `REPLY_TO`. The sender must be on the domain verified in Resend.
 
 ### The class calendar, online
