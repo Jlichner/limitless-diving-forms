@@ -173,8 +173,8 @@
         ${agreements.length ? `<section class="panel"><h2 class="sec">My agreements</h2><ul class="acct-agrs">${agreements.map(x => `<li>
           <div><b>${esc(x.title || "Learning agreement")}</b><span>${x.signed_at ? "Signed " + esc(fmtWhen(x.signed_at)) : "Waiting for your signature"}</span></div>
           <button class="btn small${x.signed_at ? "" : " primary"}" data-act="agr-open" data-id="${esc(x.id)}">${x.signed_at ? "View or print" : "Read and sign"}</button></li>`).join("")}</ul></section>` : ""}
-        <section class="panel"><h2 class="sec">Upcoming classes</h2>
-          ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">No classes are scheduled right now.</p>`}
+        <section class="panel"><h2 class="sec">Upcoming events</h2>
+          ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">Nothing is scheduled right now.</p>`}
           <p class="hint">Click one for its details, to join or to sign up. <a href="classes.html">See the full class calendar</a></p></section>
       </div></div>`;
   }
