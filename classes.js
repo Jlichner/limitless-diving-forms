@@ -28,7 +28,7 @@
     const check = ok === true ? `<span class="cert-check ok">✓ The certifications on your account meet this.</span>`
       : ok === false ? `<span class="cert-check no">Your account doesn't list this certification or an equivalent yet. Add it on your <a href="account.html">Student portal</a> page, or ask us before signing up.</span>`
       : window.LDCloud && window.LDCloud.configured ? `<span class="cert-check">Log in to the <a href="account.html">Student portal</a> to check your certifications.</span>` : "";
-    return `<p class="cert-req"><b>Minimum certification:</b> ${esc(k.minCertName)}${check ? "<br>" + check : ""}</p>`;
+    return `<p class="cert-req"><b>Min Cert:</b> ${esc(k.minCertName)}${check ? "<br>" + check : ""}</p>`;
   }
 
   function card(k) {
@@ -54,7 +54,7 @@
     const events = [];
     list.forEach(k => k.dates.forEach((d, i) => events.push({
       date: d,
-      html: `<a class="cal-ev ${color(k)}" href="#class-${esc(k.id)}" title="${esc(k.title + (k.minCertName ? " · needs " + k.minCertName : ""))}">${esc(k.title)}${k.dates.length > 1 ? ` <small>${i + 1}/${k.dates.length}</small>` : ""}</a>`
+      html: `<a class="cal-ev ${color(k)}" href="#class-${esc(k.id)}" title="${esc(k.title + (k.minCertName ? " · Min Cert: " + k.minCertName : ""))}">${esc(k.title)}${k.dates.length > 1 ? ` <small>${i + 1}/${k.dates.length}</small>` : ""}</a>`
     })));
     const c = data.contact || {}, email = safeEmail(c.email), tel = telHref(c.phone);
     const contact = [c.instructor ? esc(c.instructor) : "", email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : "", tel ? `<a href="${esc(tel)}">${esc(c.phone)}</a>` : ""].filter(Boolean).join(" · ");
