@@ -401,7 +401,7 @@ ${vals.business}`
     if (!p) return "";
     if (!p.accountId) {
       return `<p class="hint">${esc(p.name || "This student")} doesn't have a Student portal account linked, so they can't sign online yet. Ask them to sign up at
-        <a href="${PORTAL_URL}" target="_blank" rel="noopener">limitless-diving.com/account.html</a>, then link their account under <b>Admin Log in → Student accounts</b>. You can still print it for them to sign on paper.</p>`;
+        <a href="${PORTAL_URL}" target="_blank" rel="noopener">limitless-diving.com/account.html</a>, then link their account under <b>Records → Students</b> (click their name, then Link under Course records). You can still print it for them to sign on paper.</p>`;
     }
     const busy = v.sending ? " disabled" : "";
     if (!row) {
@@ -548,7 +548,7 @@ ${vals.business}`
       <div class="sch-pick">${studentSelect(a)}${p ? `<button class="btn small" data-sact="open-student">Open their record</button>` : ""}</div>
       ${v.accBusy ? `<p class="hint">Loading student portal accounts…</p>` : ""}
       ${p ? `<p class="hint">${esc([p.phone, p.email, p.dob ? "DOB " + fmtDate(p.dob) : ""].filter(Boolean).join(" · ") || "No contact details on file yet.")}</p>` : ""}
-      ${p && !p.accountId && online() ? `<p class="hint"><b>${esc(p.name || "This student")} isn't linked to a Student portal account</b>, so this won't show under “My training” when they log in. Pick their account under “Student portal accounts” above, or link it under <b>Admin Log in → Student accounts</b>.</p>` : ""}
+      ${p && !p.accountId && online() ? `<p class="hint"><b>${esc(p.name || "This student")} isn't linked to a Student portal account</b>, so this won't show under “My training” when they log in. Pick their account under “Student portal accounts” above, or link it under <b>Records → Students</b> (click their name, then Link under Course records).</p>` : ""}
 
       <h2 class="sec">2 · Class, event, tour or coaching</h2>
       ${building ? "" : `<div class="sch-pick">${targetSelect(a)}${canBuild ? `<span class="sch-or">or</span>

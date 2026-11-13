@@ -21,7 +21,8 @@
   // Course records whose student is linked to an account: these are what "Share progress" sends.
   function sharedEnrollments() {
     const ids = new Set(people().filter(p => p.accountId).map(p => p.id));
-    return L().state.enrollments.filter(e => ids.has(e.studentId) && L().COURSES[e.course]);
+    // Not ones taken off their class on the Calendar (Remove), until they're enrolled in a class again.
+    return L().state.enrollments.filter(e => ids.has(e.studentId) && L().COURSES[e.course] && !e.portalHidden);
   }
   function note() { return v.note ? `<p class="acct-note ${v.noteKind}" role="${v.noteKind === "bad" ? "alert" : "status"}">${L().esc(v.note)}</p>` : ""; }
   function setNote(t, k) { v.note = t || ""; v.noteKind = k || ""; }
@@ -87,19 +88,37 @@
   // Instructor or Admin is signed in, the course records of students linked to an account are copied to their
   // portal a few seconds later. Unlike "Share progress", this never removes records it didn't send itself, so a
   // second device with older or no data can't wipe what students see.
-  const auto = { timer: null, busy: false, again: false, last: {}, ids: null, validIds: null };
+  const auto = { timer: null, busy: false, again: false, last: {}, ids: null, validIds: null, list: null };
   function canAutoShare() { const c = C(); return !!(c.available && c.client && c.user && c.can && c.can("instructor")); }
   async function validAccountIds() {
     // Every account, students and staff alike (member_directory). student_accounts leaves staff out, so a
     // Dive Master or Instructor taking a course would never see it; use it only if member_directory is missing.
-    if (v.members && !v.membersOld) return new Set(v.members.map(a => a.id));
+    if (v.members && !v.membersOld) { auto.list = v.members; return new Set(v.members.map(a => a.id)); }
     if (!auto.validIds) {
       let r = await C().client.rpc("member_directory");
       if (r.error) r = await C().client.rpc("student_accounts");
       if (r.error) throw r.error;
-      auto.validIds = new Set((r.data || []).map(a => a.id));
+      auto.list = r.data || [];
+      auto.validIds = new Set(auto.list.map(a => a.id));
     }
     return auto.validIds;
+  }
+  // A student enrolled in a course but not linked to a portal account can't see anything. Link them when their
+  // email matches an account, or, failing that, when exactly one account has exactly their full name.
+  function autoLink() {
+    const norm = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const accounts = auto.list || [], taken = new Set(people().map(p => p.accountId).filter(Boolean)), linked = [];
+    const enrolled = new Set(L().state.enrollments.filter(e => L().COURSES[e.course]).map(e => e.studentId));
+    people().filter(p => !p.accountId && enrolled.has(p.id) && (p.name || p.email)).forEach(p => {
+      const free = accounts.filter(a => !taken.has(a.id));
+      let acc = p.email ? free.find(a => norm(a.email) === norm(p.email)) : null;
+      if (!acc && p.name) { const same = accounts.filter(a => norm(a.full_name) === norm(p.name)); if (same.length === 1 && !taken.has(same[0].id)) acc = same[0]; }
+      if (!acc) return;
+      p.accountId = acc.id; if (!p.email && acc.email) p.email = acc.email;
+      taken.add(acc.id); linked.push(p.name || acc.email);
+    });
+    if (linked.length) { L().save(); L().toast("Linked " + linked.join(", ") + " to their Student portal account"); }
+    return linked.length;
   }
   async function autoShare() {
     if (!canAutoShare()) return;
@@ -108,6 +127,7 @@
     try {
       const byPerson = {}; people().forEach(p => { byPerson[p.id] = p; });
       let valid = await validAccountIds();
+      autoLink();
       // A student linked a moment ago may not be in the list we have yet: refresh it once.
       if (sharedEnrollments().some(e => !valid.has(byPerson[e.studentId].accountId))) { auto.validIds = null; if (!v.members || v.membersOld) valid = await validAccountIds(); }
       const rows = sharedEnrollments().filter(e => valid.has(byPerson[e.studentId].accountId))
@@ -142,6 +162,14 @@
   }
   function scheduleAutoShare() { clearTimeout(auto.timer); auto.timer = setTimeout(autoShare, 2500); }
   document.addEventListener("ld:saved", () => { if (canAutoShare()) scheduleAutoShare(); });
+  // Removed from a class on the Calendar: take that course record out of their portal right away.
+  document.addEventListener("ld:unshare", (ev) => {
+    const id = ev.detail && ev.detail.id; if (!id || !canAutoShare()) return;
+    C().client.from("student_progress").delete().eq("id", id).then(r => {
+      if (r.error) console.warn("Couldn't remove course record " + id + " from the portal:", r.error);
+      else { delete auto.last[id]; if (auto.ids) auto.ids.delete(id); }
+    });
+  });
   // Catch up once after signing in, for anything changed while signed out.
   if (window.LDCloud && window.LDCloud.onChange) window.LDCloud.onChange(() => { auto.validIds = null; if (canAutoShare()) scheduleAutoShare(); });
 
