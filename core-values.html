@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Core Values · Limitless Diving</title>
+<meta name="description" content="The core values of Limitless Diving &amp; Technical Training: Safety First, Always Do the Right Thing, Be A Team Player, Grow Yourself and Others, Celebrate Diversity, Respect Yourself and Others.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="styles.css?v=20261112">
+<link rel="stylesheet" href="calendar.css?v=20261112n">
+<link rel="stylesheet" href="account.css?v=20261112g">
+<style>
+/* Core values page. Styles live here so the page stands alone. */
+.cv-panel { position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px clamp(16px, 4vw, 40px) 32px; }
+.cv-panel::before { /* faint compass rose behind the title */
+  content: ""; position: absolute; right: -60px; top: -60px; width: 260px; height: 260px; opacity: .08; pointer-events: none;
+  background: radial-gradient(circle, transparent 58%, var(--accent) 59%, var(--accent) 61%, transparent 62%),
+    conic-gradient(from 0deg, var(--accent) 0 2deg, transparent 2deg 88deg, var(--accent) 88deg 92deg, transparent 92deg 178deg, var(--accent) 178deg 182deg, transparent 182deg 268deg, var(--accent) 268deg 272deg, transparent 272deg 358deg, var(--accent) 358deg);
+  border-radius: 50%; }
+.cv-eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.cv-panel h1 { font-family: var(--font-display); font-size: clamp(34px, 6vw, 52px); line-height: 1.05; margin: 6px 0 8px; color: var(--ink); }
+.cv-lead { font-size: 18px; color: var(--muted); margin: 0 0 22px; max-width: 60ch; }
+.cv-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; counter-reset: cv; }
+.cv-list li { counter-increment: cv; position: relative; padding: 16px 16px 16px 66px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); border-left: 4px solid var(--accent); }
+.cv-list li::before { content: counter(cv); position: absolute; left: 14px; top: 14px; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--accent-ink); background: var(--accent); box-shadow: 0 0 0 3px var(--surface-2), 0 0 0 5px var(--shallows); }
+.cv-list h2 { font-family: var(--font-display); font-size: 22px; margin: 0 0 6px; color: var(--ink); line-height: 1.15; }
+.cv-list p { margin: 0; line-height: 1.5; }
+.cv-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.cv-links .btn { text-decoration: none; }
+.cv-links .btn:not(.primary) { color: var(--accent); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <svg class="topo" aria-hidden="true" viewBox="0 0 1440 200" preserveAspectRatio="xMidYMid slice">
+    <defs><path id="contour" vector-effect="non-scaling-stroke" d="M -120 0 C -110 -70 -30 -95 40 -80 C 110 -65 140 -10 120 40 C 100 95 20 110 -40 90 C -100 70 -128 40 -120 0 Z"></path></defs>
+    <g fill="none" stroke-width="1">
+      <g transform="translate(1180 95)"><use href="#contour" transform="scale(2.4 2.4)"></use><use href="#contour" transform="scale(2.0 2.0)"></use><use href="#contour" transform="scale(1.65 1.65)"></use><use href="#contour" transform="scale(1.3 1.3)"></use><use href="#contour" transform="scale(0.95 0.95)"></use><use href="#contour" transform="scale(0.6 0.6)"></use><use href="#contour" transform="scale(0.3 0.3)"></use></g>
+      <g transform="translate(560 160) rotate(-12)"><use href="#contour" transform="scale(2.4 1.2)"></use><use href="#contour" transform="scale(2.0 1.0)"></use><use href="#contour" transform="scale(1.6 0.8)"></use><use href="#contour" transform="scale(1.2 0.6)"></use><use href="#contour" transform="scale(0.8 0.4)"></use><use href="#contour" transform="scale(0.4 0.2)"></use></g>
+      <g transform="translate(130 40) rotate(20)"><use href="#contour" transform="scale(1.9 1.3)"></use><use href="#contour" transform="scale(1.55 1.05)"></use><use href="#contour" transform="scale(1.2 0.8)"></use><use href="#contour" transform="scale(0.85 0.58)"></use><use href="#contour" transform="scale(0.5 0.35)"></use></g>
+      <g transform="translate(860 15) rotate(35)"><use href="#contour" transform="scale(1.5 0.95)"></use><use href="#contour" transform="scale(1.15 0.72)"></use><use href="#contour" transform="scale(0.8 0.5)"></use><use href="#contour" transform="scale(0.45 0.28)"></use></g>
+      <g transform="translate(1430 190) rotate(-20)"><use href="#contour" transform="scale(2.0 1.3)"></use><use href="#contour" transform="scale(1.6 1.05)"></use><use href="#contour" transform="scale(1.2 0.8)"></use><use href="#contour" transform="scale(0.8 0.52)"></use></g>
+      <g transform="translate(300 190) rotate(8)"><use href="#contour" transform="scale(1.7 0.8)"></use><use href="#contour" transform="scale(1.3 0.6)"></use><use href="#contour" transform="scale(0.9 0.42)"></use><use href="#contour" transform="scale(0.5 0.24)"></use></g>
+      <g transform="translate(1000 200) rotate(-5)"><use href="#contour" transform="scale(1.2 0.5)"></use><use href="#contour" transform="scale(0.8 0.33)"></use></g>
+    </g>
+  </svg>
+  <div class="brand">
+    <svg class="rose" role="img" aria-label="Limitless Diving compass rose" viewBox="0 0 200 200">
+      <defs>
+        <g id="pt-major"><polygon points="100,6 90,100 100,100" class="r-dark" style="fill: var(--shallows)"></polygon><polygon points="100,6 110,100 100,100" class="r-light" style="fill: var(--deep-ink)"></polygon></g>
+        <polygon id="pt-minor" points="100,38 94,100 106,100" class="r-mid" style="fill: var(--thermo)"></polygon>
+      </defs>
+      <circle cx="100" cy="100" r="92" fill="none" class="r-ring" stroke-width="4"></circle>
+      <circle cx="100" cy="100" r="76" fill="none" class="r-ring" stroke-width="2" stroke-dasharray="2 9"></circle>
+      <use href="#pt-minor" transform="rotate(45 100 100)"></use><use href="#pt-minor" transform="rotate(135 100 100)"></use>
+      <use href="#pt-minor" transform="rotate(225 100 100)"></use><use href="#pt-minor" transform="rotate(315 100 100)"></use>
+      <use href="#pt-major"></use><use href="#pt-major" transform="rotate(90 100 100)"></use>
+      <use href="#pt-major" transform="rotate(180 100 100)"></use><use href="#pt-major" transform="rotate(270 100 100)"></use>
+      <circle cx="100" cy="100" r="9" class="r-hub" stroke-width="3"></circle>
+    </svg>
+    <div class="brand-text"><b>Limitless Diving</b><span>Scuba training classes</span></div>
+  </div>
+  <div class="head-right">
+    <svg class="flag" role="img" aria-label="Diver down flag" viewBox="0 0 48 32"><rect width="48" height="32" fill="#D7263D"></rect><polygon points="0,0 9,0 48,26 48,32 39,32 0,6" fill="#FFFFFF"></polygon></svg>
+    <a class="admin-login" id="admin-login" href="index.html#staff">Admin Log in</a>
+  </div>
+</header>
+<svg class="wave" aria-hidden="true" viewBox="0 0 1440 18" preserveAspectRatio="none"><path d="M0 0 H1440 V6 C1380 14 1320 14 1260 6 C1200 -2 1140 -2 1080 6 C1020 14 960 14 900 6 C840 -2 780 -2 720 6 C660 14 600 14 540 6 C480 -2 420 -2 360 6 C300 14 240 14 180 6 C120 -2 60 -2 0 6 Z"></path></svg>
+<nav class="pubnav" aria-label="Main"><a href="index.html" class="home"><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16"><path d="M3 11.5 12 4l9 7.5M5.5 9.5V20h5v-6h3v6h5V9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>Home</a><a href="core-values.html" class="on" aria-current="page">Core values</a><a href="available-classes.html">Available classes</a><a href="request.html">Request a class</a><a href="classes.html">Class calendar</a><a href="nitrox.html">Nitrox calculator</a><a href="diving-physics.html">Diving physics</a><a href="dive-team-6.html">Dive Team 6</a><a href="dive-map.html">Dive map</a><a href="account.html">Student portal</a><a href="https://www.diveteamfinder.com/" class="ext" target="_blank" rel="noopener">Dive Team Finder <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></a><a href="https://www.divepacking.com/" class="ext" target="_blank" rel="noopener">Dive Packing Checklist <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></a><a href="https://www.etsy.com/shop/TechdiveCreations" class="ext" target="_blank" rel="noopener">Gear <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></a></nav>
+<main class="pub">
+  <section class="cv-panel" aria-labelledby="cv-title">
+    <span class="cv-eyebrow">Limitless Diving &amp; Technical Training</span>
+    <h1 id="cv-title">Our Core Values</h1>
+    <!-- ============================================================
+         EDIT THE WORDING HERE. Change any text between the tags.
+         Each value is one <li> block: the title goes in <h2>, the
+         description in <p>. Numbers are added automatically, so you
+         can add, remove or reorder values freely.
+         ============================================================ -->
+    <p class="cv-lead">How we dive, teach and treat each other, in the water and out of it.</p>
+    <ol class="cv-list">
+      <li>
+        <h2>Safety First</h2>
+        <p>Put the safety of your teammates and yourself as a top priority on and off the boat. Never cut corners at the expense of safety.</p>
+      </li>
+      <li>
+        <h2>Always Do the Right Thing</h2>
+        <p>Act with integrity, keep your word and be honest. Take responsibility for your actions and be worthy of trust. Speak up without fear of criticism if you have an idea or a concern no matter how large or small.</p>
+      </li>
+      <li>
+        <h2>Be A Team Player</h2>
+        <p>Strive to be positive, fun, and humble. Support your team members in all their endeavors.</p>
+      </li>
+      <li>
+        <h2>Grow Yourself and Others</h2>
+        <p>Take every opportunity to improve your diving skills and knowledge. Mentor others and pass on the expertise and knowledge you&rsquo;ve earned to benefit the team.</p>
+      </li>
+      <li>
+        <h2>Celebrate Diversity</h2>
+        <p>We are many and varied, but we are all God&rsquo;s children. Our differences make us stronger as a team.</p>
+      </li>
+      <li>
+        <h2>Respect Yourself and Others</h2>
+        <p>Believe that you are good and worthy of being treated well, and in doing so be respectful to others. No one has a right to disparage you. Be respectful of the sacrifices others have made to get us where we are today.</p>
+      </li>
+    </ol>
+    <!-- ===================== END OF EDITABLE TEXT ===================== -->
+    <div class="cv-links"><a class="btn primary" href="available-classes.html">See available classes</a><a class="btn" href="request.html">Request a class</a></div>
+  </section>
+</main>
+</body>
+</html>
