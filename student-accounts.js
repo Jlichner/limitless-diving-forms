@@ -21,7 +21,8 @@
   // Course records whose student is linked to an account: these are what "Share progress" sends.
   function sharedEnrollments() {
     const ids = new Set(people().filter(p => p.accountId).map(p => p.id));
-    return L().state.enrollments.filter(e => ids.has(e.studentId) && L().COURSES[e.course]);
+    // Not ones taken off their class on the Calendar (Remove), until they're enrolled in a class again.
+    return L().state.enrollments.filter(e => ids.has(e.studentId) && L().COURSES[e.course] && !e.portalHidden);
   }
   function note() { return v.note ? `<p class="acct-note ${v.noteKind}" role="${v.noteKind === "bad" ? "alert" : "status"}">${L().esc(v.note)}</p>` : ""; }
   function setNote(t, k) { v.note = t || ""; v.noteKind = k || ""; }
@@ -161,6 +162,14 @@
   }
   function scheduleAutoShare() { clearTimeout(auto.timer); auto.timer = setTimeout(autoShare, 2500); }
   document.addEventListener("ld:saved", () => { if (canAutoShare()) scheduleAutoShare(); });
+  // Removed from a class on the Calendar: take that course record out of their portal right away.
+  document.addEventListener("ld:unshare", (ev) => {
+    const id = ev.detail && ev.detail.id; if (!id || !canAutoShare()) return;
+    C().client.from("student_progress").delete().eq("id", id).then(r => {
+      if (r.error) console.warn("Couldn't remove course record " + id + " from the portal:", r.error);
+      else { delete auto.last[id]; if (auto.ids) auto.ids.delete(id); }
+    });
+  });
   // Catch up once after signing in, for anything changed while signed out.
   if (window.LDCloud && window.LDCloud.onChange) window.LDCloud.onChange(() => { auto.validIds = null; if (canAutoShare()) scheduleAutoShare(); });
 
