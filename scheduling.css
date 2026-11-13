@@ -45,3 +45,9 @@ table.sch-ph code { font-family: var(--font-mono); font-size: 12.5px; }
   .ladoc h3, .ladoc .la-sigs { break-after: avoid; }
   .ladoc .la-sig { break-inside: avoid; }
 }
+
+/* Making a new class or event from Scheduling: the Calendar's form, set in a box. */
+.sch-or { color: var(--muted); font-size: 13px; }
+.sch-build { border: 1px solid var(--line); border-left: 4px solid var(--teal, #2f7f8a); border-radius: var(--radius); padding: 14px clamp(10px, 3vw, 18px); margin: 6px 0 14px; background: var(--surface); }
+.sch-build .rec-head h1 { font-size: 22px; }
+.sch-build-acts { margin-top: 16px; }

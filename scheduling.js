@@ -424,14 +424,24 @@ ${STUDENT_DUTIES}`
     const pickT = (a.agreement && tplList.find(t => t.id === a.agreement.templateId)) || best;
     const enrolled = ev && ev.isClass && p && L().state.enrollments.some(e => e.studentId === p.id && e.classId === ev.entry.id);
     let details = "";
-    if (ev && ev.kind === "calendar") {
+    const CAL = window.LDCalendar, canBuild = !!(CAL && CAL.newEntry);
+    const building = a.building && ev && ev.kind === "calendar" && ev.entry.id === a.building;
+    if (a.building && !building) a.building = "";
+    if (building) {
+      // The Calendar's own class form, right here (calendar.js renderClass, embedded).
+      const who = p ? esc(p.name) : "the student";
+      details = `<div class="sch-build" id="sch-build">${CAL.renderForm(a.building)}
+        <div class="row-actions sch-build-acts"><button class="btn primary" data-sact="build-done">${a.buildNew ? "Save and schedule " + who : "Done"}</button>
+          ${a.buildNew ? `<button class="btn danger" data-sact="build-cancel">Cancel and delete this ${esc(ev.typeName.toLowerCase())}</button>` : ""}</div>
+        <p class="hint">It's saved on the Calendar as a draft${ev.entry.published ? "" : " (tick “Show on the public calendar” to publish it)"}.${ev.isClass ? " " + who + " is enrolled when you press " + (a.buildNew ? "Save" : "Done") + ", with these dates and location." : ""}</p></div>`;
+    } else if (ev && ev.kind === "calendar") {
       const k = ev.entry;
       details = `<dl class="sch-facts"><div><dt>Type</dt><dd>${esc(ev.typeName)}${ev.courseName ? " · " + esc(ev.courseName) : ""}</dd></div>
         <div><dt>Dates</dt><dd>${esc(ev.dates.map(fmtDate).join(", ") || "Not set")}</dd></div>
         <div><dt>Time</dt><dd>${esc(ev.time || "Not set")}</dd></div><div><dt>Location</dt><dd>${esc(ev.location || "Not set")}</dd></div>
         <div><dt>Price</dt><dd>${ev.price === "" ? "Not set" : money(ev.price)}</dd></div>
         ${Number(k.seats) > 0 ? `<div><dt>Seats</dt><dd>${esc(k.seats)}</dd></div>` : ""}</dl>
-        <p class="hint">These come from the Calendar. Change them there.${ev.isClass ? (enrolled ? " " + esc(p.name) + " is enrolled in this class." : p ? "" : " Pick a student to enroll them.") : ""}</p>`;
+        <p class="hint">${canBuild ? `<button class="btn small" data-sact="build-edit">Edit this ${esc(ev.typeName.toLowerCase())}</button> ` : ""}These come from the Calendar.${ev.isClass ? (enrolled ? " " + esc(p.name) + " is enrolled in this class." : p ? "" : " Pick a student to enroll them.") : ""}</p>`;
     } else if (ev && ev.kind === "offer") {
       details = `<div class="grid">${(a.dates.length ? a.dates : [""]).map((d, i) => `<div class="field"><label for="sch-d-${i}">Date ${a.dates.length > 1 ? i + 1 : ""}</label>
           <div class="sch-date"><input id="sch-d-${i}" type="date" data-sdate="${i}" value="${esc(d)}">${a.dates.length > 1 ? `<button class="btn small danger" data-sact="rm-date" data-i="${i}" aria-label="Remove date ${i + 1}">×</button>` : ""}</div></div>`).join("")}
@@ -450,12 +460,13 @@ ${STUDENT_DUTIES}`
       ${p ? `<p class="hint">${esc([p.phone, p.email, p.dob ? "DOB " + fmtDate(p.dob) : ""].filter(Boolean).join(" · ") || "No contact details on file yet.")}</p>` : ""}
 
       <h2 class="sec">2 · Class, event, tour or coaching</h2>
-      <div class="sch-pick">${targetSelect(a)}</div>
-      ${(L().state.classes || []).length ? "" : `<p class="hint">Nothing is on the Calendar yet. Add classes, events and tours there, or pick a coaching or tour listing.</p>`}
+      ${building ? "" : `<div class="sch-pick">${targetSelect(a)}${canBuild ? `<span class="sch-or">or</span>
+        <select id="sch-build-type" aria-label="Create a new calendar entry"><option value="">+ Create a new…</option>${calTypes().map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select>` : ""}</div>
+      ${(L().state.classes || []).length ? "" : `<p class="hint">Nothing is on the Calendar yet. Create a class or event here, or pick a coaching or tour listing.</p>`}`}
       ${details}
 
       <h2 class="sec">3 · Learning agreement</h2>
-      ${!ev ? `<p class="hint">Pick what the student is scheduled for, then make the agreement.</p>` : `
+      ${building ? `<p class="hint">Save the ${esc(ev.typeName.toLowerCase())} above first, then make the agreement.</p>` : !ev ? `<p class="hint">Pick what the student is scheduled for, then make the agreement.</p>` : `
         <div class="sch-pick"><label for="sch-tpl">Template</label>
           <select id="sch-tpl">${tplList.map(t => `<option value="${t.id}"${pickT && t.id === pickT.id ? " selected" : ""}>${esc(t.name)} — ${esc(forLabel(t.for))}${t.course ? " · " + esc((L().COURSES[t.course] || {}).name || t.course) : ""}</option>`).join("")}</select>
           <button class="btn primary" data-sact="make">${a.agreement ? "Make it again" : "Make agreement"}</button></div>
@@ -506,7 +517,7 @@ ${STUDENT_DUTIES}`
   // Scheduling a student on a Class enrolls them in it (once).
   function enrollIfClass(a) {
     const ev = eventOf(a), p = person(a);
-    if (!ev || !ev.isClass || !p) return false;
+    if (!ev || !ev.isClass || !p || a.building === ev.entry.id) return false;
     if (L().state.enrollments.some(e => e.studentId === p.id && e.classId === ev.entry.id)) return false;
     L().enrollInClass(p.id, ev.entry);
     return true;
@@ -542,6 +553,11 @@ ${STUDENT_DUTIES}`
       if (a.target.startsWith("o:")) { const o = offer(a.target.slice(2)); if (o) { a.offerName = o.name; a.offerType = o.calType; if (a.price === "" && o.price) a.price = o.price; } }
       const en = enrollIfClass(a); L().save(); rerender();
       if (en) L().toast((person(a).name || "Student") + " enrolled in " + eventOf(a).title);
+    } else if (el.id === "sch-build-type" && a && el.value) {
+      // A new class, event or tour made right here, with the Calendar's form, then this student is put on it.
+      const k = window.LDCalendar.newEntry(el.value);
+      a.target = "k:" + k.id; a.building = k.id; a.buildNew = true; L().save(); rerender();
+      const x = document.getElementById(typeById(k.type).course ? "cal-course" : "cal-f-title"); if (x) x.focus();
     } else if (el.id === "sch-tpl-pick") { v.tplSel = el.value; rerender(); }
     else if (el.dataset && el.dataset.stv && el.tagName === "SELECT") { const t = curTpl(); if (t) { t[el.dataset.stv] = el.value; L().save(); rerender(); } }
     else if (el.id === "sch-tpl-file" && el.files && el.files[0]) {
@@ -570,6 +586,21 @@ ${STUDENT_DUTIES}`
         if (!t) { L().toast("Add a template first (Agreement templates)."); break; }
         make(a, t); L().save(); rerender(); L().toast("Learning agreement made from “" + t.name + "”");
         const d = $("#sch-doc"); if (d && d.scrollIntoView) d.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+      case "build-edit": { const ev = a && eventOf(a); if (!ev || ev.kind !== "calendar") break; a.building = ev.entry.id; a.buildNew = false; L().save(); rerender(); break; }
+      case "build-done": {
+        if (!a) break;
+        const ev = eventOf(a), wasNew = a.buildNew;
+        a.building = ""; a.buildNew = false; window.LDCalendar.closeForm();
+        const en = enrollIfClass(a); L().save(); rerender();
+        L().toast(ev ? (wasNew ? ev.typeName + " saved to the Calendar" : "Saved") + (en ? " and " + (person(a).name || "the student") + " enrolled" : "") : "Saved");
+        break;
+      }
+      case "build-cancel": {
+        if (!a || !a.building) break;
+        window.LDCalendar.removeEntry(a.building); a.building = ""; a.buildNew = false; a.target = ""; L().save(); rerender();
+        L().toast("New entry deleted");
         break;
       }
       case "print": window.print(); break;

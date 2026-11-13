@@ -315,7 +315,9 @@
     return `<div class="field${extra ? " " + extra : ""}"><label for="${id}">${label}</label>${ctl}</div>`;
   }
 
-  function renderClass(k) {
+  // embedded: the same form inside another page (Business → Scheduling), without the Calendar's own
+  // back button, student list, duplicate and delete.
+  function renderClass(k, embedded) {
     const { esc, money } = L(), c = course(k), ros = roster(k), left = seatsLeft(k);
     const unit = c ? c.unit : "Day";
     const enrolledIds = new Set(ros.map(e => e.studentId));
@@ -325,7 +327,7 @@
     const typeSel = `<div class="field"><label for="cal-type">Type</label><select id="cal-type"${ros.length ? " disabled" : ""}>
         ${types().map(t => `<option value="${esc(t.id)}"${t === ty ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
         ${ros.length ? `<span class="hint" style="margin:0">Remove the students to change the type.</span>` : `<span class="hint" style="margin:0">${esc(ty.about || "")}</span>`}</div>`;
-    return `<div class="row-actions" style="margin:0 0 10px"><button class="btn small" data-cact="back">‹ Calendar</button></div>
+    return `${embedded ? "" : `<div class="row-actions" style="margin:0 0 10px"><button class="btn small" data-cact="back">‹ Calendar</button></div>`}
       <div class="rec-head"><div class="who"><span class="eyebrow"><i class="cal-dot ${colorOf(k)}" aria-hidden="true"></i> ${esc(isClass ? courseName(k) : ty.name)}</span>
         <h1 id="cal-title">${esc(titleOf(k))}</h1><span class="sub" id="cal-range">${esc(G().range(k.dates) || "No dates yet")}</span></div>
         <div class="stats">${isClass ? `<div class="stat"><b>${ros.length}</b><span>Enrolled</span></div>` : ""}
@@ -351,7 +353,7 @@
         ${k.dates.length > 1 ? `<button class="btn small" data-cact="rm-date" data-i="${i}" aria-label="Remove this date">✕</button>` : ""}</span></div>`).join("")}</div>
       <div class="row-actions"><button class="btn" data-cact="add-date">+ Add a date</button></div>
 
-      ${isClass ? `<h2 class="sec">Students</h2>
+      ${isClass && !embedded ? `<h2 class="sec">Students</h2>
       ${ros.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Student</th><th>Contact</th><th>Progress</th><th>Balance due</th><th></th></tr></thead><tbody>
         ${ros.map(e => { const p = L().personById(e.studentId) || {}; return `<tr>
           <td><button class="linkbtn" data-act="open-person" data-id="${esc(p.id || "")}">${esc(p.name || "Unnamed student")}</button></td>
@@ -365,9 +367,20 @@
         <button class="btn" data-cact="enroll-new">+ New student</button>
         ${ros.some(e => (L().personById(e.studentId) || {}).email) ? `<button class="btn" data-cact="email-class">✉ Email this class</button>` : ""}</div>` : ""}
 
-      <div class="row-actions" style="margin-top:28px"><button class="btn" data-cact="dup">Duplicate</button>
-        <button class="btn danger" data-cact="del">Delete…</button><span id="cal-del-confirm"></span></div>`;
+      ${embedded ? "" : `<div class="row-actions" style="margin-top:28px"><button class="btn" data-cact="dup">Duplicate</button>
+        <button class="btn danger" data-cact="del">Delete…</button><span id="cal-del-confirm"></span></div>`}`;
   }
+  // For Business → Scheduling: make a new calendar entry and edit it with this same form.
+  function newEntry(typeId, date) {
+    const n = blank(L().COURSE_ORDER[0], date || "");
+    const t = types().find(x => x.id === typeId);
+    if (t && !t.course) { n.type = t.id; n.dates = [G().firstDate(n.dates) || ""]; n.price = ""; n.time = ""; }
+    data().classes.push(n); L().save();
+    return n;
+  }
+  function renderForm(id) { open(id); const k = cur(); return k ? renderClass(k, true) : ""; }
+  function closeForm() { v.sel = null; }
+  function removeEntry(id) { L().state.enrollments.forEach(e => { if (e.classId === id) e.classId = ""; }); data().classes = data().classes.filter(x => x.id !== id); if (v.sel === id) v.sel = null; L().save(); }
 
   function renderPublish() {
     const { esc, money } = L(), d = publicData(), s = S();
@@ -615,6 +628,6 @@
     }
   });
 
-  window.LDCalendar = { render, renderTypes, types };
+  window.LDCalendar = { render, renderTypes, types, canEdit, newEntry, renderForm, closeForm, removeEntry };
   L().render();
 })();
