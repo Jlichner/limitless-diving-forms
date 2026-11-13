@@ -547,7 +547,7 @@
     const c = COURSES[k.course]; if (!c) return null;
     let e = state.enrollments.find(x => x.studentId === studentId && x.course === k.course && !x.classId);
     if (!e) { e = blankEnrollment(studentId, k.course); state.enrollments.push(e); }
-    e.classId = k.id;
+    e.classId = k.id; e.portalHidden = false;
     c.schedule.forEach((_, i) => { if (k.dates && k.dates[i]) e.dates["d" + (i + 1)] = k.dates[i]; });
     if (k.location && !e.location) e.location = k.location;
     save();

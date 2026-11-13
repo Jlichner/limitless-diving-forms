@@ -594,8 +594,11 @@
         break;
       }
       case "unenroll": {
-        const en = L().state.enrollments.find(x => x.id === b.dataset.id); if (en) en.classId = "";
-        L().save(); rerender(); L().toast("Removed from the class. Their course record stays in " + courseName(k) + ".");
+        // Off the class, and out of their Student portal ("My training"), since a course record has one class.
+        // The record itself stays in the course list; enrolling them in a class again puts it back in their portal.
+        const en = L().state.enrollments.find(x => x.id === b.dataset.id);
+        if (en) { en.classId = ""; en.portalHidden = true; document.dispatchEvent(new CustomEvent("ld:unshare", { detail: { id: en.id } })); }
+        L().save(); rerender(); L().toast("Removed from the class and from their Student portal. Their course record stays in " + courseName(k) + ".");
         break;
       }
       case "dup": {
