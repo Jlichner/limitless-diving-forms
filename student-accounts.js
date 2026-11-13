@@ -68,7 +68,8 @@
   async function shareProgress() {
     const sb = C().client;
     const byPerson = {}; people().forEach(p => { byPerson[p.id] = p; });
-    const known = new Set((v.accounts || []).map(a => a.id));
+    // Every account, students and staff alike: a Dive Master taking a class needs their training shown too.
+    const known = new Set((v.accounts || []).concat(v.members || []).map(a => a.id));
     const rows = sharedEnrollments().filter(e => known.has(byPerson[e.studentId].accountId))
       .map(e => ({ id: e.id, student_id: byPerson[e.studentId].accountId, course: e.course, summary: summary(e) }));
     const existing = await sb.from("student_progress").select("id");
@@ -89,9 +90,12 @@
   const auto = { timer: null, busy: false, again: false, last: {}, ids: null, validIds: null };
   function canAutoShare() { const c = C(); return !!(c.available && c.client && c.user && c.can && c.can("instructor")); }
   async function validAccountIds() {
-    if (v.accounts) return new Set(v.accounts.map(a => a.id));
+    // Every account, students and staff alike (member_directory). student_accounts leaves staff out, so a
+    // Dive Master or Instructor taking a course would never see it; use it only if member_directory is missing.
+    if (v.members && !v.membersOld) return new Set(v.members.map(a => a.id));
     if (!auto.validIds) {
-      const r = await C().client.rpc("student_accounts");
+      let r = await C().client.rpc("member_directory");
+      if (r.error) r = await C().client.rpc("student_accounts");
       if (r.error) throw r.error;
       auto.validIds = new Set((r.data || []).map(a => a.id));
     }
@@ -105,14 +109,22 @@
       const byPerson = {}; people().forEach(p => { byPerson[p.id] = p; });
       let valid = await validAccountIds();
       // A student linked a moment ago may not be in the list we have yet: refresh it once.
-      if (sharedEnrollments().some(e => !valid.has(byPerson[e.studentId].accountId))) { auto.validIds = null; if (!v.accounts) valid = await validAccountIds(); }
+      if (sharedEnrollments().some(e => !valid.has(byPerson[e.studentId].accountId))) { auto.validIds = null; if (!v.members || v.membersOld) valid = await validAccountIds(); }
       const rows = sharedEnrollments().filter(e => valid.has(byPerson[e.studentId].accountId))
         .map(e => ({ id: e.id, student_id: byPerson[e.studentId].accountId, course: e.course, summary: summary(e) }));
       const changed = rows.filter(r => auto.last[r.id] !== JSON.stringify(r));
       if (changed.length) {
-        const up = await C().client.from("student_progress").upsert(changed.map(r => Object.assign({ updated_at: new Date().toISOString() }, r)));
-        if (up.error) throw up.error;
-        changed.forEach(r => { auto.last[r.id] = JSON.stringify(r); });
+        const stamp = (r) => Object.assign({ updated_at: new Date().toISOString() }, r);
+        const up = await C().client.from("student_progress").upsert(changed.map(stamp));
+        if (!up.error) changed.forEach(r => { auto.last[r.id] = JSON.stringify(r); });
+        else {
+          // One bad row (say, an account with no profile yet) shouldn't stop everyone else's: send them one by one.
+          console.warn("Sending course records together failed, trying one at a time:", up.error);
+          for (const r of changed) {
+            const one = await C().client.from("student_progress").upsert(stamp(r));
+            if (one.error) console.warn("Couldn't send course record " + r.id + ":", one.error); else auto.last[r.id] = JSON.stringify(r);
+          }
+        }
       }
       // Records this browser sent earlier that are gone now (taken off the class, student unlinked or deleted).
       const now = new Set(rows.map(r => r.id));
