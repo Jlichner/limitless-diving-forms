@@ -81,6 +81,58 @@
     return rows.length;
   }
 
+  // ---------- keeping students' "My training" up to date automatically ----------
+  // Whenever this browser saves (enrolling a student in a class, ticking off a skill, logging a dive…) and an
+  // Instructor or Admin is signed in, the course records of students linked to an account are copied to their
+  // portal a few seconds later. Unlike "Share progress", this never removes records it didn't send itself, so a
+  // second device with older or no data can't wipe what students see.
+  const auto = { timer: null, busy: false, again: false, last: {}, ids: null, validIds: null };
+  function canAutoShare() { const c = C(); return !!(c.available && c.client && c.user && c.can && c.can("instructor")); }
+  async function validAccountIds() {
+    if (v.accounts) return new Set(v.accounts.map(a => a.id));
+    if (!auto.validIds) {
+      const r = await C().client.rpc("student_accounts");
+      if (r.error) throw r.error;
+      auto.validIds = new Set((r.data || []).map(a => a.id));
+    }
+    return auto.validIds;
+  }
+  async function autoShare() {
+    if (!canAutoShare()) return;
+    if (auto.busy) { auto.again = true; return; }
+    auto.busy = true;
+    try {
+      const byPerson = {}; people().forEach(p => { byPerson[p.id] = p; });
+      let valid = await validAccountIds();
+      // A student linked a moment ago may not be in the list we have yet: refresh it once.
+      if (sharedEnrollments().some(e => !valid.has(byPerson[e.studentId].accountId))) { auto.validIds = null; if (!v.accounts) valid = await validAccountIds(); }
+      const rows = sharedEnrollments().filter(e => valid.has(byPerson[e.studentId].accountId))
+        .map(e => ({ id: e.id, student_id: byPerson[e.studentId].accountId, course: e.course, summary: summary(e) }));
+      const changed = rows.filter(r => auto.last[r.id] !== JSON.stringify(r));
+      if (changed.length) {
+        const up = await C().client.from("student_progress").upsert(changed.map(r => Object.assign({ updated_at: new Date().toISOString() }, r)));
+        if (up.error) throw up.error;
+        changed.forEach(r => { auto.last[r.id] = JSON.stringify(r); });
+      }
+      // Records this browser sent earlier that are gone now (taken off the class, student unlinked or deleted).
+      const now = new Set(rows.map(r => r.id));
+      if (auto.ids) {
+        const gone = [...auto.ids].filter(id => !now.has(id));
+        if (gone.length) { const del = await C().client.from("student_progress").delete().in("id", gone); if (!del.error) gone.forEach(id => { delete auto.last[id]; }); }
+      }
+      auto.ids = now;
+    } catch (err) {
+      console.warn("Couldn't update students' portals automatically:", err);
+    } finally {
+      auto.busy = false;
+      if (auto.again) { auto.again = false; scheduleAutoShare(); }
+    }
+  }
+  function scheduleAutoShare() { clearTimeout(auto.timer); auto.timer = setTimeout(autoShare, 2500); }
+  document.addEventListener("ld:saved", () => { if (canAutoShare()) scheduleAutoShare(); });
+  // Catch up once after signing in, for anything changed while signed out.
+  if (window.LDCloud && window.LDCloud.onChange) window.LDCloud.onChange(() => { auto.validIds = null; if (canAutoShare()) scheduleAutoShare(); });
+
   async function loadAccounts() {
     if (!C().can("divemaster")) return;
     v.loading = true; v.error = ""; rerender();
@@ -203,7 +255,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       ${note()}
       ${C().can("admin") ? staffBox() : ""}
       ${!edit ? `<p class="hint">As a Dive Master you can see every student's details below. Instructors make changes.</p>` : `<h2 class="sec">Share progress with students</h2>
-      <p class="hint">Sends each linked student their course schedule, skills mastered, dives logged and balance due, so they see it on their account page. Medical notes, instructor notes and other students are never sent. Share again after you update their records.</p>
+      <p class="hint">Sends each linked student their course schedule, skills mastered, dives logged and balance due, so they see it on their account page. Medical notes, instructor notes and other students are never sent. This now happens on its own a few seconds after you enroll a student or update their record (while you're signed in here). Use the button to resend everything and clear out records for students you've removed.</p>
       <div class="row-actions"><button class="btn primary" data-sa="share"${v.busy || !n ? " disabled" : ""}>${v.busy ? "Sharing…" : `Share progress (${n} course record${n === 1 ? "" : "s"})`}</button>
         <span class="hint" style="align-self:center;margin:0">${at && !isNaN(at) ? "Last shared " + esc(at.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })) : "Not shared yet"}${n ? "" : ". Link an account to a student first."}</span></div>`}
       <h2 class="sec">Accounts${list.length ? ` <span class="hint">(${list.length}${unlinked ? ", " + unlinked + " not linked yet" : ""})</span>` : ""}</h2>
