@@ -271,7 +271,7 @@
     const need = (r) => { const c = window.LDCatalog && window.LDCatalog.find(r.course); return c ? window.LDCatalog.minDays(c) : 1; };
     return `<section class="cal-reqs" id="cal-reqs" aria-label="Class requests"><h2 class="sec">Class requests <span class="req-status wait">${v.reqs.length} waiting</span></h2>
       <ul class="req-list">${v.reqs.map(r => `<li><div><b>${esc(r.course_name || r.course)}</b>
-          <span>${esc(r.student_name || "Student")}${r.student_email ? ` · <a href="mailto:${esc(r.student_email)}">${esc(r.student_email)}</a>` : ""}</span>
+          <span>${esc(r.student_name || "Student")}${r.student_email ? ` · <a href="mailto:${esc(r.student_email)}" data-email-to="${esc(r.student_email)}" data-email-name="${esc(r.student_name || "")}">${esc(r.student_email)}</a>` : ""}</span>
           <span class="when">${esc(r.dates.map(d => G().fmt(d, { weekday: "short", year: undefined })).join(" · "))} (${r.dates.length} day${r.dates.length === 1 ? "" : "s"}, needs ${need(r)})</span>
           ${r.notes ? `<span class="hint">“${esc(r.notes)}”</span>` : ""}
           <span class="hint">Asked ${esc(new Date(r.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }))}</span></div>
@@ -364,7 +364,8 @@
       ${left === 0 ? `<p class="hint">This class is full. You can still enroll more students.</p>` : ""}
       <div class="row-actions">${avail.length ? `<select id="cal-enroll" aria-label="Student to enroll"><option value="">Choose a student…</option>${avail.map(p => `<option value="${p.id}">${esc(p.name || "Unnamed student")}</option>`).join("")}</select>
         <button class="btn primary" data-cact="enroll">Enroll</button>` : ""}
-        <button class="btn" data-cact="enroll-new">+ New student</button></div>` : ""}
+        <button class="btn" data-cact="enroll-new">+ New student</button>
+        ${ros.some(e => (L().personById(e.studentId) || {}).email) ? `<button class="btn" data-cact="email-class">✉ Email this class</button>` : ""}</div>` : ""}
 
       ${embedded ? "" : `<div class="row-actions" style="margin-top:28px"><button class="btn" data-cact="dup">Duplicate</button>
         <button class="btn danger" data-cact="del">Delete…</button><span id="cal-del-confirm"></span></div>`}`;
@@ -585,6 +586,11 @@
         const p = L().addStudent(); L().enrollInClass(p.id, k);
         L().go("students", { psel: p.id, focus: "f-d-name" });
         L().toast("New student enrolled in " + titleOf(k) + ". Fill in their info here.");
+        break;
+      }
+      case "email-class": {
+        const to = roster(k).map(e => L().personById(e.studentId) || {}).filter(p => p.email).map(p => ({ name: p.name || "", email: p.email }));
+        if (window.LDEmail) window.LDEmail.open({ to, about: "the " + titleOf(k) + " class", subject: titleOf(k) });
         break;
       }
       case "unenroll": {
