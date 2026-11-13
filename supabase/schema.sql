@@ -587,3 +587,85 @@ drop policy if exists "Instructors add to the email log" on public.email_log;
 create policy "Instructors add to the email log" on public.email_log
   for insert to authenticated
   with check ((select public.has_role('instructor')) and sent_by = (select auth.uid()));
+
+-- ---------- learning agreements students sign in the Student portal (added 2026-11-13) ----------
+-- Business → Scheduling sends a student their learning agreement. It is copied here so the student can read,
+-- sign and print it in the Student portal, and they get an email asking them to. Students see only their own;
+-- Dive Masters and up see all. Only Instructors and Admins add, change or take back agreements, and only
+-- until the student signs. Signing is done through sign_agreement() below, and only by that student: nobody,
+-- staff included, can write or change a signature any other way.
+create table if not exists public.agreements (
+  id             text primary key,                -- the Scheduling entry's id in the instructor app
+  student_id     uuid not null references public.student_profiles (id) on delete cascade,
+  title          text not null default '' check (length(title) <= 300),
+  body           text not null default '' check (length(body) <= 100000),
+  meta           jsonb not null default '{}'::jsonb,   -- names, dates and contact shown at the top of the agreement
+  sent_by        uuid default auth.uid() references auth.users (id) on delete set null,
+  sent_at        timestamptz not null default now(),
+  signed_at      timestamptz,
+  signed_name    text,
+  guardian_name  text,
+  signed_body    text                              -- exactly the wording the student signed
+);
+create index if not exists agreements_student_id on public.agreements (student_id);
+alter table public.agreements enable row level security;
+
+drop policy if exists "Students read their own agreements; staff read all" on public.agreements;
+create policy "Students read their own agreements; staff read all" on public.agreements
+  for select to authenticated using (student_id = (select auth.uid()) or (select public.has_role('divemaster')));
+
+drop policy if exists "Instructors send agreements" on public.agreements;
+create policy "Instructors send agreements" on public.agreements
+  for insert to authenticated with check ((select public.has_role('instructor')));
+
+drop policy if exists "Instructors change agreements until signed" on public.agreements;
+create policy "Instructors change agreements until signed" on public.agreements
+  for update to authenticated
+  using ((select public.has_role('instructor')) and signed_at is null)
+  with check ((select public.has_role('instructor')));
+
+drop policy if exists "Instructors take back agreements" on public.agreements;
+create policy "Instructors take back agreements" on public.agreements
+  for delete to authenticated using ((select public.has_role('instructor')));
+
+-- Signature fields can only be written by sign_agreement().
+create or replace function public.protect_agreement_signature()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if coalesce(current_setting('ld.signing', true), '') <> 'on' then
+    if tg_op = 'INSERT' then
+      new.signed_at := null; new.signed_name := null; new.guardian_name := null; new.signed_body := null;
+    else
+      new.signed_at := old.signed_at; new.signed_name := old.signed_name;
+      new.guardian_name := old.guardian_name; new.signed_body := old.signed_body;
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists agreements_protect_signature on public.agreements;
+create trigger agreements_protect_signature before insert or update on public.agreements
+  for each row execute function public.protect_agreement_signature();
+
+create or replace function public.sign_agreement(agreement_id text, signer_name text, guardian text default '')
+returns public.agreements
+language plpgsql security definer set search_path = '' as $$
+declare a public.agreements;
+begin
+  select * into a from public.agreements where id = agreement_id and student_id = (select auth.uid()) for update;
+  if not found then raise exception 'That agreement isn''t in your account.'; end if;
+  if a.signed_at is not null then raise exception 'You''ve already signed this agreement.'; end if;
+  if length(trim(coalesce(signer_name, ''))) < 2 then raise exception 'Type your full name to sign.'; end if;
+  perform set_config('ld.signing', 'on', true);
+  update public.agreements
+     set signed_at = now(), signed_name = left(trim(signer_name), 200),
+         guardian_name = nullif(left(trim(coalesce(guardian, '')), 200), ''), signed_body = body
+   where id = a.id
+   returning * into a;
+  perform set_config('ld.signing', 'off', true);
+  return a;
+end $$;
+revoke all on function public.sign_agreement(text, text, text) from public, anon;
+grant execute on function public.sign_agreement(text, text, text) to authenticated;
+
+revoke all on public.agreements from anon;
+grant select, insert, update, delete on public.agreements to authenticated;
