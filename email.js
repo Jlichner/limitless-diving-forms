@@ -133,16 +133,24 @@
     if (window.LD && window.LD.toast) window.LD.toast(msg); else alert(msg);
   }
 
-  // A plain-language reason the email didn't go.
+  // A plain-language reason the email didn't go. supabase-js gives three kinds of error:
+  //   FunctionsFetchError  the browser couldn't reach the function at all (wrong name, not deployed,
+  //                        "Verify JWT" still on, or no internet). The browser hides which one.
+  //   FunctionsRelayError  Supabase reached the function but it didn't start (a problem in the pasted code).
+  //   FunctionsHttpError   the function answered with an error; ours always says why in { error }.
   async function explain(err) {
-    try {
-      if (err && err.context && typeof err.context.json === "function") {
-        const j = await err.context.json();
-        if (j && j.error) return "Not sent. " + j.error;
-      }
-    } catch (x) { /* not JSON */ }
-    const m = String((err && err.message) || err || "");
-    if (/not found|404|failed to send a request|relay/i.test(m)) return "Not sent. Email from the site isn't switched on yet: the send-email function needs to be set up in Supabase (see the README).";
+    const name = String((err && err.name) || ""), m = String((err && err.message) || err || "");
+    let status = 0, j = null;
+    try { if (err && err.context) { status = err.context.status || 0; if (typeof err.context.json === "function") j = await err.context.json(); } } catch (x) { /* not JSON */ }
+    if (j && j.error) return "Not sent. " + j.error;
+    if (/FetchError/.test(name) || /failed to send a request/i.test(m))
+      return "Not sent. The site couldn't reach the send-email function in Supabase. Check that it's named exactly send-email, that it's deployed, and that Verify JWT is switched off for it. (Or check your internet connection.)";
+    if (/RelayError/.test(name) || /relay/i.test(m))
+      return "Not sent. Supabase found the send-email function but it didn't start. Open it in Supabase, paste the code again from the README link, and deploy.";
+    if (status === 404 || (j && /not.?found/i.test(String(j.code || j.message || ""))))
+      return "Not sent. Supabase has no function called send-email. Check the function's name in Supabase → Edge Functions.";
+    if (status === 401 && j && j.message) return "Not sent. Supabase said: " + j.message + ". Switch off Verify JWT for send-email.";
+    if (status) return "Not sent. The send-email function answered with error " + status + (j && (j.message || j.msg) ? ": " + (j.message || j.msg) : "") + ".";
     return "Not sent. " + (C().explain ? C().explain(err) : m);
   }
 
