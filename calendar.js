@@ -9,7 +9,7 @@
   const G = () => window.LDCalGrid;
   const v = { ym: null, sel: null, past: false, publish: false, reqs: null, reqsBusy: false, reqsErr: "", pub: null, pubBusy: false };
   const UPLOAD_URL = "https://github.com/jlichner/limitless-diving-forms/upload/main";
-  const PUBLIC_URL = "https://jlichner.github.io/limitless-diving-forms/classes.html";
+  const PUBLIC_URL = "https://limitless-diving.com/classes.html";
 
   // ---------- data ----------
   function data() {

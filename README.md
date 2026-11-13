@@ -52,7 +52,7 @@ Your course records, invoices and settings in this app still live only in the br
 
 1. **Create a Supabase project.** Go to [supabase.com/dashboard](https://supabase.com/dashboard), sign in (GitHub sign-in is fine), and click **New project**. Name it `limitless-diving`, choose a database password (save it somewhere safe), pick the region closest to you, and click **Create**. The free plan is enough.
 2. **Create the tables.** In the project, open **SQL Editor** in the left menu, click **New query**, paste everything from [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. You should see "Success".
-3. **Point sign-in emails at your site.** Open **Authentication → URL Configuration**. Set **Site URL** to `https://jlichner.github.io/limitless-diving-forms/account.html` and add the same address under **Redirect URLs**. This is where the "confirm your email" and "reset password" links send students.
+3. **Point sign-in emails at your site.** Open **Authentication → URL Configuration**. Set **Site URL** to `https://limitless-diving.com/account.html`, and under **Redirect URLs** add `https://limitless-diving.com/**` and `https://www.limitless-diving.com/**`. This is where the "confirm your email" and "reset password" links send students.
 4. **Connect the website.** Open **Project Settings → API Keys** and copy the **Publishable key**, then **Project Settings → Data API** and copy the **Project URL**. In this repository, edit [`supabase-config.js`](supabase-config.js) on GitHub (pencil icon), paste both between the quotes, and commit. These two values are meant to be public; the security rules protect the data. Never paste the **secret** (service role) key anywhere in this site.
 5. **Make yourself the Admin.** Open `account.html` on your site and create an account with your own email (confirm it from your inbox). Then in the **SQL Editor**, run (with your email):
 
@@ -87,7 +87,7 @@ The instructor app saves everything in your browser, so publishing works through
 1. In **Calendar**, open each class you want to show and tick **Show on the public calendar**.
 2. Click **Publish calendar…**, check the list, and click **Download classes.json**.
 3. Upload that file to this repository ([Upload files](https://github.com/jlichner/limitless-diving-forms/upload/main)), replacing the old one, and commit.
-4. In about a minute it's live at `https://jlichner.github.io/limitless-diving-forms/classes.html`.
+4. In about a minute it's live at `https://limitless-diving.com/classes.html`.
 
 Republish whenever classes change or students enroll, so the open seats stay current. Classes drop off the public page by themselves once their last date has passed. The file holds only class details and the contact info set on the Publish page.
 
@@ -98,6 +98,7 @@ It's a static site with no build step. Open `index.html` in a browser, or publis
 1. Go to **Settings → Pages** in this repository.
 2. Under **Build and deployment**, choose **Deploy from a branch**, then pick `main` and `/ (root)`.
 3. Save. The site will be at `https://jlichner.github.io/limitless-diving-forms/`.
+4. **Custom domain (limitless-diving.com, registered at IONOS).** In IONOS DNS, add four **A** records for `@` pointing to `185.199.108.153`, `185.199.109.153`, `185.199.110.153` and `185.199.111.153`, and a **CNAME** for `www` pointing to `jlichner.github.io`. Leave the Resend email records (`resend._domainkey`, `send`, `_dmarc`) alone. Then in **Settings → Pages**, enter `limitless-diving.com` as the custom domain, save, and tick **Enforce HTTPS** once it's offered. The old github.io address forwards to the new one automatically.
 
 Note: if this repository is public, anyone can see the code and the default contact details in `app.js`. Student data is never in the repository.
 
