@@ -243,7 +243,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         <h1>${esc(acc.full_name || "No name yet")}</h1>
         <span class="sub">${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span> `}${acc.updated_at ? "Updated " + esc(fmtDate(String(acc.updated_at).slice(0, 10))) : ""}</span></div></div></div>
       <div class="dir-actions">${acc.phone ? `<a class="btn primary" href="tel:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Call</a><a class="btn" href="sms:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Text</a>` : ""}
-        ${acc.email ? `<a class="btn" href="mailto:${esc(acc.email)}">Email</a>` : ""}
+        ${acc.email ? `<a class="btn" href="mailto:${esc(acc.email)}" data-email-to="${esc(acc.email)}" data-email-name="${esc(acc.full_name || "")}">Email</a>` : ""}
         <button class="btn" data-sa="dcopy" data-acc="${esc(acc.id)}">Copy contact</button></div>
       <h2 class="sec">Contact</h2>
       <dl class="dir-dl">${row("Phone", telLink(acc.phone))}${row("Email", acc.email ? `<a href="mailto:${esc(acc.email)}">${esc(acc.email)}</a>` : "")}${row("Address", map)}</dl>
@@ -269,7 +269,8 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         <span class="meta dir-count" id="dir-count">${list.length ? countText() : ""}</span>
         ${v.membersOld ? `<p class="hint" style="margin:0">Showing students only. Run the latest <code>supabase/schema.sql</code> to include staff.</p>` : ""}
         <ul id="dir-list">${dirList()}</ul>
-        <button class="btn small" data-sa="refresh">Refresh list</button></aside>
+        <span class="row-actions" style="margin:0"><button class="btn small" data-sa="refresh">Refresh list</button>
+        ${C().can("instructor") && list.length ? `<button class="btn small" data-sa="demail" title="Email everyone in the list as it's filtered now">✉ Email this list</button>` : ""}</span></aside>
       <section class="panel" id="record">${v.error ? `<p class="acct-note bad" role="alert">${esc(v.error)}</p>` : ""}
         ${acc ? dirDetail(acc) : `<div class="empty"><h2>${v.loading ? "Loading students…" : "No registered students yet"}</h2>
           <p>Students show up here once they create an account on the <a href="account.html">Student portal</a> page.</p></div>`}</section>`;
@@ -338,6 +339,13 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast("Still a student account. Ask an Admin for a staff role."); } break;
       case "refresh": setNote(""); loadAccounts(); break;
       case "dpick": v.dsel = b.dataset.acc; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
+      case "demail": {
+        const to = dirMatches().filter(a => a.email).map(a => ({ name: a.full_name || "", email: a.email }));
+        const lvl = { student: "Students", divemaster: "Dive Masters", instructor: "Instructors", admin: "Admins" }[v.dlevel];
+        if (!to.length) { L().toast("No one in the list has an email address"); break; }
+        if (window.LDEmail) window.LDEmail.open({ to, about: lvl ? "all " + lvl.toLowerCase() : v.dq.trim() ? "the people found" : "everyone registered" });
+        break;
+      }
       case "dcopy": {
         const t = [acc.full_name, acc.phone, acc.email, acc.address].filter(Boolean).join("\n");
         try { await navigator.clipboard.writeText(t); L().toast("Contact copied"); } catch (err) { L().toast("Couldn't copy. Select the details and copy them."); }

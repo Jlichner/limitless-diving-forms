@@ -565,3 +565,25 @@ drop policy if exists "Photos: students remove their own" on storage.objects;
 create policy "Photos: students remove their own" on storage.objects
   for delete to authenticated
   using (bucket_id = 'avatars' and (storage.foldername(name))[1] = (select auth.uid())::text);
+
+-- ---------- emails sent from the site (added 2026-11-13) ----------
+-- One row each time an Instructor or Admin sends an email from the site (the send-email Edge Function
+-- writes it). It holds how many people it went to and the subject, never addresses or the message,
+-- and keeps sending inside Resend's free allowance of 100 emails a day.
+create table if not exists public.email_log (
+  id          bigint generated always as identity primary key,
+  sent_by     uuid default auth.uid() references auth.users (id) on delete set null,
+  recipients  integer not null check (recipients between 1 and 100),
+  subject     text not null default '' check (length(subject) <= 200),
+  created_at  timestamptz not null default now()
+);
+alter table public.email_log enable row level security;
+
+drop policy if exists "Instructors see the email log" on public.email_log;
+create policy "Instructors see the email log" on public.email_log
+  for select to authenticated using ((select public.has_role('instructor')));
+
+drop policy if exists "Instructors add to the email log" on public.email_log;
+create policy "Instructors add to the email log" on public.email_log
+  for insert to authenticated
+  with check ((select public.has_role('instructor')) and sent_by = (select auth.uid()));

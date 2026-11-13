@@ -72,6 +72,28 @@ When an update changes `supabase/schema.sql` (for example, the split mailing add
 
 Profile photos are kept in a private storage bucket called `avatars`, which the schema creates. Students can only add, change or remove their own photo, and only staff (Dive Master and up) can see other people's photos. Photos are cropped square and shrunk to 512px before upload.
 
+### Emailing students from the site
+
+Instructors and Admins can write and send an email without leaving the site. It goes out from **Jamie at Limitless Diving &lt;jamie@limitless-diving.com&gt;**, and when a student replies, the reply goes to **jamie@limitless-diving.com** (the IONOS mailbox, or wherever that address forwards).
+
+- **One student:** Records → Students, pick someone, click **Email**.
+- **A whole class:** open the class on the Calendar and click **✉ Email this class** (under the student list).
+- **A group:** in Records → Students, search or pick a level (for example "Students"), then **✉ Email this list**.
+- **A class request:** click the student's email on a request.
+
+Each person gets their own copy, so nobody sees anyone else's address. Up to 50 people per send and 100 emails a day (Resend's free plan; the copy to yourself counts). **Use my email app instead** in the box opens your normal email app with everyone in Bcc. Dive Masters see the Email button but it opens their own email app.
+
+**Turning it on (one time, about 10 minutes):**
+
+1. **Make a sending key in Resend.** Sign in at [resend.com](https://resend.com) → **API Keys** → **Create API key**. Name it `site emails`, set **Permission** to **Sending access**, **Domain** to `limitless-diving.com`, then **Add**. Copy the key (it starts with `re_`). Don't paste it anywhere else, including chat or this repository.
+2. **Store it in Supabase.** In your Supabase project (the one in `supabase-config.js`): **Edge Functions → Secrets** → add a secret named `RESEND_API_KEY` with the key as its value → **Save**.
+3. **Add the sending function.** **Edge Functions → Deploy a new function → Via Editor**. Name it exactly `send-email`. Delete the sample code, paste everything from [`supabase/functions/send-email/index.ts`](supabase/functions/send-email/index.ts), and click **Deploy function**.
+4. **Turn off "Verify JWT"** for `send-email` (open the function → **Details** → **Function configuration** → switch off **Enforce JWT verification** (may be labelled "Verify JWT") → **Save**). The function checks the sign-in and the Instructor/Admin level itself.
+5. **Update the database:** run the latest `supabase/schema.sql` (adds the `email_log` table that keeps count of the daily limit; it stores only the subject and how many people, never addresses or messages).
+6. Test: sign in with **Admin Log in**, open your own account in Records → Students, click **Email**, untick nothing, and send yourself a short message.
+
+To change the sender or reply address later, add the secrets `FROM_EMAIL` (for example `Jamie at Limitless Diving <jamie@limitless-diving.com>`) and `REPLY_TO`. The sender must be on the domain verified in Resend.
+
 ### The class calendar, online
 
 Once you're signed in as the instructor, **Publish calendar…** shows **Publish online now**. It updates the public page right away, with no `classes.json` to upload. The public page reads the online calendar once you've published there, and uses `classes.json` until then.
