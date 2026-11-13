@@ -90,7 +90,7 @@ Each person gets their own copy, so nobody sees anyone else's address. Up to 50 
 3. **Add the sending function.** **Edge Functions → Deploy a new function → Via Editor**. Name it exactly `send-email`. Delete the sample code, paste everything from [`supabase/functions/send-email/index.ts`](supabase/functions/send-email/index.ts), and click **Deploy function**.
 4. **Turn off "Verify JWT"** for `send-email` (open the function → **Details** → **Function configuration** → switch off **Enforce JWT verification** (may be labelled "Verify JWT") → **Save**). The function checks the sign-in and the Instructor/Admin level itself.
 5. **Update the database:** run the latest `supabase/schema.sql` (adds the `email_log` table that keeps count of the daily limit; it stores only the subject and how many people, never addresses or messages).
-6. Test: sign in with **Admin Log in**, open your own account in Records → Students, click **Email**, untick nothing, and send yourself a short message.
+6. Test: sign in with **Admin Log in**, open your own account in Records → Students, click **Email**, and send yourself a short message.
 
 To change the sender or reply address later, add the secrets `FROM_EMAIL` (for example `Jamie at Limitless Diving <jamie@limitless-diving.com>`) and `REPLY_TO`. The sender must be on the domain verified in Resend.
 
