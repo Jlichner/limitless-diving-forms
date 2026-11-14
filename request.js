@@ -100,13 +100,13 @@
     if (!C.available) { main.innerHTML = `<div class="msg">The sign-in service couldn't be loaded. Check your connection and refresh the page.</div>`; return; }
     if (!C.loaded) { main.innerHTML = `<div class="msg">Loading…</div>`; return; }
     if (!C.user) {
-      main.innerHTML = `<section class="pub-hero"><h1>Request a class</h1><p>Pick a course and the days that work for you, and we'll set it up.</p></section>
+      main.innerHTML = `<img class="photo-hero" src="photos/regulator.webp" alt="Close-up of a chrome scuba regulator first stage" style="object-position:50% 45%"><section class="pub-hero"><h1>Request a class</h1><p>Pick a course and the days that work for you, and we'll set it up.</p></section>
         <div class="msg"><p>Please log in to your student account first, so we know who's asking and how to reach you.</p>
         <p><a class="btn primary" href="account.html#then=request">Student portal</a></p><p class="hint">New here? You can create an account on the same page.</p></div>`;
       return;
     }
     if (!v.loaded) { main.innerHTML = `<div class="msg">Loading open dates…</div>`; return; }
-    main.innerHTML = `<section class="pub-hero"><h1>Request a class</h1>
+    main.innerHTML = `<img class="photo-hero" src="photos/regulator.webp" alt="Close-up of a chrome scuba regulator first stage" style="object-position:50% 45%"><section class="pub-hero"><h1>Request a class</h1>
         <p>Pick a course and the days that work for you. We'll confirm by email, and you'll see the answer here.</p></section>
       ${myRequests()}${form()}`;
   }

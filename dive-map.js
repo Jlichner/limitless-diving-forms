@@ -23,6 +23,9 @@
       <div class="panel dm-panel"><div class="dm-map" id="dm-map" aria-label="World map of places our members have dived"></div>
         ${M.ok() ? "" : `<p class="acct-note bad">The map couldn't be loaded. Check your connection and refresh the page. The list of places is below.</p>`}
         ${state ? `<p class="hint dm-state" role="status">${esc(state)}</p>` : ""}</div>
+      <div class="photo-strip"><img src="photos/wreck-plane.webp" alt="Divers exploring a sunken airplane" loading="lazy">
+        <img src="photos/wreck-trolley.webp" alt="Diver swimming toward a sunken trolley car" loading="lazy">
+        <img src="photos/wreck-truck.webp" alt="Diver beside a sunken truck, in black and white" loading="lazy"></div>
       ${sorted.length ? `<section class="panel dm-list-panel" aria-labelledby="dm-list-h"><h2 id="dm-list-h" class="sec">All dive sites</h2>
         <ul class="dm-list">${sorted.map((p, i) => `<li><button type="button" data-pin="${pins.indexOf(p)}"><b>${esc(p.name)}</b>
           <span>${esc(p.place)}</span><em>${esc(plural(p.divers, "diver"))}</em></button></li>`).join("")}</ul></section>` : ""}

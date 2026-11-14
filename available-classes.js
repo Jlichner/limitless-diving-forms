@@ -58,6 +58,9 @@
     });
     main.innerHTML = `<section class="pub-hero"><h1>Available classes</h1>
         <p>Every course Limitless Diving teaches. Open one to see what it covers, what you need to start, and when it runs next.</p></section>
+      <div class="photo-strip"><img src="photos/reel-drysuit.webp" alt="Diver in a drysuit running a line from a reel">
+        <img src="photos/lift-bags.webp" alt="Diver raising a statue with two orange lift bags">
+        <img src="photos/wreck-green.webp" alt="Technical diver with doubles lighting up a wreck"></div>
       ${specials()}${sections.join("")}${foot()}`;
   }
 

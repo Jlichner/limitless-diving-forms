@@ -61,7 +61,8 @@
     const c = data.contact || {}, email = safeEmail(c.email), tel = telHref(c.phone);
     const contact = [c.instructor ? esc(c.instructor) : "", email ? `<a href="mailto:${esc(email)}">${esc(email)}</a>` : "", tel ? `<a href="${esc(tel)}">${esc(c.phone)}</a>` : ""].filter(Boolean).join(" · ");
     const updated = data.updated ? new Date(data.updated) : null;
-    main.innerHTML = `<section class="pub-hero"><h1>${esc(data.heading || "Upcoming training classes")}</h1>${data.intro ? `<p>${esc(data.intro)}</p>` : ""}</section>
+    main.innerHTML = `<img class="photo-hero" src="photos/dpv-purple-light.webp" alt="Diver on a scooter with a purple dive light" style="object-position:50% 28%">
+      <section class="pub-hero"><h1>${esc(data.heading || "Upcoming training classes")}</h1>${data.intro ? `<p>${esc(data.intro)}</p>` : ""}</section>
       <section aria-label="Calendar"><div class="pub-month"><h2>${esc(G.monthName(ym))}</h2>
         <div class="cal-nav"><button class="btn" data-m="-1" aria-label="Previous month">‹</button><button class="btn" data-m="0">Today</button><button class="btn" data-m="1" aria-label="Next month">›</button></div></div>
         ${G.month(ym, events)}</section>
