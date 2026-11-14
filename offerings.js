@@ -11,13 +11,14 @@
     { id: "coaching", name: "Coaching sessions", tag: "With an instructor", price: "", calType: "event", active: true,
       about: "Buoyancy, trim and propulsion are the foundations of all diving. In these sessions you work one on one or in a small group with an instructor to hone those skills, or any other skill you choose." },
     { id: "hydra", name: "Lake Hydra tours", tag: "Led by a divemaster", price: "", calType: "tour", active: true,
-      about: "Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day." }
+      about: "Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day. Every Limitless divemaster is DPV certified and can bring underwater scooter (DPV) adventures to your tour too." }
   ];
   const PREFIX = "offer-";
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
   // Descriptions saved online before a starter description changed: show the new starter wording instead.
-  const OLD_ABOUT = { coaching: "Work one on one or in a small group with an instructor to hone the skill of your choice." };
+  const OLD_ABOUT = { coaching: "Work one on one or in a small group with an instructor to hone the skill of your choice.",
+    hydra: "Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day." };
   function about(r) {
     const d = DEFAULTS.find(x => x.id === r.id);
     return d && OLD_ABOUT[r.id] && String(r.about || "").trim() === OLD_ABOUT[r.id] ? d.about : r.about || "";
