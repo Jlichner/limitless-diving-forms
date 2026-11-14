@@ -16,8 +16,14 @@
   const PREFIX = "offer-";
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
+  // Descriptions saved online before a starter description changed: show the new starter wording instead.
+  const OLD_ABOUT = { coaching: "Work one on one or in a small group with an instructor to hone the skill of your choice." };
+  function about(r) {
+    const d = DEFAULTS.find(x => x.id === r.id);
+    return d && OLD_ABOUT[r.id] && String(r.about || "").trim() === OLD_ABOUT[r.id] ? d.about : r.about || "";
+  }
   function fromRow(r) {
-    return { id: r.id, name: r.name || "", tag: r.tag || "", about: r.about || "", price: r.price || "",
+    return { id: r.id, name: r.name || "", tag: r.tag || "", about: about(r), price: r.price || "",
       calType: r.cal_type || "event", active: r.active !== false, sort: Number(r.sort) || 0 };
   }
   function copy(list) { return JSON.parse(JSON.stringify(list)); }
