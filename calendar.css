@@ -416,3 +416,9 @@ a.cal-ev { text-decoration: none; box-sizing: border-box; }
 .off-date > span:first-of-type { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .off-date .when { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
 .off-date .more { color: var(--accent); font-weight: 600; font-size: 14px; white-space: nowrap; }
+
+/* ---------- photos (photos/ folder) ---------- */
+.photo-hero { display: block; width: 100%; aspect-ratio: 21 / 8; object-fit: cover; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2, #0b3a52); }
+.photo-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.photo-strip img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2, #0b3a52); }
+@media (max-width: 640px) { .photo-hero { aspect-ratio: 16 / 9; } }
