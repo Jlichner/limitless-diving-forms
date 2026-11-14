@@ -440,6 +440,8 @@ create table if not exists public.event_signups (
   unique (class_id, student_id)
 );
 alter table public.event_signups enable row level security;
+-- When the alert to the instructor went out (notify-signup Edge Function), added 2026-11-14.
+alter table public.event_signups add column if not exists notified_at timestamptz;
 
 -- New sign-ups are always the member's own, for a published entry that hasn't ended. The server decides the
 -- kind and status, fills in the name and email from the account, and keeps joins within the seats left.
@@ -461,7 +463,7 @@ begin
   new.title := left(coalesce(nullif(k.title, ''), k.course_name, ''), 300);
   new.kind := case when k.event_type = 'class' or k.course <> '' then 'class' else 'join' end;
   new.status := case when new.kind = 'class' then 'pending' else 'joined' end;
-  new.staff_note := ''; new.created_at := now(); new.updated_at := now();
+  new.staff_note := ''; new.created_at := now(); new.updated_at := now(); new.notified_at := null;
   new.student_email := left(coalesce((select u.email::text from auth.users u where u.id = new.student_id), ''), 320);
   new.student_name := left(coalesce(nullif((select p.full_name from public.student_profiles p where p.id = new.student_id), ''), new.student_name, ''), 200);
   if new.kind = 'join' and k.seats_left is not null then
@@ -497,6 +499,29 @@ create policy "Instructors answer sign-ups" on public.event_signups
 
 revoke all on public.event_signups from anon;
 grant select, insert, update, delete on public.event_signups to authenticated;
+
+-- The notify-signup Edge Function calls this, as the member who just signed up, to get what goes in the
+-- alert to the instructor. It answers once per sign-up, only for the caller's own sign-up made in the last
+-- 15 minutes, and marks it as alerted, so nobody can use it to send repeat alerts or read others' sign-ups.
+create or replace function public.claim_signup_notice(p_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare s public.event_signups%rowtype; k public.classes%rowtype;
+begin
+  update public.event_signups e set notified_at = now()
+    where e.id = p_id and e.student_id = (select auth.uid()) and e.notified_at is null
+      and e.created_at > now() - interval '15 minutes'
+    returning e.* into s;
+  if not found then return null; end if;
+  select * into k from public.classes where id = s.class_id;
+  return jsonb_build_object('name', s.student_name, 'email', s.student_email, 'title', s.title, 'kind', s.kind,
+    'notes', s.notes, 'class_id', s.class_id, 'dates', coalesce(k.dates, '[]'::jsonb),
+    'time', coalesce(k.time, ''), 'location', coalesce(k.location, ''),
+    'phone', coalesce((select p.phone from public.student_profiles p where p.id = s.student_id), ''));
+end $$;
+revoke all on function public.claim_signup_notice(uuid) from public, anon;
+grant execute on function public.claim_signup_notice(uuid) to authenticated;
 
 -- How many people have joined an event (a number only, never who), for the event page.
 create or replace function public.event_going(p_class_id text)
