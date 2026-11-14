@@ -12,6 +12,9 @@
 //                       carrier's email-to-text address (Verizon 5551234567@vtext.com, T-Mobile
 //                       5551234567@tmomail.net; AT&T closed theirs in 2025). Set it to "off" for none.
 //   FROM_EMAIL          optional, as for send-email.
+// WhatsApp messages through CallMeBot (free; see https://www.callmebot.com/blog/free-api-whatsapp-messages/):
+//   WHATSAPP_PHONE      your WhatsApp number with country code, like +15557654321
+//   WHATSAPP_APIKEY     the key CallMeBot sent you on WhatsApp
 // Text messages (optional, add these once your Twilio number is approved for texting):
 //   TWILIO_ACCOUNT_SID  from the Twilio console (starts with AC…)
 //   TWILIO_AUTH_TOKEN   from the Twilio console
@@ -94,6 +97,17 @@ Deno.serve(async (req) => {
     });
     results.email = r.ok;
     if (!r.ok) console.error("Resend error", r.status, await r.text());
+  }
+
+  // WhatsApp message, once CallMeBot is set up.
+  const WA_PHONE = Deno.env.get("WHATSAPP_PHONE") || "", WA_KEY = Deno.env.get("WHATSAPP_APIKEY") || "";
+  if (WA_PHONE && WA_KEY) {
+    const msg = [`🤿 Limitless Diving: ${line}`, contact, s.notes ? `Note: "${String(s.notes).slice(0, 300)}"` : "", next, `${SITE}/index.html#staff`].filter(Boolean).join("\n");
+    const r = await fetch("https://api.callmebot.com/whatsapp.php?" + new URLSearchParams({ phone: WA_PHONE, text: msg, apikey: WA_KEY }));
+    const t = await r.text();
+    // CallMeBot answers 200 even for some problems; its page says "Message queued" when it worked.
+    results.whatsapp = r.ok && !/error|invalid|not\s+valid/i.test(t);
+    if (!results.whatsapp) console.error("CallMeBot", r.status, t.slice(0, 500));
   }
 
   // Text message, once Twilio is set up.
