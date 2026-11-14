@@ -1,5 +1,6 @@
 // Limitless Diving: tell the instructor when someone joins an event or signs up for a class on an event's
-// information page (event.html). Supabase Edge Function "notify-signup".
+// information page (event.html), or asks for a class on Request a class (request.html).
+// Supabase Edge Function "notify-signup". Body: { id } for a sign-up, or { request: id } for a request.
 //
 // event.js calls it right after the sign-up is saved, as the member who signed up. It asks the database
 // (claim_signup_notice in supabase/schema.sql) for that sign-up; the database answers only once, only for
@@ -56,13 +57,14 @@ Deno.serve(async (req) => {
   const auth = req.headers.get("Authorization") || "";
   const apikey = req.headers.get("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || "";
   if (!/^Bearer\s+\S+/.test(auth)) return reply(401, { error: "Please sign in first." });
-  let body: { id?: unknown };
+  let body: { id?: unknown; request?: unknown };
   try { body = await req.json(); } catch { return reply(400, { error: "The request wasn't readable." }); }
-  const id = String(body.id || "");
+  const isRequest = !!body.request;
+  const id = String(body.request || body.id || "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return reply(400, { error: "Which sign-up?" });
 
-  // Ask the database, as the member, for their new sign-up (once only).
-  const claim = await fetch(`${SUPABASE_URL}/rest/v1/rpc/claim_signup_notice`, {
+  // Ask the database, as the member, for their new sign-up or request (once only).
+  const claim = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${isRequest ? "claim_request_notice" : "claim_signup_notice"}`, {
     method: "POST", headers: { apikey, Authorization: auth, "Content-Type": "application/json" }, body: JSON.stringify({ p_id: id }),
   });
   if (!claim.ok) { console.error("claim_signup_notice", claim.status, await claim.text()); return reply(502, { error: "Couldn't read the sign-up." }); }
@@ -72,10 +74,13 @@ Deno.serve(async (req) => {
   const name = String(s.name || s.email || "Someone");
   const title = String(s.title || "an event");
   const dates = when(Array.isArray(s.dates) ? s.dates : []);
-  const verb = s.kind === "class" ? "signed up for" : "joined";
-  const line = `${name} ${verb} ${title}${dates ? " (" + dates + ")" : ""}.`;
+  const verb = s.kind === "request" ? "asked for a class:" : s.kind === "class" ? "signed up for" : "joined";
+  const line = s.kind === "request"
+    ? `${name} asked for a class: ${title}${dates ? " on " + (Array.isArray(s.dates) ? s.dates.length + " day" + (s.dates.length === 1 ? "" : "s") + ", " : "") + dates : ""}.`
+    : `${name} ${verb} ${title}${dates ? " (" + dates + ")" : ""}.`;
   const contact = [s.email, s.phone].filter(Boolean).join(" · ");
-  const next = s.kind === "class" ? "Schedule them from Website sign-ups on the Calendar." : "They're on the list.";
+  const next = s.kind === "request" ? "Schedule or decline it under Class requests on the Calendar."
+    : s.kind === "class" ? "Schedule them from Website sign-ups on the Calendar." : "They're on the list.";
   const results: Record<string, unknown> = {};
 
   // Email alert.
@@ -87,8 +92,8 @@ Deno.serve(async (req) => {
     const text = [line, contact, s.notes ? `Their note: "${s.notes}"` : "", next, `${SITE}/index.html#staff`].filter(Boolean).join("\n\n");
     const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#0c2233">` +
       [line, contact, s.notes ? `Their note: “${s.notes}”` : "", next].filter(Boolean).map((p) => `<p style="margin:0 0 12px">${escapeHtml(String(p))}</p>`).join("") +
-      `<p style="margin:0"><a href="${SITE}/index.html#staff">Open the Calendar</a> · <a href="${SITE}/event.html?id=${encodeURIComponent(String(s.class_id || ""))}">See the event page</a></p></div>`;
-    const subject = (s.kind === "class" ? "New class sign-up: " : "New sign-up: ") + name + " · " + title;
+      `<p style="margin:0"><a href="${SITE}/index.html#staff">Open the Calendar</a>${s.class_id ? ` · <a href="${SITE}/event.html?id=${encodeURIComponent(String(s.class_id))}">See the event page</a>` : ""}</p></div>`;
+    const subject = (s.kind === "request" ? "New class request: " : s.kind === "class" ? "New class sign-up: " : "New sign-up: ") + name + " · " + title;
     // Phone email-to-text addresses get a short plain message; everyone else the full email.
     const isPhone = (a: string) => /@(vtext|vzwpix|tmomail|messaging\.sprintpcs|mms\.att|txt\.att|msg\.fi\.google|email\.uscc|sms\.myboostmobile|mymetropcs|text\.republicwireless)\./i.test(a) || /^\+?\d{10,11}@/.test(a);
     const batch = toList.map((addr) => isPhone(addr)

@@ -167,13 +167,15 @@
       render(); return;
     }
     v.busy = true; setNote(""); render();
-    const { error } = await C.client.from("class_requests").insert({
+    const { data: row, error } = await C.client.from("class_requests").insert({
       course: c.app, course_name: c.fullName, dates: v.picked, notes: v.notes.trim().slice(0, 2000),
       student_name: String((profile && profile.full_name) || (C.user.user_metadata && C.user.user_metadata.full_name) || "").slice(0, 200),
       student_email: String(C.user.email || "").slice(0, 320)
-    });
+    }).select("id").maybeSingle();
     v.busy = false;
     if (error) { setNote(C.explain(error), "bad"); await load(); return; }
+    // Let the instructor know (Telegram, email…, supabase/functions/notify-signup). Best effort.
+    if (row && row.id && C.client.functions) Promise.resolve(C.client.functions.invoke("notify-signup", { body: { request: row.id } })).catch(() => {});
     setNote("Request sent. We'll be in touch to confirm.", "ok");
     v.course = ""; v.picked = []; v.notes = "";
     await load();

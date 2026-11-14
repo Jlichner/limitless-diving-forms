@@ -354,6 +354,8 @@ create table if not exists public.class_requests (
   updated_at    timestamptz not null default now()
 );
 alter table public.class_requests enable row level security;
+-- When the alert to the instructor went out (notify-signup Edge Function), added 2026-11-14.
+alter table public.class_requests add column if not exists notified_at timestamptz;
 
 -- Days that can't be requested: published class days, and days already asked for or scheduled.
 -- Returns dates only (never who asked), so anyone can see which days are free.
@@ -379,7 +381,7 @@ as $$
 declare bad text;
 begin
   new.student_id := (select auth.uid());
-  new.status := 'pending'; new.staff_note := ''; new.class_id := null;
+  new.status := 'pending'; new.staff_note := ''; new.class_id := null; new.notified_at := null;
   new.created_at := now(); new.updated_at := now();
   if (select count(*) from public.class_requests where student_id = new.student_id and status = 'pending') >= 5 then
     raise exception 'You already have 5 requests waiting. Please wait for an answer or withdraw one first.';
@@ -521,6 +523,25 @@ begin
     'phone', coalesce((select p.phone from public.student_profiles p where p.id = s.student_id), ''));
 end $$;
 revoke all on function public.claim_signup_notice(uuid) from public, anon;
+
+-- The same for a new request on Request a class (request.html), added 2026-11-14.
+create or replace function public.claim_request_notice(p_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare r public.class_requests%rowtype;
+begin
+  update public.class_requests q set notified_at = now()
+    where q.id = p_id and q.student_id = (select auth.uid()) and q.notified_at is null
+      and q.created_at > now() - interval '15 minutes'
+    returning q.* into r;
+  if not found then return null; end if;
+  return jsonb_build_object('name', r.student_name, 'email', r.student_email, 'title', coalesce(nullif(r.course_name, ''), r.course),
+    'kind', 'request', 'notes', r.notes, 'dates', r.dates,
+    'phone', coalesce((select p.phone from public.student_profiles p where p.id = r.student_id), ''));
+end $$;
+revoke all on function public.claim_request_notice(uuid) from public, anon;
+grant execute on function public.claim_request_notice(uuid) to authenticated;
 grant execute on function public.claim_signup_notice(uuid) to authenticated;
 
 -- How many people have joined an event (a number only, never who), for the event page.
