@@ -11,7 +11,7 @@
     { id: "coaching", name: "Coaching sessions", tag: "With an instructor", price: "", calType: "event", active: true,
       about: "Buoyancy, trim and propulsion are the foundations of all diving. In these sessions you work one on one or in a small group with an instructor to hone those skills, or any other skill you choose." },
     { id: "hydra", name: "Lake Hydra tours", tag: "Led by a divemaster", price: "", calType: "tour", active: true,
-      about: "Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day. Got a scooter? Bring it along! Every Limitless divemaster is DPV certified, so we can zip around the lake right beside you and turn your day into a high-speed adventure." }
+      about: "Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day. Got a scooter? Bring it along! Every Limitless divemaster is DPV certified, so we can zip around the lake right beside you and turn your day into a high-speed adventure utilizing expedition-grade DPVs." }
   ];
   const PREFIX = "offer-";
 
