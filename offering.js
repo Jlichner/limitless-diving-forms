@@ -21,6 +21,9 @@
     return !!t && !!stem && (t.includes(stem) || n.includes(t));
   }
 
+  // Coaching is private, one on one or a small group, so its page has no public dates: just "Schedule your session".
+  function isPrivate() { return /coach/i.test(offer.id + " " + offer.name); }
+
   function render() {
     if (!offer) {
       main.innerHTML = `<div class="msg"><h1>This listing isn't available</h1><p>See everything we offer on <a href="available-classes.html">Available classes</a>.</p></div>`;
@@ -38,10 +41,10 @@
     main.innerHTML = `<p><a class="back" href="available-classes.html">‹ Available classes</a></p>
       <section class="pub-hero off-hero">${offer.tag ? `<span class="eyebrow">${esc(offer.tag)}</span>` : ""}<h1>${esc(offer.name)}</h1>
         ${offer.about ? `<p>${esc(offer.about)}</p>` : ""}${offer.price ? `<p class="off-price">${esc(offer.price)}</p>` : ""}</section>
-      <section class="panel evt-act"><h2 class="sec">Upcoming dates</h2>${list}</section>
-      <section class="panel evt-act"><h2 class="sec">Want a different day?</h2>
-        <p>Pick the days that suit you and we'll confirm the details with you.</p>
-        <div class="row-actions"><a class="btn primary" href="request.html?course=offer-${encodeURIComponent(offer.id)}">Request a day</a>
+      ${isPrivate() ? "" : `<section class="panel evt-act"><h2 class="sec">Upcoming dates</h2>${list}</section>`}
+      <section class="panel evt-act"><h2 class="sec">${isPrivate() ? "Schedule your session" : "Want a different day?"}</h2>
+        <p>${isPrivate() ? "Pick the days that suit you and tell us what you'd like to work on. We'll confirm the details with you." : "Pick the days that suit you and we'll confirm the details with you."}</p>
+        <div class="row-actions"><a class="btn primary" href="request.html?course=offer-${encodeURIComponent(offer.id)}">${isPrivate() ? "Request a session" : "Request a day"}</a>
           ${ask ? `<a class="btn" href="${esc(ask)}">Ask a question</a>` : ""}</div></section>`;
   }
 
@@ -75,6 +78,6 @@
   O.load(true).then(list => {
     offer = list.find(o => o.id === id) || null;
     render();
-    if (offer) loadCalendar();
+    if (offer) loadCalendar();  // also brings the contact email for Ask a question
   });
 })();

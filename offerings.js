@@ -9,7 +9,7 @@
 
   const DEFAULTS = [
     { id: "coaching", name: "Coaching sessions", tag: "With an instructor", price: "", calType: "event", active: true,
-      about: "Work one on one or in a small group with an instructor to hone the skill of your choice." },
+      about: "Buoyancy, trim and propulsion are the foundation of all diving. In these sessions you work one on one or in a small group with an instructor to hone those skills, or any other skill you choose." },
     { id: "hydra", name: "Lake Hydra tours", tag: "Led by a divemaster", price: "", calType: "tour", active: true,
       about: "Day-long tours of Lake Hydra with a divemaster. The adventure is yours: dive as little or as much as you like for the day." }
   ];
