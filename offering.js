@@ -28,7 +28,8 @@
   // Photos for each listing (photos/ folder): a banner at the top and a strip under the request box.
   const PHOTOS = {
     coaching: { hero: ["david-trim", "Diver holding perfect trim in open water", "50% 42%"],
-      strip: [["trim-wetsuit", "Diver gliding in trim over a lake bottom"], ["bubble-ring", "Bubble ring rising past a diver"]] },
+      strip: [["trim-wetsuit", "Diver gliding in trim over a lake bottom"], ["bubble-ring", "Bubble ring rising past a diver"],
+        ["trim-deck", "Diver with doubles in flat trim over a sunken wooden deck"]] },
     hydra: { hero: ["dpv-wreck", "Diver on a scooter lighting up an underwater structure", "50% 45%"],
       strip: [["scooters-dock", "Three DPV scooters lined up on a dock by the lake"], ["dpv-line", "Diver on a scooter following a line over the lake bottom"],
         ["dpv-square", "Diver on a scooter heading toward the camera"]] }
