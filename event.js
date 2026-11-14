@@ -4,7 +4,8 @@
    - join an Event, Exploration or Tour straight away (up to the seats left), or leave it again;
    - start signing up for a Class. That waits for the instructor, who puts them on the class with
      Business → Scheduling (enrolls them and sends the learning agreement to sign in the Student portal).
-   Sign-ups live in the Supabase table event_signups (supabase/schema.sql). Minimum certifications are checked
+   Sign-ups live in the Supabase table event_signups (supabase/schema.sql), and each new one alerts the
+   instructor through the notify-signup Edge Function. Minimum certifications are checked
    against the member's account and shown as a warning, never a block, as on the class calendar. */
 (function () {
   "use strict";
@@ -204,10 +205,15 @@
     if (act === "join") {
       v.busy = true; setNote(""); render();
       const name = (C.user.user_metadata && C.user.user_metadata.full_name) || "";
-      const { error } = await C.client.from("event_signups").insert({ class_id: k.id, notes: v.notes.trim().slice(0, 1000), student_name: String(name).slice(0, 200) });
+      const { data: row, error } = await C.client.from("event_signups").insert({ class_id: k.id, notes: v.notes.trim().slice(0, 1000), student_name: String(name).slice(0, 200) }).select("id").maybeSingle();
       v.busy = false;
       if (error) setNote(/duplicate|unique/i.test(error.message || "") ? "You've already signed up for this." : C.explain(error), "bad");
-      else { v.notes = ""; setNote(isClass(k) ? "Sign-up sent. We'll be in touch soon." : "You're in! See you there.", "ok"); }
+      else {
+        v.notes = ""; setNote(isClass(k) ? "Sign-up sent. We'll be in touch soon." : "You're in! See you there.", "ok");
+        // Let the instructor know (email and/or text, supabase/functions/notify-signup). Best effort: the
+        // sign-up is saved either way.
+        if (row && row.id && C.client.functions) Promise.resolve(C.client.functions.invoke("notify-signup", { body: { id: row.id } })).catch(() => {});
+      }
       await refreshGoing(); await loadMine();
       return;
     }
