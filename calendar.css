@@ -407,3 +407,12 @@ a.cal-ro:hover, a.cal-ro:focus-visible { border-color: var(--accent); }
 a.cal-ev { text-decoration: none; box-sizing: border-box; }
 .panel a.cal-ev { color: #fff; }
 .evt-act a.btn:not(.primary) { color: var(--ink); }
+.special-card.picked { outline: 2px solid var(--shallows); outline-offset: 2px; }
+/* Coaching and tours page (offering.html). */
+.off-price { font-weight: 700; color: var(--ink) !important; }
+.off-dates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.off-date { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: inherit !important; text-decoration: none; }
+.off-date:hover, .off-date:focus-visible { border-color: var(--accent); }
+.off-date > span:first-of-type { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.off-date .when { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.off-date .more { color: var(--accent); font-weight: 600; font-size: 14px; white-space: nowrap; }
