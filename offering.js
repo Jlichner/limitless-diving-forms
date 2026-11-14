@@ -1,0 +1,80 @@
+/* Limitless Diving — a page for one Coaching and tours listing (offering.html?id=coaching, ?id=hydra…).
+   The left menu's Coaching sessions and Lake Hydra tours, and each card on Available classes, open it.
+   It shows the listing (offerings.js: name, label, description, price, edited in staff Settings →
+   Coaching and tours listings), its upcoming dates from the published calendar, each linking to its
+   information page (event.html) to join, and a Request button for a day that suits you (request.html). */
+(function () {
+  "use strict";
+
+  const G = window.LDCalGrid, esc = G.esc, O = window.LDOfferings;
+  const main = document.getElementById("off");
+  const id = new URLSearchParams(location.search).get("id") || "";
+  let offer = null, entries = null, contact = {};
+
+  function safeEmail(e) { return /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(e || "") ? e : ""; }
+  function color(k) { return /^k\d$/.test(k.color || "") ? k.color : "k0"; }
+  // Calendar entries for this listing: those whose title names it ("Lake Hydra tour – Dec 5" matches
+  // "Lake Hydra tours"), which includes everything scheduled from a request for it.
+  function norm(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim(); }
+  function matches(k) {
+    const t = norm(k.title), n = norm(offer.name), stem = n.replace(/s$/, "");
+    return !!t && !!stem && (t.includes(stem) || n.includes(t));
+  }
+
+  function render() {
+    if (!offer) {
+      main.innerHTML = `<div class="msg"><h1>This listing isn't available</h1><p>See everything we offer on <a href="available-classes.html">Available classes</a>.</p></div>`;
+      return;
+    }
+    document.title = offer.name + " · Limitless Diving";
+    const email = safeEmail(contact.email);
+    const ask = email ? `mailto:${email}?subject=${encodeURIComponent(offer.name)}` : "";
+    const list = entries == null ? `<p class="hint">Loading dates…</p>`
+      : entries.length ? `<ul class="off-dates">${entries.map(k => `<li><a class="off-date ${color(k)}" href="event.html?id=${encodeURIComponent(k.id)}">
+          <i class="cal-dot ${color(k)}" aria-hidden="true"></i><span><b>${esc(k.title)}</b>
+          <span class="when">${esc(G.range(k.dates) || "Dates to be announced")}${k.location ? " · " + esc(k.location) : ""}</span></span>
+          <span class="more">${k.seatsLeft === 0 ? "Full" : "Details and join ›"}</span></a></li>`).join("")}</ul>`
+      : `<p>Nothing is on the calendar right now. Ask for a day that works for you and we'll set it up.</p>`;
+    main.innerHTML = `<p><a class="back" href="available-classes.html">‹ Available classes</a></p>
+      <section class="pub-hero off-hero">${offer.tag ? `<span class="eyebrow">${esc(offer.tag)}</span>` : ""}<h1>${esc(offer.name)}</h1>
+        ${offer.about ? `<p>${esc(offer.about)}</p>` : ""}${offer.price ? `<p class="off-price">${esc(offer.price)}</p>` : ""}</section>
+      <section class="panel evt-act"><h2 class="sec">Upcoming dates</h2>${list}</section>
+      <section class="panel evt-act"><h2 class="sec">Want a different day?</h2>
+        <p>Pick the days that suit you and we'll confirm the details with you.</p>
+        <div class="row-actions"><a class="btn primary" href="request.html?course=offer-${encodeURIComponent(offer.id)}">Request a day</a>
+          ${ask ? `<a class="btn" href="${esc(ask)}">Ask a question</a>` : ""}</div></section>`;
+  }
+
+  async function loadCalendar() {
+    const C = window.LDCloud;
+    let rows = null;
+    try {
+      if (C && C.configured) {
+        const get = (path) => fetch(C.url + "/rest/v1/" + path, { headers: { apikey: C.key }, cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+        const [s, list] = await Promise.all([get("calendar_settings?id=eq.1&select=*"), get("classes?select=*")]);
+        if (s && s[0]) {
+          contact = { email: s[0].email, phone: s[0].phone };
+          rows = (list || []).map(k => ({ id: k.id, title: k.title || k.course_name, color: k.color, dates: k.dates, location: k.location, seatsLeft: k.seats_left, course: k.course }));
+        }
+      }
+    } catch (e) { console.warn("Online calendar not available:", e); }
+    if (!rows) {
+      try { const r = await fetch("classes.json", { cache: "no-store" }); const d = r.ok ? await r.json() : {}; contact = d.contact || {}; rows = Array.isArray(d.classes) ? d.classes : []; }
+      catch (e) { rows = []; }
+    }
+    const t = G.today();
+    entries = rows.map(k => Object.assign({}, k, { dates: (Array.isArray(k.dates) ? k.dates : []).filter(x => G.parse(x)).sort() }))
+      .filter(k => !k.course && (!k.dates.length || G.lastDate(k.dates) >= t) && matches(k))
+      .sort((a, b) => (G.firstDate(a.dates) || "9999").localeCompare(G.firstDate(b.dates) || "9999"));
+    render();
+  }
+
+  const nav = document.getElementById("pubnav");
+  if (nav && window.LDCloud && window.LDCloud.configured) nav.hidden = false;
+  if (!O) { render(); return; }
+  O.load(true).then(list => {
+    offer = list.find(o => o.id === id) || null;
+    render();
+    if (offer) loadCalendar();
+  });
+})();

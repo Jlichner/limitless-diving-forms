@@ -62,7 +62,8 @@
   }
 
   // Coaching and tours (offerings.js), shown at the top of the list. They aren't certification courses, so
-  // they have no detail page: each card's Request button opens Request a class with that listing picked.
+  // each has its own page, offering.html (offering.js), with its upcoming dates; Request opens Request a
+  // class with that listing picked.
   let offers = [];
   function specials() {
     if (!offers.length) return "";
@@ -71,7 +72,8 @@
       <div class="pub-list special-list">${offers.map(o => `<div class="pub-card course-card special-card" id="special-${esc(o.id)}">
         ${o.tag ? `<span class="eyebrow">${esc(o.tag)}</span>` : ""}<h3>${esc(o.name)}</h3>${o.about ? `<p>${esc(o.about)}</p>` : ""}
         ${o.price ? `<span class="facts"><span class="price">${esc(o.price)}</span></span>` : ""}
-        <div class="course-actions"><a class="btn primary" href="request.html?course=offer-${encodeURIComponent(o.id)}">Request</a></div>
+        <div class="course-actions"><a class="btn primary" href="offering.html?id=${encodeURIComponent(o.id)}">Dates and details ›</a>
+          <a class="btn" href="request.html?course=offer-${encodeURIComponent(o.id)}">Request</a></div>
       </div>`).join("")}</div></section>`;
   }
   if (window.LDOfferings) window.LDOfferings.load(true).then(list => { offers = list; if (!/^#course=/.test(location.hash)) route(); });
