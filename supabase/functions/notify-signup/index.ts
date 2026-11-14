@@ -15,6 +15,9 @@
 // WhatsApp messages through CallMeBot (free; see https://www.callmebot.com/blog/free-api-whatsapp-messages/):
 //   WHATSAPP_PHONE      your WhatsApp number with country code, like +15557654321
 //   WHATSAPP_APIKEY     the key CallMeBot sent you on WhatsApp
+// Telegram messages (free, from your own bot):
+//   TELEGRAM_BOT_TOKEN  the token @BotFather gave you when you made your bot
+//   TELEGRAM_CHAT_ID    your Telegram user id (message @userinfobot to see it). Send your bot "hi" once first.
 // Text messages (optional, add these once your Twilio number is approved for texting):
 //   TWILIO_ACCOUNT_SID  from the Twilio console (starts with AC…)
 //   TWILIO_AUTH_TOKEN   from the Twilio console
@@ -108,6 +111,18 @@ Deno.serve(async (req) => {
     // CallMeBot answers 200 even for some problems; its page says "Message queued" when it worked.
     results.whatsapp = r.ok && !/error|invalid|not\s+valid/i.test(t);
     if (!results.whatsapp) console.error("CallMeBot", r.status, t.slice(0, 500));
+  }
+
+  // Telegram message, once a bot is set up.
+  const TG_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "", TG_CHAT = Deno.env.get("TELEGRAM_CHAT_ID") || "";
+  if (TG_TOKEN && TG_CHAT) {
+    const msg = [`🤿 ${line}`, contact, s.notes ? `Note: "${String(s.notes).slice(0, 500)}"` : "", next, `${SITE}/index.html#staff`].filter(Boolean).join("\n");
+    const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT, text: msg, disable_web_page_preview: true }),
+    });
+    results.telegram = r.ok;
+    if (!r.ok) console.error("Telegram error", r.status, await r.text());
   }
 
   // Text message, once Twilio is set up.
