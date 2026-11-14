@@ -108,7 +108,12 @@
   function route() {
     const m = /^#course=([\w-]+)$/.exec(location.hash), c = m && CAT.find(m[1]);
     if (c) { document.title = c.name + " · Limitless Diving"; detail(c); }
-    else { document.title = "Limitless Diving Available Classes"; list(); }
+    else {
+      document.title = "Limitless Diving Available Classes"; list();
+      // A link straight to one Coaching and tours card (the left menu's Coaching sessions / Lake Hydra tours).
+      const sp = /^#special-[\w-]+$/.test(location.hash) && document.getElementById(location.hash.slice(1));
+      if (sp) { sp.classList.add("picked"); window.scrollTo(0, Math.max(0, sp.getBoundingClientRect().top + window.scrollY - 80)); }
+    }
   }
   window.addEventListener("hashchange", route);
 

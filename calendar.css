@@ -407,3 +407,4 @@ a.cal-ro:hover, a.cal-ro:focus-visible { border-color: var(--accent); }
 a.cal-ev { text-decoration: none; box-sizing: border-box; }
 .panel a.cal-ev { color: #fff; }
 .evt-act a.btn:not(.primary) { color: var(--ink); }
+.special-card.picked { outline: 2px solid var(--shallows); outline-offset: 2px; }
