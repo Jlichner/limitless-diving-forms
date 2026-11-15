@@ -103,12 +103,33 @@ alter table public.student_profiles add column if not exists state  text not nul
 alter table public.student_profiles add column if not exists zip    text not null default '';
 -- Profile photo: the file's path in the private "avatars" storage bucket (see the end of this file).
 alter table public.student_profiles add column if not exists photo_path text not null default '';
+-- Elements of tech diving: the members-only section an Instructor or Admin switches on per student (added 2026-11-15).
+alter table public.student_profiles add column if not exists tech_access boolean not null default false;
 alter table public.student_profiles drop constraint if exists student_profiles_address_parts;
 alter table public.student_profiles drop constraint if exists student_profiles_photo_own_folder;
 alter table public.student_profiles add constraint student_profiles_photo_own_folder
   check (photo_path = '' or photo_path like id::text || '/%');
 alter table public.student_profiles add constraint student_profiles_address_parts
   check (length(street) <= 200 and length(city) <= 100 and length(state) <= 40 and length(zip) <= 20);
+
+-- Only Instructors and Admins can switch Elements of tech diving on or off. A student saving their own
+-- details can't change it; new profiles start with it off.
+create or replace function public.protect_tech_access()
+returns trigger
+language plpgsql set search_path = ''
+as $$
+begin
+  if not public.has_role('instructor') then
+    if tg_op = 'INSERT' then new.tech_access := false;
+    else new.tech_access := old.tech_access;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists student_profiles_protect_tech on public.student_profiles;
+create trigger student_profiles_protect_tech before insert or update on public.student_profiles
+  for each row execute function public.protect_tech_access();
 
 drop trigger if exists student_profiles_touch on public.student_profiles;
 create trigger student_profiles_touch before update on public.student_profiles
@@ -183,7 +204,7 @@ returns table (
   id uuid, email text, full_name text, address text, phone text,
   emergency_name text, emergency_relationship text, emergency_phone text,
   certifications jsonb, created_at timestamptz, updated_at timestamptz, email_confirmed boolean,
-  photo_path text, role text
+  photo_path text, role text, tech_access boolean
 )
 language plpgsql stable security definer set search_path = ''
 as $$
@@ -195,7 +216,7 @@ begin
     select u.id, u.email::text, coalesce(p.full_name, ''), coalesce(p.address, ''), coalesce(p.phone, ''),
            coalesce(p.emergency_name, ''), coalesce(p.emergency_relationship, ''), coalesce(p.emergency_phone, ''),
            coalesce(p.certifications, '[]'::jsonb), coalesce(p.created_at, u.created_at), coalesce(p.updated_at, u.created_at),
-           u.email_confirmed_at is not null, p.photo_path, coalesce(r.role, 'student')
+           u.email_confirmed_at is not null, p.photo_path, coalesce(r.role, 'student'), coalesce(p.tech_access, false)
     from auth.users u
     left join public.student_profiles p on p.id = u.id
     left join public.staff_roles r on r.user_id = u.id
@@ -257,6 +278,39 @@ end;
 $$;
 revoke all on function public.set_staff_role(text, text) from public, anon;
 grant execute on function public.set_staff_role(text, text) to authenticated;
+
+-- ---------- Elements of tech diving access (added 2026-11-15) ----------
+-- Instructors and Admins switch it on for a person from Records → Students. Works for staff accounts too
+-- (makes their profile row if they don't have one yet).
+create or replace function public.set_tech_access(member uuid, allow boolean)
+returns boolean
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only Instructors and Admins can change tech diving access' using errcode = '42501';
+  end if;
+  if not exists (select 1 from auth.users where id = member) then
+    raise exception 'No account found' using errcode = 'P0002';
+  end if;
+  insert into public.student_profiles (id, tech_access) values (member, coalesce(allow, false))
+  on conflict (id) do update set tech_access = excluded.tech_access;
+  return coalesce(allow, false);
+end;
+$$;
+revoke all on function public.set_tech_access(uuid, boolean) from public, anon;
+grant execute on function public.set_tech_access(uuid, boolean) to authenticated;
+
+-- True when you may open Elements of tech diving: it's switched on in your profile, or you're an Instructor or Admin.
+create or replace function public.my_tech_access()
+returns boolean
+language sql stable security definer set search_path = ''
+as $$
+  select public.has_role('instructor')
+      or coalesce((select tech_access from public.student_profiles where id = (select auth.uid())), false);
+$$;
+revoke all on function public.my_tech_access() from public, anon;
+grant execute on function public.my_tech_access() to authenticated;
 
 -- ---------- training progress the instructor shares with each student ----------
 create table if not exists public.student_progress (

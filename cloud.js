@@ -18,6 +18,7 @@
     client: null, session: null, user: null,
     role: "student",             // "student" | "divemaster" | "instructor" | "admin"
     instructor: false,           // role is Instructor or Admin
+    techAccess: false,           // may open Elements of tech diving (switched on in their profile, or Instructor/Admin)
     ROLES: ["student", "divemaster", "instructor", "admin"],
     ROLE_NAMES: { student: "Student", divemaster: "Dive Master", instructor: "Instructor", admin: "Admin" },
     // True when the signed-in person's level is at least minRole.
@@ -25,11 +26,14 @@
     url, key,
     onChange(fn) { listeners.push(fn); },
     async refreshRole() {
-      C.role = "student"; C.instructor = false;
-      if (!C.client || !C.user) return C.role;
-      const { data, error } = await C.client.rpc("my_role");
-      if (!error && C.ROLES.includes(data)) C.role = data;
+      C.role = "student"; C.instructor = false; C.techAccess = false;
+      if (!C.client || !C.user) { techLink(); return C.role; }
+      const [r, t] = await Promise.all([C.client.rpc("my_role"), C.client.rpc("my_tech_access")]);
+      if (!r.error && C.ROLES.includes(r.data)) C.role = r.data;
       C.instructor = C.can("instructor");
+      // Before schema.sql is re-run there's no my_tech_access(): only Instructors and Admins get in then.
+      C.techAccess = t.error ? C.instructor : t.data === true;
+      techLink();
       return C.role;
     },
     signOut() { return C.client ? C.client.auth.signOut() : Promise.resolve(); },
@@ -48,6 +52,22 @@
     }
   };
 
+  // Elements of tech diving: add its link to the top menu of every page for people who have access,
+  // and take it away again for everyone else (e.g. after logging out).
+  function techLink() {
+    if (typeof document === "undefined") return;
+    document.querySelectorAll(".pubnav").forEach(nav => {
+      let a = nav.querySelector("a.tech-link");
+      if (!C.techAccess) { if (a) a.remove(); return; }
+      if (a) return;
+      a = document.createElement("a");
+      a.href = "tech-diving.html"; a.className = "tech-link"; a.textContent = "Elements of tech diving";
+      if (/tech-diving\.html$/.test(location.pathname)) { a.classList.add("on"); a.setAttribute("aria-current", "page"); }
+      const after = nav.querySelector('a[href="diving-physics.html"]') || nav.querySelector('a[href="account.html"]');
+      if (after) after.insertAdjacentElement("afterend", a); else nav.appendChild(a);
+    });
+  }
+
   function emit(event) { listeners.forEach(fn => { try { fn(event); } catch (e) { console.error(e); } }); }
 
   let resolveReady;
@@ -64,7 +84,7 @@
       // Don't call Supabase inside this callback (it can deadlock); finish the work afterwards.
       setTimeout(async () => {
         if (first || (C.user && C.user.id) !== prev || event === "SIGNED_IN") await C.refreshRole();
-        if (!C.user) { C.role = "student"; C.instructor = false; }
+        if (!C.user) { C.role = "student"; C.instructor = false; C.techAccess = false; techLink(); }
         if (first) { first = false; C.loaded = true; resolveReady(C); }
         emit(event);
       }, 0);
