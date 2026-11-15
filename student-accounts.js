@@ -343,10 +343,25 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       ${acc.emergency_name || acc.emergency_phone ? `<dl class="dir-dl">${row("Name", esc([acc.emergency_name, acc.emergency_relationship ? "(" + acc.emergency_relationship + ")" : ""].filter(Boolean).join(" ")))}${row("Phone", telLink(acc.emergency_phone))}</dl>` : `<p class="hint">None given yet.</p>`}
       <h2 class="sec">Certifications</h2>
       ${certs.length ? `<ul class="dir-certs">${certs.map(c => `<li>${esc(certText(c))}</li>`).join("")}</ul>` : `<p class="hint">None listed yet.</p>`}
+      ${techBlock(acc)}
       <h2 class="sec">Course records</h2>
       ${p ? `<p class="hint">${enrolled.length ? enrolled.map(e => esc(L().COURSES[e.course].name)).join(", ") : "No courses yet"} · <button class="linkbtn" data-sa="open" data-id="${esc(p.id)}">Open ${esc(p.name || "their")} record</button></p>`
         : `<p class="hint">Not linked to a course record in this browser yet.${C().can("instructor") ? "" : " An Instructor can link it."}</p>`}
       ${C().can("instructor") && !p ? linkBlock(acc) : ""}`;
+  }
+  // Elements of tech diving (tech-diving.html): Instructors and Admins switch it on per person.
+  function techBlock(acc) {
+    const { esc } = L();
+    const staffSees = ["instructor", "admin"].includes(acc.role || "student");
+    let body;
+    if (typeof acc.tech_access !== "boolean") body = `<p class="hint">Run the latest <code>supabase/schema.sql</code> to switch this on for students.</p>`;
+    else if (staffSees) body = `<p class="hint">${esc(roleName(acc.role))}s always have access.</p>`;
+    else {
+      const on = acc.tech_access;
+      body = `<p class="hint tech-state"><span class="sa-badge${on ? "" : " wait"}">${on ? "On" : "Off"}</span> ${on ? "They see Elements of tech diving in their menu and Student portal." : "Hidden from them. Switch it on when they're ready."}</p>
+        ${C().can("instructor") ? `<div class="row-actions"><button class="btn${on ? "" : " primary"}" data-sa="tech" data-acc="${esc(acc.id)}" data-on="${on ? "0" : "1"}" aria-pressed="${on}"${v.busy ? " disabled" : ""}>${on ? "Turn off access" : "Turn on access"}</button></div>` : ""}`;
+    }
+    return `<h2 class="sec">Elements of tech diving</h2>${body}`;
   }
   function renderDirectory(switchHtml) {
     const { esc } = L();
@@ -456,6 +471,19 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       case "pull": { const p = linkedPerson(acc); if (p) { applyAccount(p, acc, true); L().save(); rerender(); L().toast("Copied " + (p.name || "their") + " details from the account"); } break; }
       case "unlink": { const p = L().personById(b.dataset.id); if (p) { p.accountId = ""; L().save(); rerender(); L().toast("Unlinked. Share progress again to remove it from their account."); } break; }
       case "open": L().go("students", { psel: b.dataset.id }); break;
+      case "tech": {
+        if (!acc) break;
+        const allow = b.dataset.on === "1";
+        v.busy = true; rerender();
+        const { error } = await C().client.rpc("set_tech_access", { member: acc.id, allow });
+        v.busy = false;
+        if (error) { rerender(); L().toast("Not changed: " + C().explain(error)); break; }
+        acc.tech_access = allow;
+        (v.members || []).concat(v.accounts || []).forEach(a => { if (a.id === acc.id) a.tech_access = allow; });
+        setNote(""); rerender();
+        L().toast(allow ? "Elements of tech diving is on for " + (acc.full_name || "them") : "Elements of tech diving is off for " + (acc.full_name || "them"));
+        break;
+      }
       case "share": {
         v.busy = true; setNote(""); rerender();
         try { const n = await shareProgress(); setNote("Shared " + n + " course record" + (n === 1 ? "" : "s") + ". Students see it on their account page now.", "ok"); }

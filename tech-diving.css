@@ -1,0 +1,91 @@
+/* Limitless Diving — Elements of tech diving (tech-diving.html). Uses the colors from styles.css. */
+.td { --gold: #c9a24a; --gold-ink: #d9ae4f; }
+
+/* ---------- tabs across the top ---------- */
+.td-tabs { position: sticky; top: 0; z-index: 20; background: var(--deep); border-radius: 12px; padding: 6px; box-shadow: 0 2px 10px rgba(4, 19, 27, .18); }
+.td-tabs > ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.td-tabs li { position: relative; display: flex; }
+.td-tab, .td-caret { font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: .02em; color: var(--deep-muted, #b9dde1); text-decoration: none;
+  padding: 8px 12px; border-radius: 8px; border: 0; background: transparent; cursor: pointer; line-height: 1.2; min-height: 36px; display: inline-flex; align-items: center; }
+.has-sub .td-tab { padding-right: 4px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.td-caret { padding: 8px 8px 8px 4px; font-size: 13px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.td-tab:hover, .td-caret:hover { background: rgba(255, 255, 255, .08); color: #fff; }
+.td-tab.on, .td-caret.on { background: var(--shallows); color: #062027; }
+.td-tab:focus-visible, .td-caret:focus-visible, .td-menu a:focus-visible, .td-subtabs a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.td-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0; min-width: 190px; list-style: none; margin: 0; padding: 6px; z-index: 30;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(4, 19, 27, .25); }
+.has-sub.open .td-menu { display: block; }
+@media (hover: hover) and (pointer: fine) { .has-sub:hover .td-menu { display: block; } .has-sub:hover .td-menu::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; } }
+.td-menu a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--ink); text-decoration: none; font-weight: 600; }
+.td-menu a:hover { background: var(--accent-soft); }
+.td-menu a[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+.td-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -8px; }
+.td-subtabs a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 600; font-size: 14px; }
+.td-subtabs a:hover { border-color: var(--accent); }
+.td-subtabs a.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+/* ---------- landing ---------- */
+.td-hero { position: relative; overflow: hidden; border-radius: 14px; background: #04080b; color: #e9dcc0; border: 1px solid #3a2f17; padding: 36px 32px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: center; }
+.td-topo { position: absolute; inset: 0; width: 100%; height: 100%; color: rgba(201, 162, 74, .16); pointer-events: none; }
+.td-hero .td-rose { position: relative; width: 100%; max-width: 200px; color: var(--gold); justify-self: center; }
+.td-hero-text { position: relative; display: flex; flex-direction: column; gap: 12px; }
+.td-eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.td-hero h1 { font-family: var(--font-display); font-size: clamp(34px, 6vw, 54px); line-height: 1; color: var(--gold-ink); margin: 0; letter-spacing: .02em; }
+.td-motto { margin: 0; display: flex; flex-direction: column; gap: 2px; border-left: 3px solid var(--gold); padding-left: 12px; }
+.td-motto i { font-family: var(--font-display); font-style: normal; font-size: clamp(18px, 3vw, 24px); letter-spacing: .08em; text-transform: uppercase; color: var(--gold-ink); }
+.td-motto span { font-size: 14px; color: #b9ad94; }
+.td-lead { margin: 0; font-size: 17px; max-width: 60ch; }
+.td-hero .btn.primary { background: var(--gold); border-color: var(--gold); color: #04080b; }
+.td-hero .btn:not(.primary) { background: transparent; color: #e9dcc0; border-color: #8a6d2a; }
+.td-hero .btn { text-decoration: none; }
+.td-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 12px; }
+.td-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--accent); color: var(--ink); text-decoration: none; }
+.td-card:hover { border-color: var(--accent); }
+.td-card b { font-family: var(--font-display); font-size: 20px; }
+.td-card span { font-size: 14px; color: var(--muted); }
+.td-card em { font-style: normal; font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.td-source p { max-width: 70ch; }
+
+/* ---------- the rig diagram ---------- */
+.td-figure { margin: 8px 0 0; display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: center; }
+.td-figure svg { width: 100%; height: auto; display: block; }
+.td-body path, .td-body circle { fill: var(--surface-2); stroke: var(--muted); stroke-width: 2; }
+.td-harness path { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; }
+.td-hose { fill: none; stroke: #e2b53c; stroke-width: 4; stroke-dasharray: 9 6; stroke-linecap: round; }
+.td-num circle { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.td-num text { font-family: var(--font-mono); font-size: 14px; font-weight: 600; fill: var(--accent-ink); }
+.td-figure figcaption { font-size: 14px; color: var(--ink); }
+.td-legend { margin: 0 0 10px; padding-left: 24px; display: flex; flex-direction: column; gap: 4px; }
+.td-figure figcaption span { color: var(--muted); font-size: 13px; }
+@media (max-width: 640px) { .td-figure { grid-template-columns: minmax(0, 1fr); } .td-figure svg { max-width: 280px; margin: 0 auto; } }
+
+/* ---------- lesson pages ---------- */
+.td-photo { aspect-ratio: 21 / 7; }
+.td-article { display: flex; flex-direction: column; gap: 4px; }
+.td-article .watermark { position: absolute; right: -40px; top: -40px; width: 240px; color: var(--accent); opacity: .07; pointer-events: none; }
+.td-sec { max-width: 74ch; position: relative; }
+.td-sec p, .td-sec li { line-height: 1.55; }
+.td-sec ul, .td-sec ol { padding-left: 22px; margin: 6px 0 12px; display: flex; flex-direction: column; gap: 6px; }
+.td-sec h2.sec:first-child { margin-top: 4px; }
+.td-note { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 10px 14px; margin: 12px 0; }
+.td-note.today { border-left-color: var(--gold); background: var(--ip-bg); }
+.td-note b { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.td-note.today b { color: var(--ip); }
+.td-note p { margin: 4px 0 0; }
+.td-table { overflow-x: auto; margin: 6px 0 12px; }
+.td-table table { border-collapse: collapse; width: 100%; font-size: 15px; }
+.td-table th, .td-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.td-table th { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.td-check { margin-top: 18px; border: 1px dashed var(--accent); border-radius: 10px; padding: 12px 14px; background: var(--surface-2); max-width: 74ch; }
+.td-check summary { cursor: pointer; }
+.td-check p { margin: 8px 0 0; }
+.td-pager { display: flex; justify-content: space-between; gap: 10px; }
+.td-pager .btn { text-decoration: none; }
+
+@media (max-width: 760px) {
+  .td-hero { grid-template-columns: minmax(0, 1fr); padding: 22px 18px; gap: 16px; }
+  .td-hero .td-rose { max-width: 110px; }
+  .td-tabs { position: static; }
+  .td-tab, .td-caret { font-size: 15px; padding: 7px 9px; }
+  .td-photo { aspect-ratio: 16 / 9; }
+}
