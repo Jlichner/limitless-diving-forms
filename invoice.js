@@ -110,7 +110,7 @@
         Every field stays editable, and you can print it or save it as a PDF.</p>
         <button class="btn primary" data-iact="new">+ New invoice</button></div>`;
     }
-    const t = totals(inv), cat = S().catalog.filter(c => c.desc);
+    const t = totals(inv), cat = S().catalog.filter(c => c.desc), sus = (L().state.classSetups || []).filter(x => L().feeLines(x).length);
     const students = L().state.students.filter(s => s.name).slice().sort((a, b) => a.name.localeCompare(b.name));
     return `<div class="no-print">
       <div class="rec-head"><h1 id="inv-title">Invoice ${esc(inv.number)}</h1>
@@ -135,7 +135,9 @@
           <td class="x"><button class="btn small danger" data-iact="rm-item" data-i="${i}">Remove</button></td></tr>`).join("")}
       </tbody></table></div>
       <div class="row-actions"><button class="btn" data-iact="add-item">+ Add line</button>
-        ${cat.length ? `<select id="inv-cat" aria-label="Add a saved item"><option value="">+ Add a saved item…</option>${cat.map((c, i) => `<option value="${i}">${esc(c.desc)} — ${money(c.amt)}</option>`).join("")}</select>` : ""}</div>
+        ${cat.length || sus.length ? `<select id="inv-cat" aria-label="Add a saved item"><option value="">+ Add a saved item…</option>
+          ${sus.length ? `<optgroup label="A class's fees (Business → Classes)">${sus.map(x => `<option value="s:${esc(x.id)}">${esc(x.name || "Untitled class")} — ${money(L().setupTotal(x))}</option>`).join("")}</optgroup>` : ""}
+          ${cat.length ? `<optgroup label="Saved items">${cat.map((c, i) => `<option value="${i}">${esc(c.desc)} — ${money(c.amt)}</option>`).join("")}</optgroup>` : ""}</select>` : ""}</div>
 
       <h2 class="sec">Payments received</h2>
       <p class="hint">Shown on the invoice under the subtotal. Leave empty to show only the total due, like the original template.</p>
@@ -247,6 +249,11 @@
       const inv = cur(), s = L().state.students.find(x => x.id === el.value); if (!inv || !s) return;
       fillFromStudent(inv, s); L().save(); rerender();
       L().toast("Filled in from " + (s.name || "student"));
+    } else if (el.id === "inv-cat" && el.value.startsWith("s:")) {
+      const inv = cur(), su = (L().state.classSetups || []).find(x => x.id === el.value.slice(2)); if (!inv || !su) return;
+      inv.items = inv.items.filter(r => r.desc || (r.amt !== "" && r.amt != null));
+      L().feeLines(su).forEach(x => inv.items.push({ desc: x.desc, amt: x.amt }));
+      L().save(); rerender();
     } else if (el.id === "inv-cat" && el.value !== "") {
       const inv = cur(), c = S().catalog.filter(x => x.desc)[Number(el.value)]; if (!inv || !c) return;
       const empty = inv.items.findIndex(r => !r.desc && (r.amt === "" || r.amt == null));

@@ -92,6 +92,38 @@
     };
   }
 
+  // A calendar entry made from a class set up under Business → Classes (class-setup.js): its type, course,
+  // price (the setup's fee lines added up), time, location, seats and description. The entry keeps setupId, so
+  // the learning agreement and the invoice can use the setup's fee lines and deposit.
+  function fromSetup(su, date) {
+    const t = types().find(x => x.id === (su.type || "class")) || types().find(x => x.course) || types()[0];
+    const n = blank(t.course && L().COURSES[su.course] ? su.course : L().COURSE_ORDER[0], date || "");
+    n.type = t.id;
+    const days = Math.max(1, Math.floor(Number(su.days)) || 0);
+    if (!t.course || Number(su.days) > 0) n.dates = Array.from({ length: t.course ? days : Math.max(1, days) }, (_, i) => {
+      const d = G().parse(date); if (!d) return ""; d.setDate(d.getDate() + i); return G().ymd(d);
+    });
+    if (!t.course) n.course = "";
+    const total = L().setupTotal(su), cName = t.course && L().COURSES[n.course] ? (L().COURSES[n.course].fullName || L().COURSES[n.course].name) : "";
+    Object.assign(n, {
+      setupId: su.id, title: su.name && su.name !== cName ? su.name : "",
+      time: su.time || (t.course ? n.time : ""), location: su.location || (t.course ? n.location : ""),
+      price: L().feeLines(su).length ? total : "", seats: Number(su.seats) > 0 ? Number(su.seats) : "", notes: su.notes || "",
+      minCert: t.course ? "" : su.minCert || ""
+    });
+    return n;
+  }
+  function addFromSetup(su, date) { const n = fromSetup(su, date); data().classes.push(n); L().save(); return n; }
+  function setupSelect(k) {
+    const { esc, money } = L(), list = L().state.classSetups || [];
+    if (!list.length) return "";
+    const su = L().setupOf(k);
+    return `<div class="field"><label for="cal-setup">Class setup</label><select id="cal-setup">
+        <option value=""${su ? "" : " selected"}>None (set the details here)</option>
+        ${list.map(x => `<option value="${esc(x.id)}"${su === x ? " selected" : ""}>${esc(x.name || "Untitled class")}${L().feeLines(x).length ? " · " + money(L().setupTotal(x)) : ""}</option>`).join("")}</select>
+        <span class="hint" style="margin:0">${su ? "Fees and deposit come from " + esc(su.name || "this setup") + ". <button class=\"linkbtn\" data-cact=\"open-setup\">Open setup</button>" : "Pick one to fill this in from Business → Classes."}</span></div>`;
+  }
+
   // What classes.json holds: published classes that haven't ended, with public details only.
   function publicData() {
     const s = S(), t = G().today();
@@ -413,6 +445,7 @@
         <span class="hint" style="margin:0">${k.published ? "Published entries go out the next time you use Publish calendar." : "Drafts stay private to this app."}</span></div>
 
       <h2 class="sec">${esc(ty.name)}</h2><div class="grid">
+        ${setupSelect(k)}
         ${typeSel}
         ${isClass ? `<div class="field"><label for="cal-course">Course</label><select id="cal-course"${ros.length ? " disabled" : ""}>
           ${L().courseOptions(k.course)}</select>
@@ -595,6 +628,18 @@
       if (!wasClass && isCourseType(k)) { const fresh = blank(k.course, G().firstDate(k.dates)); k.dates = fresh.dates; k.price = fresh.price; if (!k.time) k.time = fresh.time; }
       L().save(); rerender(); const x = document.getElementById(isCourseType(k) ? "cal-type" : "cal-f-title"); if (x) x.focus(); return;
     }
+    if (el.id === "cal-setup") {
+      const k = cur(); if (!k) return;
+      if (!el.value) { delete k.setupId; L().save(); rerender(); return; }
+      const su = (L().state.classSetups || []).find(x => x.id === el.value); if (!su) return;
+      const ros = roster(k);
+      if (ros.length && (su.type || "class") !== (k.type || "class")) { el.value = k.setupId || ""; L().toast("Remove the students first: that setup is a different type."); return; }
+      if (ros.length && su.course && su.course !== k.course) { el.value = k.setupId || ""; L().toast("Remove the students first: that setup is for a different course."); return; }
+      const fresh = fromSetup(su, G().firstDate(k.dates));
+      ["type", "course", "setupId", "title", "time", "location", "price", "seats", "notes", "minCert"].forEach(x => { k[x] = fresh[x]; });
+      if (!ros.length) k.dates = fresh.dates;
+      L().save(); rerender(); L().toast("Filled in from " + (su.name || "the class setup")); return;
+    }
     if (el.id === "cal-mincert") { const k = cur(); if (k) { k.minCert = el.value; L().save(); refresh(); } return; }
     if (el.dataset && el.dataset.ct) { typeInput(el); return; }
     if (el.id === "cal-course") {
@@ -629,6 +674,7 @@
         break;
       }
       case "pick": open(b.dataset.id); L().go("calendar"); break;
+      case "open-setup": if (k && window.LDClassSetup) window.LDClassSetup.open(k.setupId); break;
       case "su-schedule": answerSignup(b.dataset.id, "schedule"); break;
       case "su-decline": answerSignup(b.dataset.id, "decline"); break;
       case "su-remove": answerSignup(b.dataset.id, "remove"); break;
@@ -711,6 +757,8 @@
     }
   });
 
-  window.LDCalendar = { render, renderTypes, types, canEdit, newEntry, renderForm, closeForm, removeEntry };
+  // Opens one entry on the Calendar (used by Business → Classes).
+  function show(id) { open(id); L().go("calendar"); }
+  window.LDCalendar = { render, renderTypes, types, canEdit, newEntry, renderForm, closeForm, removeEntry, addFromSetup, show, roster, titleOf, isPast };
   L().render();
 })();

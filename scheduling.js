@@ -83,6 +83,9 @@
 ## Student Responsibilities
 ${STUDENT_DUTIES}
 
+## Course Investment
+{{fees}}
+
 ## Payment Policy
 {{payment_policy}}
 
@@ -152,6 +155,7 @@ ${STUDENT_DUTIES}`
     ["student_certs", "Certifications the student holds"],
     ["event_title", "Class, event, tour or session name"], ["event_type", "Class, Event, Tour, Coaching…"],
     ["dates", "Dates"], ["time", "Time"], ["location", "Location"], ["price", "Fee"], ["notes", "Notes on this schedule"],
+    ["fees", "Fee lines, what's included and the total (bullets, from Business → Classes)"], ["deposit", "Deposit amount"],
     ["course_name", "Course name (classes)"], ["min_age", "Minimum age"], ["prerequisites", "Prerequisites"],
     ["dives", "Required open water dives"], ["max_depth", "Maximum depth"], ["standards_source", "Where the standards come from"],
     ["payment_notes", "Payment notes from the course settings"],
@@ -170,6 +174,12 @@ ${STUDENT_DUTIES}`
     const st = L().state;
     if (!Array.isArray(st.assignments)) st.assignments = [];
     if (!Array.isArray(st.agreementTemplates) || !st.agreementTemplates.length) st.agreementTemplates = JSON.parse(JSON.stringify(DEFAULT_TEMPLATES));
+    // Templates saved before Business → Classes: the course agreement gains a Course Investment section (once).
+    if (!st.feesSectionAdded) {
+      st.feesSectionAdded = true;
+      const t = st.agreementTemplates.find(x => x.id === "t-class");
+      if (t && !/\{\{\s*fees\s*\}\}/.test(t.body || "") && (t.body || "").includes("## Payment Policy")) t.body = t.body.replace("## Payment Policy", "## Course Investment\n{{fees}}\n\n## Payment Policy");
+    }
     return st;
   }
   const templates = () => data().agreementTemplates;
@@ -201,7 +211,7 @@ ${STUDENT_DUTIES}`
       return { kind: "calendar", entry: k, type: ty, isClass, course: isClass ? k.course : "", courseName,
         title: k.title || courseName || ("Untitled " + ty.name.toLowerCase()), typeName: ty.name,
         dates: (k.dates || []).filter(Boolean).sort(), time: k.time || "", location: k.location || "",
-        price: k.price === "" || k.price == null ? "" : Number(k.price), keys: [ty.id] };
+        price: k.price === "" || k.price == null ? "" : Number(k.price), keys: [ty.id], setup: L().setupOf ? L().setupOf(k) : null };
     }
     if (t.startsWith("o:")) {
       const o = offer(id) || (a.offerName ? { id, name: a.offerName, calType: a.offerType || "event" } : null); if (!o) return null;
@@ -270,6 +280,9 @@ ${STUDENT_DUTIES}`
   // Most specific first: same course, then the event's own kind, then "any".
   function bestTemplate(ev) {
     if (!ev) return null;
+    // A class setup can name its own agreement template (Business → Classes).
+    const own = ev.setup && ev.setup.template && templates().find(t => t.id === ev.setup.template);
+    if (own) return own;
     const list = templates(), score = (t) => {
       const kindHit = ev.keys.indexOf(t.for), anyHit = t.for === "any";
       if (kindHit < 0 && !anyHit) return -1;
@@ -296,7 +309,24 @@ ${STUDENT_DUTIES}`
       instructor: prog.instructor || ow.instructor || "", instructor_phone: prog.phone || ow.phone || "",
       instructor_email: prog.email || ow.email || "",
       today: fmtDate(G().today())
-    }, standards(ev.course), proposal(ev, prog, priceTxt));
+    }, standards(ev.course), proposal(ev, prog, priceTxt), feeValues(ev, prog));
+  }
+  // {{fees}}: the class setup's fee lines, then its included / not included lines and the total. Without a setup,
+  // the course's fee line and Course investment lines from Settings (like the printed proposal).
+  function feeValues(ev, pr) {
+    const { money } = L(), su = ev && ev.setup, rows = [];
+    const price = ev && ev.price !== "" && ev.price != null && isFinite(Number(ev.price)) ? Number(ev.price) : Number(pr.price) || 0;
+    if (su && L().feeLines(su).length) {
+      const lines = L().feeLines(su), sum = L().setupTotal(su);
+      if (Math.abs(sum - price) < 0.005 || !price) lines.forEach(x => rows.push("- " + x.desc + ": " + money(x.amt)));
+      else rows.push("- " + (ev.title || "Class") + ": " + money(price));
+    } else if (price) rows.push("- " + (pr.feeLabel || pr.program || (ev && ev.title) || "Course fee") + ": " + money(price));
+    const extra = su ? su.included : (ev && ev.course ? pr.costRows : null);
+    (extra || []).filter(x => x && x.item).forEach(x => rows.push("- " + x.item + (x.cost ? ": " + x.cost : "")));
+    if (price) rows.push("- Total: " + money(price));
+    const pct = su && su.depositPct !== "" && su.depositPct != null ? Number(su.depositPct) || 0 : Number(pr.depositPct) || 0;
+    const base = su ? Math.max(0, price - L().feeLines(su).filter(x => !x.deposit).reduce((a, x) => a + x.amt, 0)) : price;
+    return { fees: rows.join("\n"), deposit: base && pct ? money(Math.round(base * pct) / 100) + " (" + pct + "% of the class fee)" : "" };
   }
   // The course's proposal wording (Settings → that course), for the learning agreement.
   function proposal(ev, pr, priceTxt) {
@@ -311,8 +341,10 @@ ${STUDENT_DUTIES}`
     out.included = (pr.included || []).filter(x => x && x.item).map(x => "- " + x.item + (x.detail ? ": " + x.detail : "")).join("\n");
     out.expectations_callout = pr.expectationsCallout || ""; out.expectations = pr.expectations || "";
     out.commitment = pr.commitment || ""; out.proficiency = pr.proficiency || ""; out.acknowledgment = pr.acknowledgment || "";
-    const price = ev.price !== "" && isFinite(Number(ev.price)) ? Number(ev.price) : Number(pr.price) || 0, pct = Number(pr.depositPct) || 0;
-    const dep = price && pct ? "A " + pct + "% non-refundable deposit of " + money(Math.round(price * pct) / 100) + " is required to secure " + (pr.depositPurpose || "training dates") + "." : "";
+    const su = ev.setup, price = ev.price !== "" && isFinite(Number(ev.price)) ? Number(ev.price) : Number(pr.price) || 0;
+    const pct = su && su.depositPct !== "" && su.depositPct != null ? Number(su.depositPct) || 0 : Number(pr.depositPct) || 0;
+    const base = su ? Math.max(0, price - L().feeLines(su).filter(x => !x.deposit).reduce((a, x) => a + x.amt, 0)) : price;
+    const dep = base && pct ? "A " + pct + "% non-refundable deposit of " + money(Math.round(base * pct) / 100) + (su && base !== price ? " (" + pct + "% of the " + money(base) + " class fee)" : "") + " is required to secure " + (pr.depositPurpose || "training dates") + "." : "";
     out.payment_policy = [dep, pr.paymentNotes || ""].filter(Boolean).join(" ");
     return out;
   }
@@ -552,7 +584,7 @@ ${vals.business}`
 
       <h2 class="sec">2 · Class, event, tour or coaching</h2>
       ${building ? "" : `<div class="sch-pick">${targetSelect(a)}${canBuild ? `<span class="sch-or">or</span>
-        <select id="sch-build-type" aria-label="Create a new calendar entry"><option value="">+ Create a new…</option>${calTypes().map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select>` : ""}</div>
+        <select id="sch-build-type" aria-label="Create a new calendar entry"><option value="">+ Create a new…</option>${(L().state.classSetups || []).length ? `<optgroup label="From a class setup">${L().state.classSetups.map(x => `<option value="setup:${esc(x.id)}">${esc(x.name || "Untitled class")}</option>`).join("")}</optgroup><optgroup label="Blank">` : ""}${calTypes().map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}${(L().state.classSetups || []).length ? "</optgroup>" : ""}</select>` : ""}</div>
       ${(L().state.classes || []).length ? "" : `<p class="hint">Nothing is on the Calendar yet. Create a class or event here, or pick a coaching or tour listing.</p>`}`}
       ${details}
 
@@ -651,7 +683,8 @@ ${vals.business}`
       if (en) L().toast((person(a).name || "Student") + " enrolled in " + eventOf(a).title);
     } else if (el.id === "sch-build-type" && a && el.value) {
       // A new class, event or tour made right here, with the Calendar's form, then this student is put on it.
-      const k = window.LDCalendar.newEntry(el.value);
+      const su = el.value.startsWith("setup:") && (L().state.classSetups || []).find(x => x.id === el.value.slice(6));
+      const k = su && window.LDCalendar.addFromSetup ? window.LDCalendar.addFromSetup(su, "") : window.LDCalendar.newEntry(el.value);
       a.target = "k:" + k.id; a.building = k.id; a.buildNew = true; L().save(); rerender();
       const x = document.getElementById(typeById(k.type).course ? "cal-course" : "cal-f-title"); if (x) x.focus();
     } else if (el.id === "sch-tpl-pick") { v.tplSel = el.value; rerender(); }
