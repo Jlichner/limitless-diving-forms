@@ -268,7 +268,35 @@
     const t = new Date(d + "T12:00:00"); if (isNaN(t)) return d;
     return t.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
-  function deposit(e) { const pr = P(e); return Math.round((Number(pr.price) || 0) * (Number(pr.depositPct) || 0)) / 100; }
+  // What a student pays for a course record. A record enrolled in a calendar class takes the class's price,
+  // and that class's setup (Business → Classes, class-setup.js) gives the deposit and the fee lines. Records not
+  // on a class, and classes with no price, fall back to the course's default fee in Settings.
+  function classOfEnr(e) { return e && e.classId ? (state.classes || []).find(k => k.id === e.classId) || null : null; }
+  function setupOf(k) { return k && k.setupId ? (state.classSetups || []).find(x => x.id === k.setupId) || null : null; }
+  function feeLines(su) { return ((su && su.fees) || []).filter(x => x && (x.desc || x.amt)).map(x => ({ desc: x.desc || "", amt: Number(x.amt) || 0, deposit: x.deposit !== false })); }
+  function setupTotal(su) { return feeLines(su).reduce((a, x) => a + x.amt, 0); }
+  function feeOf(e) {
+    if (e && e.pay) {
+      const k = classOfEnr(e), su = setupOf(k);
+      if (k && k.price !== "" && k.price != null && isFinite(Number(k.price))) return Number(k.price);
+      if (su && feeLines(su).length) return setupTotal(su);
+    }
+    return Number(P(e).price) || 0;
+  }
+  function depPctOf(e) {
+    const su = e && e.pay ? setupOf(classOfEnr(e)) : null;
+    return su && su.depositPct !== "" && su.depositPct != null ? Number(su.depositPct) || 0 : Number(P(e).depositPct) || 0;
+  }
+  // The deposit is a share (50% unless the setup says otherwise) of the class fee only: fee lines marked
+  // "Not in deposit" in the class setup (eLearning, processing…) are left out.
+  function depositBase(e) {
+    const su = e && e.pay ? setupOf(classOfEnr(e)) : null, fee = feeOf(e);
+    if (!su) return fee;
+    const other = feeLines(su).filter((x, i) => !inDeposit(su, i)).reduce((a, x) => a + x.amt, 0);
+    return Math.max(0, fee - other);
+  }
+  function inDeposit(su, i) { const x = ((su && su.fees) || [])[i]; return !!x && x.deposit !== false; }
+  function deposit(e) { return Math.round(depositBase(e) * depPctOf(e)) / 100; }
   function progress(s) {
     const c = C(s), SK = c.skills, FI = c.final;
     const m = SK.filter((_, i) => s.skills[i] && s.skills[i].m).length;
@@ -285,7 +313,7 @@
   }
   function owed(s) {
     const extras = (s.pay.extras || []).reduce((a, x) => a + (Number(x.amt) || 0), 0);
-    const price = Number(P(s).price) || 0, dep = deposit(s);
+    const price = feeOf(s), dep = deposit(s);
     const total = price + extras;
     let paid = 0;
     if (s.pay.depPaid) paid += dep;
@@ -299,8 +327,11 @@
     const items = [], payments = [];
     const on = (d) => d ? " (" + fmtDate(d) + ")" : "";
     enrs.forEach(e => {
-      const pr = Number(P(e).price) || 0, dep = deposit(e), label = P(e).program || C(e).fullName || C(e).name;
-      items.push({ desc: label + " — course fee", amt: pr });
+      const pr = feeOf(e), dep = deposit(e), label = P(e).program || C(e).fullName || C(e).name;
+      // A class set up under Business → Classes bills its own fee lines when they add up to the class price.
+      const k = classOfEnr(e), lines = feeLines(setupOf(k));
+      if (lines.length && Math.abs(lines.reduce((a, x) => a + x.amt, 0) - pr) < 0.005) lines.forEach(x => items.push({ desc: x.desc, amt: x.amt }));
+      else items.push({ desc: ((k && k.title) || label) + " — course fee", amt: pr });
       (e.pay.extras || []).filter(x => x.desc || x.amt).forEach(x => items.push({ desc: "Additional training: " + (x.desc || ""), amt: Number(x.amt) || 0 }));
       if (e.pay.depPaid) payments.push({ desc: label + " deposit received" + on(e.pay.depDate), amt: dep });
       if (e.pay.balPaid) payments.push({ desc: label + " balance received" + on(e.pay.balDate), amt: pr - dep });
@@ -341,7 +372,7 @@
   // Instructors and Admins. Staff log in with Admin Log in (student-accounts.js, cloud.js). When online logins
   // aren't set up (no supabase-config.js values), everything stays open, as before.
   const RECORD_MODES = ["students", "catalog"];
-  const BUSINESS_MODES = ["scheduling", "invoices", "program"];
+  const BUSINESS_MODES = ["classes", "scheduling", "invoices", "program"];
   function minRoleFor(mode) {
     if (BUSINESS_MODES.includes(mode)) return "instructor";
     if (RECORD_MODES.includes(mode) || isCourse(mode)) return "divemaster";
@@ -374,7 +405,7 @@
       ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"]]],
       allowed("divemaster") && ["Records", [["students", "Students"]].concat(window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
-      allowed("instructor") && ["Business", [["scheduling", "Scheduling"], ["invoices", "Invoices"], ["program", "Settings"]]]
+      allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["program", "Settings"]]]
     ].filter(Boolean);
     // A catalog course without its own nav entry lights up "All courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
@@ -413,6 +444,12 @@
       // Put a student on a class, event, tour or coaching session and make their learning agreement (scheduling.js).
       main.className = "shell";
       main.innerHTML = window.LDScheduling.render();
+      return;
+    }
+    if (view.mode === "classes" && window.LDClassSetup) {
+      // Classes set up once (course, fees, deposit, defaults), then added to the calendar (class-setup.js).
+      main.className = "shell";
+      main.innerHTML = window.LDClassSetup.render();
       return;
     }
     if (view.mode === "invoices" && window.LDInvoices) {
@@ -608,10 +645,10 @@
   }
 
   function renderPay() {
-    const s = cur(), o = owed(s), pr = Number(P().price) || 0;
-    return `<h2 class="sec">Deposit — ${money(deposit())} (${esc(P().depositPct)}%, non-refundable)</h2>
+    const s = cur(), o = owed(s), pr = feeOf(s);
+    return `<h2 class="sec">Deposit — ${money(deposit(s))} (${esc(depPctOf(s))}%, non-refundable)</h2>
       <div class="grid">${check("pay.depPaid", "Deposit received")}${inp("s", "pay.depDate", "Date received", "date")}${inp("s", "pay.depMethod", "Method")}</div>
-      <h2 class="sec">Balance — ${money(pr - deposit())} (${esc(P().balanceDue || "due before open water")})</h2>
+      <h2 class="sec">Balance — ${money(pr - deposit(s))} (${esc(P().balanceDue || "due before open water")})</h2>
       <div class="grid">${check("pay.balPaid", "Balance received")}${inp("s", "pay.balDate", "Date received", "date")}${inp("s", "pay.balMethod", "Method")}</div>
       <h2 class="sec">Additional training charges</h2>
       <p class="hint">Not included in the course fee. Discuss with the student before adding a charge.</p>
@@ -622,7 +659,7 @@
       <div class="totals" id="totals">${totalsHtml(o)}</div>`;
   }
   function totalsHtml(o) {
-    return `<span>Course fee</span><span class="money">${money(P().price)}</span>
+    return `<span>Course fee</span><span class="money">${money(feeOf(cur()))}</span>
       <span>Additional training</span><span class="money">${money(o.extras)}</span>
       <span>Paid</span><span class="money">−${money(o.paid)}</span>
       <span class="grand">Balance due</span><span class="money grand">${money(o.due)}</span>`;
@@ -756,7 +793,9 @@
         ${inp("p", "business", "Business name", "text", "wide")}${inp("p", "docTitle", "Document title")}${inp("p", "program", "Program")}
         ${inp("p", "format", "Format", "text", "wide")}${inp("p", "tagline", "Tagline", "text", "wide")}
         ${inp("p", "schedule", "Schedule (shown when a student has no dates)", "text", "wide")}${inp("p", "hours", "Daily hours")}${inp("p", "location", "Location")}</div>
-      <h2 class="sec">Pricing &amp; payment</h2><div class="grid">${inp("p", "price", "Course fee ($)", "number")}${inp("p", "depositPct", "Deposit (%)", "number")}
+      <h2 class="sec">Pricing &amp; payment</h2>
+      <p class="hint">Class prices, fee lines and deposits are set under <button class="linkbtn" data-mode="classes">Business → Classes</button>. The fee and deposit here are only used for a student whose class has no price.</p>
+      <div class="grid">${inp("p", "price", "Default course fee ($)", "number")}${inp("p", "depositPct", "Default deposit (%)", "number")}
         <div class="field"><span class="lbl">Deposit amount</span><b class="money" id="dep-amt">${money(settingsDeposit())}</b></div>
         ${inp("p", "feeLabel", "Course fee line in Course Investment", "text", "wide")}
         ${inp("p", "depositPurpose", "Deposit secures…")}${inp("p", "balanceDue", "Balance is…")}
@@ -1048,7 +1087,8 @@
     registerCourses: (defs) => { defs.forEach(d => { registerCourse(d); adoptCourse(d.id); }); render(); },
     defaultProgram: () => clone(DEFAULT_PROGRAM), courseOptions, isCourse, view: () => view,
     COURSE_ORDER, program: (id) => P({ course: id }), enrollInClass, addStudent, go,
-    get state() { return state; }, save, render, toast, esc, money, fmtDate, billing, progress, owed, nameOf, personById
+    get state() { return state; }, save, render, toast, esc, money, fmtDate, billing, progress, owed, nameOf, personById,
+    feeLines, setupTotal, setupOf, depositOf: deposit
   });
 
   render();
