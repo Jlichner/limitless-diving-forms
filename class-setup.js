@@ -27,6 +27,7 @@
     const st = L().state;
     if (!Array.isArray(st.classSetups)) st.classSetups = [];
     if (!st.classSetupsSeeded) seed(st);
+    const ct = typeOf().id; st.classSetups.forEach(x => { if (x.type !== ct) x.type = ct; });
     return st;
   }
   // The first time: one setup for each course that already has a price in Settings, plus Intro to Tech with the
@@ -63,7 +64,8 @@
   function list() { return data().classSetups; }
   function cur() { return list().find(x => x.id === v.sel) || null; }
   function types() { return window.LDCalendar && window.LDCalendar.types ? window.LDCalendar.types() : [{ id: "class", name: "Class", course: true }]; }
-  function typeOf(su) { const t = types(); return t.find(x => x.id === (su.type || "class")) || t.find(x => x.course) || t[0]; }
+  // This page is only for classes: every setup uses the calendar's Class type (the one linked to a course).
+  function typeOf() { const t = types(); return t.find(x => x.course) || t[0]; }
   // Agency: NAUI (with NAUI Technical), TDI, or Both. It narrows the Course list and fills {{agency}}.
   const AGENCIES = [["NAUI", "NAUI"], ["TDI", "TDI"], ["Both", "Both (NAUI and TDI)"]];
   function agencyOfCourse(id) { const c = window.LDCatalog && window.LDCatalog.find(id); return c ? (/^TDI/.test(c.agency) ? "TDI" : "NAUI") : ""; }
@@ -125,7 +127,6 @@
 
       <h2 class="sec">Class</h2><div class="grid">
         ${fld("name", "Class name (shown on the calendar)", "text", "wide")}
-        <div class="field"><label for="cs-type">Calendar type</label><select id="cs-type">${types().map(t => `<option value="${esc(t.id)}"${t === ty ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></div>
         <div class="field"><label for="cs-agency">Agency</label><select id="cs-agency"><option value=""${agencyOf(su) ? "" : " selected"}>Choose…</option>
           ${AGENCIES.map(([k, l]) => `<option value="${k}"${agencyOf(su) === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
         ${isClass ? `<div class="field"><label for="cs-course">Course</label><select id="cs-course"><option value=""${c ? "" : " selected"}>Choose a course…</option>${L().courseOptions(su.course, coursesFor(agencyOf(su)).concat(su.course && !coursesFor(agencyOf(su)).includes(su.course) ? [su.course] : []))}</select></div>` : ""}</div>
@@ -214,7 +215,6 @@
     const el = e.target; if (!document.getElementById("cs-panel")) return;
     if (el.id === "cs-q") { v.q = el.value; refresh(); return; }
     const su = cur(); if (!su) return;
-    if (el.id === "cs-type") { su.type = el.value; if (!typeOf(su).course) su.course = ""; L().save(); rerender(); return; }
     if (el.id === "cs-agency") { su.agency = el.value; L().save(); rerender(); return; }
     if (el.id === "cs-course") {
       const old = courseName(su.course); su.course = el.value;
