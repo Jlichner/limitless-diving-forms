@@ -1,4 +1,4 @@
-/* Limitless Diving — Business → Classes: set up a class once, then add it to the calendar when it's time.
+/* Limitless Diving — Business → Classes: set up a class once, then pick it on a calendar entry when it's time.
    A class setup holds the course, the fee lines (class fee, eLearning, processing…), the deposit (a share of
    the class fee, half unless changed), what's included or not, the calendar defaults (days, time, location,
    seats, description) and which learning agreement to use. Calendar entries made from it keep its id
@@ -12,7 +12,7 @@
   const L = () => window.LD;
   const G = () => window.LDCalGrid;
   const $ = (s, r) => (r || document).querySelector(s);
-  const v = { sel: null, q: "", date: "" };
+  const v = { sel: null, q: "" };
   const DEFAULT_DEPOSIT = 50;
 
   function newId() { return "cs" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -106,7 +106,7 @@
     const su = cur(), { esc, money, fmtDate } = L();
     if (!su) {
       return `<div class="empty"><h2>Classes</h2>
-        <p>Set up each class you teach once: the course, the fees, the deposit and the details. When it's time, add it to the calendar.
+        <p>Set up each class you teach once: the course, the fees, the deposit and the details. When it's time, pick it under “Class setup” on a Calendar entry.
         Its fees and deposit then fill in the learning agreement and the invoice for every student on it.</p>
         <button class="btn primary" data-csact="new">+ New class</button></div>`;
     }
@@ -118,11 +118,6 @@
         <h1 id="cs-title">${esc(su.name || "Untitled class")}</h1></div>
         <div class="stats"><div class="stat"><b class="money" id="cs-total">${money(total(su))}</b><span>Total</span></div>
           <div class="stat"><b class="money" id="cs-dep">${money(dep(su))}</b><span>Deposit</span></div></div></div>
-
-      <div class="cs-add">
-        <div class="field"><label for="cs-date">Start date</label><input id="cs-date" type="date" value="${esc(v.date)}"></div>
-        <button class="btn primary" data-csact="add-cal">Add to calendar</button>
-        <span class="hint" style="margin:0">Makes a draft calendar entry with these details. Publish it from the Calendar when you're ready.</span></div>
 
       <h2 class="sec">Class</h2><div class="grid">
         ${fld("name", "Class name (shown on the calendar)", "text", "wide")}
@@ -197,7 +192,6 @@
   document.addEventListener("input", (e) => {
     const el = e.target; if (!document.getElementById("cs-panel")) return;
     if (el.id === "cs-q") { v.q = el.value; refresh(); return; }
-    if (el.id === "cs-date") { v.date = el.value; return; }
     const su = cur(); if (!su) return;
     if (el.id === "cs-type") { su.type = el.value; if (!typeOf(su).course) su.course = ""; L().save(); rerender(); return; }
     if (el.id === "cs-course") {
@@ -238,13 +232,6 @@
       case "rm-fee": su.fees.splice(i, 1); L().save(); rerender(); break;
       case "add-inc": (su.included = su.included || []).push({ item: "", cost: "" }); L().save(); rerender(); break;
       case "rm-inc": su.included.splice(i, 1); L().save(); rerender(); break;
-      case "add-cal": {
-        if (!window.LDCalendar || !window.LDCalendar.addFromSetup) break;
-        if (typeOf(su).course && !L().COURSES[su.course]) { L().toast("Pick the course first"); break; }
-        const k = window.LDCalendar.addFromSetup(su, v.date || "");
-        L().toast((su.name || "Class") + " added to the calendar as a draft" + (v.date ? "" : ". Set its dates."));
-        v.date = ""; window.LDCalendar.show(k.id); break;
-      }
       case "open-entry": if (window.LDCalendar) window.LDCalendar.show(b.dataset.id); break;
       case "dup": { const n = Object.assign(JSON.parse(JSON.stringify(su)), { id: newId(), name: (su.name || "Class") + " (copy)", created: new Date().toISOString() }); list().push(n); v.sel = n.id; L().save(); rerender(); break; }
       case "del": {
