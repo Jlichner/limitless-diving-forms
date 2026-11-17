@@ -90,8 +90,10 @@
       C.client.from("dive_logs").select("*").eq("user_id", who).order("dive_no", { ascending: false }).order("dived_on", { ascending: false }),
       C.client.from("dive_sites").select("*").eq("user_id", who).order("name", { ascending: true })
     ];
+    queries.push(C.client.from("student_profiles").select("full_name,certifications").eq("id", who).maybeSingle());
     if (mine()) queries.push(C.client.from("student_progress").select("course,summary").eq("student_id", v.uid));
-    const [d, s, p] = await Promise.all(queries);
+    const [d, s, pr, p] = await Promise.all(queries);
+    v.profile = pr && !pr.error && pr.data ? pr.data : null;
     v.loaded = true;
     if (d.error) {
       v.err = /dive_logs|PGRST205|schema cache|does not exist/i.test(d.error.message || "")
@@ -316,16 +318,6 @@
       </form></section>`;
   }
 
-  function printTable() {
-    const ds = v.dives.slice().sort((a, b) => a.dive_no - b.dive_no);
-    return `<table class="lb-print"><caption>${esc(v.viewing && !mine() ? v.viewingName + "'s" : "My")} dive log · Limitless Diving · printed ${esc(fmtDate(today()))}</caption>
-      <thead><tr><th>#</th><th>Date</th><th>Site</th><th>Max</th><th>Time</th><th>Gas</th><th>Type</th><th>Buddy</th><th>Sign-off</th></tr></thead>
-      <tbody>${ds.map(d => `<tr><td>${esc(d.dive_no)}</td><td>${esc(fmtDate(d.dived_on))}</td><td>${esc(d.site_name)}${d.place ? ", " + esc(d.place) : ""}</td>
-        <td>${d.max_depth != null ? esc(nice(d.max_depth)) + " " + (U[d.units] || U.imperial).depth : ""}</td><td>${d.bottom_time ? esc(d.bottom_time) + " min" : ""}</td>
-        <td>${esc(gasText(d))}</td><td>${esc((d.tags || []).map(t => TAG_NAME[t] || t).join(", "))}</td><td>${esc(d.buddy)}</td>
-        <td>${d.signed_at ? esc(d.signed_name || "") + " " + esc(fmtDate(d.signed_at)) : (d.tags || []).includes("training") ? "Waiting" : ""}</td></tr>`).join("")}</tbody></table>`;
-  }
-
   function gate(html) { teardownMaps(); root.innerHTML = html; }
   function teardownMaps() {
     if (pageMap) { pageMap.remove(); pageMap = null; pageLayer = null; }
@@ -354,7 +346,8 @@
           <p class="hint">${other ? (canSign() ? "Read only. You can sign off their training dives." : "Read only.") : "Every dive you log is tied to a place on your map. Training dives go to your instructor to sign off."}</p></div>
         <div class="lb-hero-act">${staffPicker()}
           <div class="row-actions">${mine() ? `<button type="button" class="btn primary" data-lb="new"${editingOpen ? " disabled" : ""}>+ Log a dive</button>` : ""}
-          <button type="button" class="btn" data-lb="print">Print log</button>${mine() ? `<a class="btn" href="account.html">My portal</a>` : ""}</div></div>
+          <button type="button" class="btn" data-lb="pdf"${v.dives.length ? "" : " disabled"}>Download PDF</button>
+          <button type="button" class="btn" data-lb="print"${v.dives.length ? "" : " disabled"}>Print</button>${mine() ? `<a class="btn" href="account.html">My portal</a>` : ""}</div></div>
       </div>
       <div id="lb-stats-box">${v.loaded && !v.err ? stats() : ""}</div>
       ${mine() ? toSignPanel() : ""}
@@ -366,7 +359,7 @@
           ${mapOk() ? `<div class="lb-map" id="lb-map" role="application" aria-label="Map of logged dives"></div>` : `<p class="acct-note bad">The map couldn't be loaded.</p>`}
           <p class="hint">Pins come from the dives' places. The public <a href="dive-map.html">Dive map</a> shows places, never names.</p></section>
       </div>
-      ${printTable()}`;
+`;
     setupPageMap();
     if (v.form) setupFormMap();
   }
@@ -588,8 +581,20 @@
     } else if (act === "go") {
       const d = v.dives.find(x => x.id === id);
       if (d && pageMap) { pageMap.setView([d.lat, d.lng], Math.max(pageMap.getZoom(), 9)); document.getElementById("lb-map").scrollIntoView({ behavior: "smooth", block: "center" }); }
-    } else if (act === "print") {
-      window.print();
+    } else if (act === "print" || act === "pdf") {
+      if (!window.LDLogPDF || !v.dives.length) return;
+      const info = { name: (v.profile && v.profile.full_name) || (mine() ? "" : v.viewingName) || (mine() && C.user.email) || "",
+        email: mine() ? C.user.email : "", certifications: (v.profile && v.profile.certifications) || [] };
+      if (act === "print") { window.LDLogPDF.print(v.dives, info); return; }
+      const label = b.textContent; b.disabled = true;
+      try {
+        await window.LDLogPDF.download(v.dives, info, (i, n) => { b.textContent = `Making page ${i} of ${n}…`; });
+        toast("PDF downloaded.");
+      } catch (err) {
+        console.error(err);
+        toast("The PDF maker couldn't load. Opening print instead: choose “Save as PDF”.");
+        window.LDLogPDF.print(v.dives, info);
+      } finally { b.textContent = label; b.disabled = false; }
     } else if (act === "sign") sign(id);
     else if (act === "unsign") unsign(id);
     else if (act === "view") view(b.dataset.uid, id);
