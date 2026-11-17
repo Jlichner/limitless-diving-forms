@@ -3,8 +3,9 @@
    account.html before account.js (it only uses the certification lists there).
 
    NAUI standards (minimum age, prerequisites, required dives, maximum depth) come from the 2026 NAUI Standards
-   and Policies Manual; `page` is the manual page. TDI standards are left blank on purpose: fill them in under
-   Settings for that course. Every value here is only a starting point and can be edited in Settings.
+   and Policies Manual; TDI standards come from TDI Standards and Procedures, Part 2: Diver Standards (version 0126).
+   `page` is the manual page (see MANUALS and source() below). Every value here is only a starting point and can be
+   edited in Settings.
 
    To give a course a full skill matrix later, register it in courses.js with the same id (like Rescue Diver),
    and add `app: "<id>"` here if the ids differ. */
@@ -17,6 +18,7 @@
   const OW = "NAUI Open Water Scuba Diver or equivalent";
   const AOW = "NAUI Advanced Open Water Scuba Diver or equivalent";
   const NO_DECO = "; no dives require staged decompression";
+  const TDI_OW = "SDI Open Water Scuba Diver or equivalent";
   const GEAR = "Students furnish their own dive equipment, checked by the instructor before open water";
 
   // id: a short stable key (also the course id in the app). app: the id of an existing full course instead.
@@ -120,9 +122,15 @@
         divesNote: "Includes an evaluated simulated-decompression dive (4 stops and a gas switch) before any required-stop dives",
         depth: "18 m / 60 ft until the NAUI Technical Diver Skills Checklist is complete, then 46 m / 150 ft", page: 241 } },
 
-    // ---------------- TDI (standards not entered yet) ----------------
-    { agency: "TDI", id: "tdi-intro-tech", name: "Intro to Technical Diving", std: null },
-    { agency: "TDI", id: "tdi-dpv", name: "Technical Diver Propulsion Vehicle", std: null }
+    // ---------------- TDI (TDI Standards and Procedures, Part 2: Diver Standards, version 0126) ----------------
+    { agency: "TDI", id: "tdi-intro-tech", name: "Intro to Technical Diving", cert: "Intro to Tech",
+      std: { age: "18, or 15 with parental consent", prereqs: [TDI_OW, "Proof of 25 logged open water dives"], dives: 3,
+        divesNote: "Within the diver's current certification depth. Only 4 dives in total when combined with TDI Advanced Nitrox",
+        depth: "23 m / 75 ft; strictly no decompression (nitrox allowed within the diver's certification)", page: 10 } },
+    { agency: "TDI", id: "tdi-dpv", name: "Technical Diver Propulsion Vehicle", cert: "Technical DPV Diver",
+      std: { age: "18, or 15 with parental consent", prereqs: [TDI_OW, "Proof of at least 25 logged dives"], dives: 2,
+        divesNote: "DPV dives with at least 60 minutes total bottom time",
+        depth: "40 m / 130 ft", page: 16 } }
   ];
 
   // Short course descriptions for the public "Available classes" page, written for students in our own words
@@ -162,6 +170,11 @@
     "tdi-intro-tech": "TDI's introduction to technical diving: gas planning, equipment configuration, trim and the core skills behind technical diving.",
     "tdi-dpv": "Use a diver propulsion vehicle on technical dives: rigging, trim, towing and handling problems on a scooter."
   };
+  // The standards manual each agency's `page` numbers refer to.
+  const MANUALS = { "NAUI": "2026 NAUI Standards and Policies Manual", "NAUI Technical": "2026 NAUI Standards and Policies Manual",
+    "TDI": "TDI Standards and Procedures, Part 2: Diver Standards (version 0126)" };
+  // "2026 NAUI Standards and Policies Manual, p. 159", or "" when the course has no page reference.
+  function source(c) { return c && c.std && c.std.page && MANUALS[c.agency] ? MANUALS[c.agency] + ", p. " + c.std.page : ""; }
   // Where to read the agency's own information about its courses.
   const AGENCY_SITES = { "NAUI": "https://www.naui.org/", "NAUI Technical": "https://www.naui.org/", "TDI": "https://www.tdisdi.com/" };
   COURSES.forEach(c => { c.cert = c.cert || c.name; c.app = c.app || c.id; c.fullName = c.agency + " " + c.name; c.about = c.about || ABOUT[c.id] || ""; });
@@ -241,6 +254,6 @@
     return Object.keys(IMPLIES).some(hi => IMPLIES[hi].includes(req.id) && has(hi));
   }
 
-  window.LDCatalog = { AGENCIES, AGENCY_SITES, CERT_AGENCIES, COURSES, DIVES_PER_DAY, minDays, byAgency, find, certNames,
+  window.LDCatalog = { AGENCIES, AGENCY_SITES, MANUALS, source, CERT_AGENCIES, COURSES, DIVES_PER_DAY, minDays, byAgency, find, certNames,
     minCertName, minCertGroups, meetsCert };
 })();

@@ -88,7 +88,7 @@
         ${s.prereqs && s.prereqs.length ? `<dt>To start</dt><dd><ul>${s.prereqs.map(p => `<li>${esc(p)}</li>`).join("")}</ul></dd>` : ""}
         ${dives(s) ? `<dt>Dives</dt><dd>${esc(dives(s))}</dd>` : ""}
         ${s.depth ? `<dt>Max depth</dt><dd>${esc(s.depth)}</dd>` : ""}
-      </dl>${s.page ? `<p class="src">From the 2026 NAUI Standards and Policies Manual, page ${esc(String(s.page))}.</p>` : ""}`
+      </dl>${CAT.source(c) ? `<p class="src">From the ${esc(CAT.source(c).replace(/, p\. /, ", page "))}.</p>` : ""}`
       : `<p>Ask us about prerequisites, dives and depth limits for this course.</p>`;
     main.innerHTML = `<p><a class="back" href="#">‹ All available classes</a></p>
       <section class="pub-hero"><span class="eyebrow">${esc(c.agency)}${c.leadership ? " · Leadership" : ""}</span><h1>${esc(c.name)}</h1>

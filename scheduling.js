@@ -260,7 +260,7 @@ ${STUDENT_DUTIES}`
     out.prerequisites = (pre || []).filter(Boolean).join("; ");
     out.dives = pr.minDives || (std ? (std.dives ? std.dives + " open water dive" + (std.dives === 1 ? "" : "s") : "") + (std.divesNote ? ". " + std.divesNote : "") : "");
     out.max_depth = pr.maxDepth || (std && std.depth) || "";
-    out.standards_source = pr.standardsRef || (std && std.page ? "2026 NAUI Standards and Policies Manual, p. " + std.page
+    out.standards_source = pr.standardsRef || (window.LDCatalog && window.LDCatalog.source(cat) ? window.LDCatalog.source(cat)
       : cat && /NAUI/.test(cat.agency || "") || !cat ? "2026 NAUI Standards and Policies Manual" : (cat.agency + " standards"));
     out.payment_notes = pr.paymentNotes || "";
     return out;
