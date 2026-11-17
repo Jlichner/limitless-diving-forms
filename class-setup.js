@@ -1,7 +1,7 @@
-/* Limitless Diving — Business → Classes: set up a class once, then add it to the calendar when it's time.
+/* Limitless Diving — Business → Classes: set up a class once, then pick it on a calendar entry when it's time.
    A class setup holds the course, the fee lines (class fee, eLearning, processing…), the deposit (a share of
-   the class fee, half unless changed), what's included or not, the calendar defaults (days, time, location,
-   seats, description) and which learning agreement to use. Calendar entries made from it keep its id
+   the class fee, half unless changed), what's included or not and which learning agreement to use. Time,
+   location, seats and dates are set on each calendar entry. Calendar entries made from it keep its id
    (setupId), so the learning agreement (scheduling.js, {{fees}} and the deposit sentence) and the invoice
    (app.js billing) use its fee lines. Setups live in this browser with everything else (state.classSetups),
    so Download backup / Restore carry them. Instructors and Admins only (app.js BUSINESS_MODES).
@@ -12,7 +12,7 @@
   const L = () => window.LD;
   const G = () => window.LDCalGrid;
   const $ = (s, r) => (r || document).querySelector(s);
-  const v = { sel: null, q: "", date: "" };
+  const v = { sel: null, q: "" };
   const DEFAULT_DEPOSIT = 50;
 
   function newId() { return "cs" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -64,6 +64,11 @@
   function cur() { return list().find(x => x.id === v.sel) || null; }
   function types() { return window.LDCalendar && window.LDCalendar.types ? window.LDCalendar.types() : [{ id: "class", name: "Class", course: true }]; }
   function typeOf(su) { const t = types(); return t.find(x => x.id === (su.type || "class")) || t.find(x => x.course) || t[0]; }
+  // Agency: NAUI (with NAUI Technical), TDI, or Both. It narrows the Course list and fills {{agency}}.
+  const AGENCIES = [["NAUI", "NAUI"], ["TDI", "TDI"], ["Both", "Both (NAUI and TDI)"]];
+  function agencyOfCourse(id) { const c = window.LDCatalog && window.LDCatalog.find(id); return c ? (/^TDI/.test(c.agency) ? "TDI" : "NAUI") : ""; }
+  function agencyOf(su) { return su.agency || agencyOfCourse(su.course) || ""; }
+  function coursesFor(ag) { return L().COURSE_ORDER.filter(id => !ag || ag === "Both" || agencyOfCourse(id) === ag || !agencyOfCourse(id)); }
   function courseName(id) { const c = L().COURSES[id]; return c ? (c.fullName || c.name) : ""; }
   function entries(su) { return (L().state.classes || []).filter(k => k.setupId === su.id); }
   function upcoming(su) { const t = G().today(); return entries(su).filter(k => (G().lastDate(k.dates) || t) >= t); }
@@ -90,7 +95,7 @@
         const n = upcoming(x).length;
         return `<li><button data-csact="pick" data-id="${x.id}" class="${x.id === v.sel ? "sel" : ""}">
           <span class="nm">${esc(x.name || "Untitled class")}</span>
-          <span class="meta">${esc([typeOf(x).course ? courseName(x.course) : typeOf(x).name, L().feeLines(x).length ? money(total(x)) : "No fees yet"].filter(Boolean).join(" · "))}</span>
+          <span class="meta">${esc([agencyOf(x) === "Both" ? "NAUI + TDI" : agencyOf(x), typeOf(x).course ? courseName(x.course) : typeOf(x).name, L().feeLines(x).length ? money(total(x)) : "No fees yet"].filter(Boolean).join(" · "))}</span>
           ${n ? `<span class="meta">${n} on the calendar</span>` : ""}</button></li>`;
       }).join("") || `<li class="meta" style="padding:8px 10px">${list().length ? "No matches." : "No classes set up yet."}</li>`}</ul>`;
   }
@@ -106,28 +111,26 @@
     const su = cur(), { esc, money, fmtDate } = L();
     if (!su) {
       return `<div class="empty"><h2>Classes</h2>
-        <p>Set up each class you teach once: the course, the fees, the deposit and the details. When it's time, add it to the calendar.
+        <p>Set up each class you teach once: the course, the fees, the deposit and the details. When it's time, pick it under “Class setup” on a Calendar entry.
         Its fees and deposit then fill in the learning agreement and the invoice for every student on it.</p>
         <button class="btn primary" data-csact="new">+ New class</button></div>`;
     }
     const ty = typeOf(su), isClass = !!ty.course, fees = su.fees || [], c = L().COURSES[su.course];
-    const unit = c ? c.unit : "Day", defDays = c && c.unit === "Day" ? Math.max(1, c.schedule.length) : 1;
-    const tplList = templates(), items = savedItems(), ents = entries(su).slice().sort((a, b) => (G().firstDate(a.dates) || "").localeCompare(G().firstDate(b.dates) || ""));
+    const tplList = templates(), items = savedItems();
     const other = total(su) - classFee(su);
     return `<div class="rec-head"><div class="who"><span class="eyebrow">${esc(isClass ? courseName(su.course) || "Pick a course" : ty.name)}</span>
         <h1 id="cs-title">${esc(su.name || "Untitled class")}</h1></div>
         <div class="stats"><div class="stat"><b class="money" id="cs-total">${money(total(su))}</b><span>Total</span></div>
           <div class="stat"><b class="money" id="cs-dep">${money(dep(su))}</b><span>Deposit</span></div></div></div>
 
-      <div class="cs-add">
-        <div class="field"><label for="cs-date">Start date</label><input id="cs-date" type="date" value="${esc(v.date)}"></div>
-        <button class="btn primary" data-csact="add-cal">Add to calendar</button>
-        <span class="hint" style="margin:0">Makes a draft calendar entry with these details. Publish it from the Calendar when you're ready.</span></div>
-
       <h2 class="sec">Class</h2><div class="grid">
         ${fld("name", "Class name (shown on the calendar)", "text", "wide")}
         <div class="field"><label for="cs-type">Calendar type</label><select id="cs-type">${types().map(t => `<option value="${esc(t.id)}"${t === ty ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></div>
-        ${isClass ? `<div class="field"><label for="cs-course">Course</label><select id="cs-course"><option value=""${c ? "" : " selected"}>Choose a course…</option>${L().courseOptions(su.course)}</select></div>` : ""}</div>
+        <div class="field"><label for="cs-agency">Agency</label><select id="cs-agency"><option value=""${agencyOf(su) ? "" : " selected"}>Choose…</option>
+          ${AGENCIES.map(([k, l]) => `<option value="${k}"${agencyOf(su) === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
+        ${isClass ? `<div class="field"><label for="cs-course">Course</label><select id="cs-course"><option value=""${c ? "" : " selected"}>Choose a course…</option>${L().courseOptions(su.course, coursesFor(agencyOf(su)).concat(su.course && !coursesFor(agencyOf(su)).includes(su.course) ? [su.course] : []))}</select></div>` : ""}</div>
+
+      ${typeOf(su).course ? renderStandards(su) : ""}
 
       <h2 class="sec">Fees</h2>
       <p class="hint">Each line is a line on the invoice and in the learning agreement. The deposit is ${esc(pct(su))}% of the lines marked <b>Class fee</b>; untick it for pass-through costs like eLearning or certification processing.</p>
@@ -152,29 +155,42 @@
       </tbody></table></div>
       <div class="row-actions"><button class="btn" data-csact="add-inc">+ Add line</button></div>
 
-      <h2 class="sec">Calendar details</h2>
-      <p class="hint">Filled in on each calendar entry you add from here. You can still change them on the entry.</p>
-      <div class="grid">
-        ${fld("days", isClass ? (unit === "Day" ? "Number of days (blank = " + defDays + ")" : "Number of dates (blank = 1)") : "Number of days (blank = 1)", "number")}
-        ${fld("time", "Time")}${fld("location", "Location")}${fld("seats", "Seats (blank = no limit)", "number")}
-        ${fld("notes", "Description for the public calendar", "area", "wide")}</div>
-
       <h2 class="sec">Learning agreement</h2>
       <div class="grid"><div class="field wide"><label for="cs-tpl">Template</label><select id="cs-tpl">
         <option value=""${su.template ? "" : " selected"}>Automatic (the best match for the course and type)</option>
         ${tplList.map(t => `<option value="${esc(t.id)}"${t.id === su.template ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
         <span class="hint" style="margin:0">Use <code>{{fees}}</code> and <code>{{deposit}}</code> in a template to show these fees. Edit templates under Business → Scheduling.</span></div></div>
 
-      <h2 class="sec">On the calendar</h2>
-      ${ents.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Dates</th><th>Price</th><th>Students</th><th>Status</th><th></th></tr></thead><tbody>
-        ${ents.map(k => { const past = window.LDCalendar && window.LDCalendar.isPast(k), n = window.LDCalendar ? window.LDCalendar.roster(k).length : 0; return `<tr>
-          <td>${esc(G().range(k.dates) || "No dates yet")}</td><td class="money">${k.price === "" || k.price == null ? "" : money(k.price)}</td><td>${n}</td>
-          <td>${past ? "Finished" : k.published ? "Published" : "Draft"}</td>
-          <td><button class="btn small" data-csact="open-entry" data-id="${esc(k.id)}">Open</button></td></tr>`; }).join("")}</tbody></table></div>`
-        : `<p class="hint">Not on the calendar yet.</p>`}
-
       <div class="row-actions" style="margin-top:28px"><button class="btn" data-csact="dup">Duplicate</button>
         <button class="btn danger" data-csact="del">Delete…</button><span id="cs-del-confirm"></span></div>`;
+  }
+  // ---------- course standards checklist ----------
+  // What the agency standards require for the course (catalog.js std, with any changes made under Settings →
+  // Course standards), as a list Jamie ticks off while setting the class up. Ticks are kept on the setup.
+  function stdItems(su) {
+    const CAT = window.LDCatalog, cat = CAT && su.course ? CAT.find(su.course) : null;
+    if (!su.course || !L().COURSES[su.course]) return null;
+    const std = (cat && cat.std) || {}, pr = L().program(su.course) || {}, out = [];
+    const age = pr.minAge || std.age; if (age) out.push(["age", "Minimum age", age]);
+    const pre = (std.prereqs && std.prereqs.length ? std.prereqs : (pr.prereqs || []).map(x => (x.item || x.label || "") + (x.detail ? " (" + x.detail + ")" : ""))).filter(Boolean);
+    pre.forEach((x, i) => out.push(["pre" + i, "Prerequisite", x]));
+    const dives = pr.minDives || (std.dives != null && std.dives !== "" ? std.dives + " open water dive" + (Number(std.dives) === 1 ? "" : "s") + (std.divesNote ? ". " + std.divesNote : "") : "");
+    if (dives) out.push(["dives", "Open water dives", dives]);
+    if (std.dives > 0 && CAT && CAT.minDays) out.push(["days", "Training days", "At least " + CAT.minDays(cat) + " (no more than " + CAT.DIVES_PER_DAY + " training dives a day)"]);
+    const depth = pr.maxDepth || std.depth; if (depth) out.push(["depth", "Maximum training depth", depth]);
+    out.push(["ratio", "Ratios and supervision", "Check the instructor-to-student ratios and any assistant needed for the planned group size"]);
+    out.push(["materials", "Materials and certification", "Student materials and certification processing are covered (a fee line or listed as included)"]);
+    const src = pr.standardsRef || (CAT && CAT.source && CAT.source(cat)) || (std.page ? (cat && /^TDI/.test(cat.agency) ? "TDI Standards and Procedures, Part 2" : "2026 NAUI Standards and Policies Manual") + ", p. " + std.page : "");
+    return { items: out, src, missing: !cat || !cat.std };
+  }
+  function renderStandards(su) {
+    const { esc } = L(), s = stdItems(su);
+    if (!s) return `<h2 class="sec">Standards checklist</h2><p class="hint">Pick a course to see what its standards require.</p>`;
+    const done = su.stdChecked || {}, n = s.items.filter(([k]) => done[k]).length;
+    return `<h2 class="sec">Standards checklist <span class="cs-std-count" id="cs-std-count">${n} of ${s.items.length}</span></h2>
+      <p class="hint">${s.missing ? "This course's standards aren't entered yet. Add them under Settings → Course standards, or check the agency manual directly." : "From " + esc(s.src || "the agency standards") + ". Tick each one once the class covers it."}</p>
+      <ul class="cs-std">${s.items.map(([k, label, text]) => `<li><label class="chk"><input type="checkbox" data-csstd="${esc(k)}"${done[k] ? " checked" : ""}>
+        <span><b>${esc(label)}:</b> ${esc(text)}</span></label></li>`).join("")}</ul>`;
   }
   function depNote(su) { const cf = classFee(su); return cf ? pct(su) + "% of " + L().money(cf) : "Mark a line as Class fee"; }
 
@@ -197,9 +213,9 @@
   document.addEventListener("input", (e) => {
     const el = e.target; if (!document.getElementById("cs-panel")) return;
     if (el.id === "cs-q") { v.q = el.value; refresh(); return; }
-    if (el.id === "cs-date") { v.date = el.value; return; }
     const su = cur(); if (!su) return;
     if (el.id === "cs-type") { su.type = el.value; if (!typeOf(su).course) su.course = ""; L().save(); rerender(); return; }
+    if (el.id === "cs-agency") { su.agency = el.value; L().save(); rerender(); return; }
     if (el.id === "cs-course") {
       const old = courseName(su.course); su.course = el.value;
       // A new setup is named after its course until it gets a name of its own.
@@ -223,6 +239,14 @@
     L().save(); refresh();
   });
   document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset && t.dataset.csstd) {
+      const su = cur(); if (!su) return;
+      su.stdChecked = su.stdChecked || {}; su.stdChecked[t.dataset.csstd] = t.checked; L().save();
+      const s = stdItems(su), c = document.getElementById("cs-std-count");
+      if (s && c) c.textContent = s.items.filter(([k]) => su.stdChecked[k]).length + " of " + s.items.length;
+      return;
+    }
     // Checkboxes and selects fire input too in current browsers; this covers older Safari.
     const el = e.target; if (!el.dataset || !el.dataset.csl || el.type !== "checkbox") return;
     const su = cur(); if (!su) return; setPath(su, el.dataset.csl, el.checked); L().save(); refresh();
@@ -238,14 +262,6 @@
       case "rm-fee": su.fees.splice(i, 1); L().save(); rerender(); break;
       case "add-inc": (su.included = su.included || []).push({ item: "", cost: "" }); L().save(); rerender(); break;
       case "rm-inc": su.included.splice(i, 1); L().save(); rerender(); break;
-      case "add-cal": {
-        if (!window.LDCalendar || !window.LDCalendar.addFromSetup) break;
-        if (typeOf(su).course && !L().COURSES[su.course]) { L().toast("Pick the course first"); break; }
-        const k = window.LDCalendar.addFromSetup(su, v.date || "");
-        L().toast((su.name || "Class") + " added to the calendar as a draft" + (v.date ? "" : ". Set its dates."));
-        v.date = ""; window.LDCalendar.show(k.id); break;
-      }
-      case "open-entry": if (window.LDCalendar) window.LDCalendar.show(b.dataset.id); break;
       case "dup": { const n = Object.assign(JSON.parse(JSON.stringify(su)), { id: newId(), name: (su.name || "Class") + " (copy)", created: new Date().toISOString() }); list().push(n); v.sel = n.id; L().save(); rerender(); break; }
       case "del": {
         const n = entries(su).length;
