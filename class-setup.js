@@ -180,7 +180,7 @@
     const depth = pr.maxDepth || std.depth; if (depth) out.push(["depth", "Maximum training depth", depth]);
     out.push(["ratio", "Ratios and supervision", "Check the instructor-to-student ratios and any assistant needed for the planned group size"]);
     out.push(["materials", "Materials and certification", "Student materials and certification processing are covered (a fee line or listed as included)"]);
-    const src = pr.standardsRef || (std.page ? (cat && /^TDI/.test(cat.agency) ? "TDI standards" : "2026 NAUI Standards and Policies Manual") + ", p. " + std.page : "");
+    const src = pr.standardsRef || (CAT && CAT.source && CAT.source(cat)) || (std.page ? (cat && /^TDI/.test(cat.agency) ? "TDI Standards and Procedures, Part 2" : "2026 NAUI Standards and Policies Manual") + ", p. " + std.page : "");
     return { items: out, src, missing: !cat || !cat.std };
   }
   function renderStandards(su) {
