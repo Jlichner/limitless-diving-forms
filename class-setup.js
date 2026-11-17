@@ -1,7 +1,7 @@
 /* Limitless Diving — Business → Classes: set up a class once, then pick it on a calendar entry when it's time.
    A class setup holds the course, the fee lines (class fee, eLearning, processing…), the deposit (a share of
-   the class fee, half unless changed), what's included or not, the calendar defaults (days, time, location,
-   seats, description) and which learning agreement to use. Calendar entries made from it keep its id
+   the class fee, half unless changed), what's included or not and which learning agreement to use. Time,
+   location, seats and dates are set on each calendar entry. Calendar entries made from it keep its id
    (setupId), so the learning agreement (scheduling.js, {{fees}} and the deposit sentence) and the invoice
    (app.js billing) use its fee lines. Setups live in this browser with everything else (state.classSetups),
    so Download backup / Restore carry them. Instructors and Admins only (app.js BUSINESS_MODES).
@@ -111,7 +111,6 @@
         <button class="btn primary" data-csact="new">+ New class</button></div>`;
     }
     const ty = typeOf(su), isClass = !!ty.course, fees = su.fees || [], c = L().COURSES[su.course];
-    const unit = c ? c.unit : "Day", defDays = c && c.unit === "Day" ? Math.max(1, c.schedule.length) : 1;
     const tplList = templates(), items = savedItems(), ents = entries(su).slice().sort((a, b) => (G().firstDate(a.dates) || "").localeCompare(G().firstDate(b.dates) || ""));
     const other = total(su) - classFee(su);
     return `<div class="rec-head"><div class="who"><span class="eyebrow">${esc(isClass ? courseName(su.course) || "Pick a course" : ty.name)}</span>
@@ -146,13 +145,6 @@
           <td class="x"><button class="btn small danger" data-csact="rm-inc" data-i="${i}">Remove</button></td></tr>`).join("")}
       </tbody></table></div>
       <div class="row-actions"><button class="btn" data-csact="add-inc">+ Add line</button></div>
-
-      <h2 class="sec">Calendar details</h2>
-      <p class="hint">Filled in on each calendar entry you add from here. You can still change them on the entry.</p>
-      <div class="grid">
-        ${fld("days", isClass ? (unit === "Day" ? "Number of days (blank = " + defDays + ")" : "Number of dates (blank = 1)") : "Number of days (blank = 1)", "number")}
-        ${fld("time", "Time")}${fld("location", "Location")}${fld("seats", "Seats (blank = no limit)", "number")}
-        ${fld("notes", "Description for the public calendar", "area", "wide")}</div>
 
       <h2 class="sec">Learning agreement</h2>
       <div class="grid"><div class="field wide"><label for="cs-tpl">Template</label><select id="cs-tpl">
