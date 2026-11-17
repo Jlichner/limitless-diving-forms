@@ -53,8 +53,15 @@
     const schedule = c.schedule.map((label, i) => ({ label, date: (e.dates && e.dates["d" + (i + 1)]) || "" }));
     const dates = k && (k.dates || []).filter(Boolean).length ? k.dates.filter(Boolean) : schedule.map(d => d.date).filter(Boolean);
     const name = c.fullName || c.name;
+    // Paperwork: the class setup's Agency (NAUI / TDI / Both), else the course's agency. The portal picks the
+    // forms from paperwork.js, so forms added there later show up without sharing again.
+    const PW = window.LDPaperwork, su = k && k.setupId ? (L().state.classSetups || []).find(x => x.id === k.setupId) : null;
+    const paperworkAgency = (su && su.agency) || (PW && PW.agencyOfCourse(e.course)) || "";
+    const person = L().personById(e.studentId), firstDay = dates.slice().sort()[0];
     return {
-      courseName: (pg && pg.program) || name, agency: /NAUI/i.test(((pg && pg.program) || "") + " " + name) ? "NAUI" : "",
+      courseName: (pg && pg.program) || name,
+      agency: paperworkAgency === "Both" ? "NAUI + TDI" : paperworkAgency || (/NAUI/i.test(((pg && pg.program) || "") + " " + name) ? "NAUI" : ""),
+      paperworkAgency, minor: PW ? PW.isMinor(person && person.dob, firstDay) : null,
       classId: k ? k.id : "", classTitle: k ? (k.title || "") : "", dates: dates.slice().sort(),
       time: (k && k.time) || "", location: (k && k.location) || e.location || "",
       schedule, pct: pr.pct,

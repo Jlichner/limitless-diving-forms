@@ -206,11 +206,24 @@
       <div class="row-actions"><button class="btn" data-csact="add-eq">+ Add equipment</button>
         ${su.course && equipFor(su.course).items.length ? `<button class="btn" data-csact="fill-eq">Add what the standards require</button>` : ""}</div>
 
+      ${renderPaperwork(su)}
+
       ${renderAgreement(su)}
 
       <div class="row-actions" style="margin-top:28px"><button class="btn primary" data-csact="new">Create class</button>
         <button class="btn danger" data-csact="del">Delete…</button><span id="cs-del-confirm"></span></div></div>
       ${v.preview && L().COURSES[su.course] && L().proposalFor ? `<div id="cs-preview">${L().proposalFor(su)}</div>` : ""}`;
+  }
+  // ---------- student paperwork (paperwork.js) ----------
+  // Read-only: shows which forms students in this class get in their Student portal, picked by the Agency.
+  function renderPaperwork(su) {
+    const PW = window.LDPaperwork; if (!PW) return "";
+    const { esc } = L(), ag = agencyOf(su), forms = ag ? PW.forClass(ag, su.course, null) : [];
+    const gap = ag && PW.missing(ag, su.course).length ? `<p class="acct-note">No forms are set for ${esc(PW.missing(ag, su.course).join(" or "))} classes yet, so students won't see that paperwork in their portal. Add them in paperwork.js.</p>` : "";
+    return `<h2 class="sec">Student paperwork</h2>
+      <p class="hint">${ag ? "Students enrolled in this class see these forms, with links to print them, under My training in their Student portal." : "Choose the Agency above to see which forms students get."}</p>
+      ${gap}
+      ${forms.length ? `<ul class="cs-paper">${forms.map(f => `<li><a href="${esc(f.file)}" target="_blank" rel="noopener">${esc(f.title)}</a>${f.minor ? " <span class=\"hint\">(students under 18 only)</span>" : ""}<br><span class="hint">Standards: ${esc(f.std)}</span></li>`).join("")}</ul>` : ""}`;
   }
   // ---------- course standards checklist ----------
   // What the agency standards require for the course (catalog.js std, with any changes made under Settings →

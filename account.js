@@ -113,10 +113,24 @@
         ${s.balanceDue != null ? `<div class="stat"><b class="money">${money(s.balanceDue)}</b><span>Balance due</span></div>` : ""}</div>
       ${sched.length ? `<h4>Schedule</h4><ul class="acct-sched">${sched.map(d => `<li><b>${esc(d.date ? G.fmt(d.date, { weekday: "short" }) : "Date TBD")}</b> ${esc(d.label)}</li>`).join("")}</ul>` : ""}
       ${s.time ? `<p class="hint">Time: ${esc(s.time)}</p>` : ""}
+      ${paperworkList(s, row.course)}
       ${skills.length ? `<details><summary>${left.length ? `${left.length} skill${left.length === 1 ? "" : "s"} still to master` : "Every required skill is mastered"}</summary>
         <ul class="acct-skills">${skills.map(x => `<li class="${x.done ? "done" : ""}"><span aria-hidden="true">${x.done ? "✓" : "○"}</span> ${esc(x.name)}${x.done ? `<span class="sr-only"> (mastered)</span>` : ""}</li>`).join("")}</ul></details>` : ""}
       ${updated && !isNaN(updated) ? `<p class="acct-updated">Updated ${esc(updated.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }))}</p>` : ""}
     </article>`;
+  }
+  // The forms this class needs (paperwork.js), picked by the class's agency. Each opens or downloads the PDF.
+  function paperworkList(s, course) {
+    // Records shared before paperwork existed have no paperworkAgency: use the course's own agency.
+    const PW = window.LDPaperwork, ag = PW && (s.paperworkAgency || PW.agencyOfCourse(course));
+    const forms = ag ? PW.forClass(ag, course, s.minor === true || s.minor === false ? s.minor : null) : [];
+    if (!forms.length) return "";
+    return `<div class="acct-paper"><h4>Class paperwork</h4>
+      <p class="hint">Print these, fill them in, and bring them to your first class. Questions? Email <a href="mailto:jamie@limitless-diving.com">jamie@limitless-diving.com</a>.</p>
+      <ul>${forms.map(f => `<li><span class="acct-paper-ico" aria-hidden="true">PDF</span><div>
+        <a href="${esc(f.file)}" target="_blank" rel="noopener"><b>${esc(f.title)}</b></a>${f.ifMinor ? ` <span class="seats">Only if you're under 18</span>` : f.minor ? ` <span class="seats">Under 18: parent or guardian signs</span>` : ""}
+        <span>${esc(f.how)}</span>
+        <span class="acct-paper-act"><a href="${esc(f.file)}" target="_blank" rel="noopener">Open</a> · <a href="${esc(f.file)}" download>Download</a></span></div></li>`).join("")}</ul></div>`;
   }
   // Each entry links to its information page (event.html) to join or sign up; the member's own sign-up shows as a badge.
   const SIGNUP_BADGE = { joined: "You're going", pending: "Sign-up sent", enrolled: "You're enrolled" };
