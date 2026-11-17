@@ -578,7 +578,8 @@ ${vals.business}`
         <div><dt>Time</dt><dd>${esc(ev.time || "Not set")}</dd></div><div><dt>Location</dt><dd>${esc(ev.location || "Not set")}</dd></div>
         <div><dt>Price</dt><dd>${ev.price === "" ? "Not set" : money(ev.price)}</dd></div>
         ${Number(k.seats) > 0 ? `<div><dt>Seats</dt><dd>${esc(k.seats)}</dd></div>` : ""}</dl>
-        <p class="hint">${canBuild ? `<button class="btn small" data-sact="build-edit">Edit this ${esc(ev.typeName.toLowerCase())}</button> ` : ""}These come from the Calendar.${ev.isClass ? (enrolled ? " " + esc(p.name) + " is enrolled in this class." : p ? "" : " Pick a student to enroll them.") : ""}</p>`;
+        <p class="hint">${canBuild ? `<button class="btn small" data-sact="build-edit">Edit this ${esc(ev.typeName.toLowerCase())}</button> ` : ""}These come from the Calendar.${ev.isClass ? (enrolled ? " " + esc(p.name) + " is enrolled in this class." : p ? "" : " Pick a student to enroll them.") : ""}</p>
+        ${enrolled && L().openProposal ? `<p class="hint"><button class="btn small primary" data-sact="proposal">Open ${esc(p.name)}'s course proposal</button> The full learning agreement laid out like the Open Water proposal, with this class's fees, deposit and equipment, ready to print.</p>` : ""}`;
     } else if (ev && ev.kind === "offer") {
       details = `<div class="grid">${(a.dates.length ? a.dates : [""]).map((d, i) => `<div class="field"><label for="sch-d-${i}">Date ${a.dates.length > 1 ? i + 1 : ""}</label>
           <div class="sch-date"><input id="sch-d-${i}" type="date" data-sdate="${i}" value="${esc(d)}">${a.dates.length > 1 ? `<button class="btn small danger" data-sact="rm-date" data-i="${i}" aria-label="Remove date ${i + 1}">×</button>` : ""}</div></div>`).join("")}
@@ -718,6 +719,11 @@ ${vals.business}`
     const b = e.target.closest("[data-sact]"); if (!b) return;
     const a = cur(), i = Number(b.dataset.i);
     switch (b.dataset.sact) {
+      case "proposal": {
+        const ev = eventOf(a), en = ev && ev.isClass && L().state.enrollments.find(e => e.studentId === a.studentId && e.classId === ev.entry.id);
+        if (en) L().openProposal(en.id);
+        return;
+      }
       case "new": { const n = blank(); data().assignments.push(n); v.sel = n.id; v.tpl = false; L().save(); rerender(); const s = $("#sch-student"); if (s) s.focus(); break; }
       case "pick": v.sel = b.dataset.id; v.tpl = false; rerender(); break;
       case "templates": v.tpl = !v.tpl; rerender(); break;
