@@ -17,7 +17,7 @@
 
   function newId() { return "cs" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function blank() {
-    return { id: newId(), name: "", type: "class", course: "", fees: [{ desc: "Class fee", amt: "", deposit: true }],
+    return { id: newId(), name: "", equipment: [], equipSeeded: true, type: "class", course: "", fees: [{ desc: "Class fee", amt: "", deposit: true }],
       depositPct: DEFAULT_DEPOSIT, included: [], days: "", time: "", location: "", seats: 6, notes: "", template: "", minCert: "",
       created: new Date().toISOString() };
   }
@@ -27,7 +27,12 @@
     const st = L().state;
     if (!Array.isArray(st.classSetups)) st.classSetups = [];
     if (!st.classSetupsSeeded) seed(st);
-    const ct = typeOf().id; st.classSetups.forEach(x => { if (x.type !== ct) x.type = ct; });
+    const ct = typeOf().id;
+    st.classSetups.forEach(x => {
+      if (x.type !== ct) x.type = ct;
+      // Setups made before Required equipment start with the list from the standards.
+      if (!x.equipSeeded) { x.equipSeeded = true; if (!Array.isArray(x.equipment)) x.equipment = []; if (!x.equipment.length && x.course) fillEquipment(x); }
+    });
     return st;
   }
   // The first time: one setup for each course that already has a price in Settings, plus Intro to Tech with the
@@ -54,6 +59,7 @@
         included: [{ item: "Instruction", cost: "Included" }]
       }));
     }
+    st.classSetups.forEach(x => { if (x.course && !x.equipment.length) fillEquipment(x); });
     (st.classes || []).forEach(k => {
       if (k.setupId || (k.type && k.type !== "class") || !k.course) return;
       const m = st.classSetups.filter(x => x.course === k.course);
@@ -71,6 +77,40 @@
   function agencyOfCourse(id) { const c = window.LDCatalog && window.LDCatalog.find(id); return c ? (/^TDI/.test(c.agency) ? "TDI" : "NAUI") : ""; }
   function agencyOf(su) { return su.agency || agencyOfCourse(su.course) || ""; }
   function coursesFor(ag) { return L().COURSE_ORDER.filter(id => !ag || ag === "Both" || agencyOfCourse(id) === ag || !agencyOfCourse(id)); }
+  // ---------- required equipment from the standards ----------
+  // NAUI: "Policies Applying to All Courses: Scuba Equipment" (2026 manual p. 57), plus course additions.
+  // TDI: section x.9 "Required Equipment" of each course in Part 2: Diver Standards (version 0126).
+  const NAUI_MIN = ["Mask", "Fins", "Scuba cylinder", "Regulator with submersible pressure gauge",
+    "Additional regulator second stage (octopus) or other demand-type alternate air source", "Buoyancy control device with low-pressure inflator"];
+  const EQUIP = {
+    "tdi-intro-tech": { src: "TDI Part 2: Diver Standards, 3.9 Required Equipment (p. 12–13)", items: [
+      "Primary cylinder(s), volume appropriate for the diving conditions and the diver's gas consumption",
+      "Primary regulators: primary and alternate second stage on all primary cylinder(s)",
+      "Submersible pressure gauge on all primary cylinder(s)", "Depth gauge and automatic bottom timer and/or dive computer",
+      "Buoyancy compensator appropriate for the equipment configuration",
+      "Ascent reel with lift bag or surface marker buoy, appropriate for the maximum planned depth and with adequate lift and size for the dive environment",
+      "Exposure protection appropriate for local diving conditions", "Slates / wet notes"] },
+    "tdi-dpv": { src: "TDI Part 2: Diver Standards, 4.9 Required Equipment (p. 18)", items: [
+      "Cylinder(s), volume appropriate for the planned dive and the student's gas consumption",
+      "First and second stage regulator(s) with alternate air source", "Submersible pressure gauge", "Buoyancy compensator (BCD) with power inflator",
+      "Exposure suit adequate for the diving environment", "Mask and fins", "Cutting device", "Computer, watch or bottom timer, and depth gauge",
+      "Slate or wet notes with a pencil", "Whistle or other signaling device", "DPV adequately configured for the environment",
+      "Reel with at least 7.5 m / 25 ft of line", "Lift bag or surface marker buoy with adequate lift and size for the dive environment", "Compass"] },
+    "naui-night": { add: ["At least two lights (night and limited visibility dives)"] }
+  };
+  function equipFor(id) {
+    const e = EQUIP[id], cat = window.LDCatalog && window.LDCatalog.find(id);
+    if (e && e.items) return { src: e.src, items: e.items.slice() };
+    if (cat && /^TDI/.test(cat.agency)) return { src: "", items: [] };
+    return { src: "2026 NAUI Standards and Policies Manual, Policies Applying to All Courses: Scuba Equipment (p. 57)", items: NAUI_MIN.concat((e && e.add) || []) };
+  }
+  function fillEquipment(su) {
+    const f = equipFor(su.course), have = new Set((su.equipment || []).map(x => (x.item || "").trim().toLowerCase()));
+    su.equipment = su.equipment || [];
+    let n = 0;
+    f.items.forEach(x => { if (!have.has(x.toLowerCase())) { su.equipment.push({ item: x, note: "" }); n++; } });
+    return n;
+  }
   function courseName(id) { const c = L().COURSES[id]; return c ? (c.fullName || c.name) : ""; }
   function entries(su) { return (L().state.classes || []).filter(k => k.setupId === su.id); }
   function upcoming(su) { const t = G().today(); return entries(su).filter(k => (G().lastDate(k.dates) || t) >= t); }
@@ -156,6 +196,16 @@
       </tbody></table></div>
       <div class="row-actions"><button class="btn" data-csact="add-inc">+ Add line</button></div>
 
+      <h2 class="sec">Required equipment</h2>
+      ${(() => { const f = su.course ? equipFor(su.course) : null; return `<p class="hint">What each student must have for this class. It goes into the learning agreement as <code>{{equipment}}</code>.${f && f.src ? " Standards: " + esc(f.src) + "." : su.course ? " This course's required equipment isn't in the app yet; check the agency standards." : ""}</p>`; })()}
+      <div class="tablewrap"><table class="m cs-eq"><thead><tr><th>Item</th><th>Notes (e.g. provided, rental available)</th><th></th></tr></thead><tbody>
+        ${(su.equipment || []).map((x, i) => `<tr><td><textarea id="cs-eq-${i}-item" data-csl="equipment.${i}.item" rows="${Math.max(1, Math.ceil(String(x.item || "").length / 42))}" aria-label="Item">${esc(x.item)}</textarea></td>
+          <td><input id="cs-eq-${i}-note" data-csl="equipment.${i}.note" value="${esc(x.note)}" aria-label="Notes"></td>
+          <td class="x"><button class="btn small danger" data-csact="rm-eq" data-i="${i}">Remove</button></td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="row-actions"><button class="btn" data-csact="add-eq">+ Add equipment</button>
+        ${su.course && equipFor(su.course).items.length ? `<button class="btn" data-csact="fill-eq">Add what the standards require</button>` : ""}</div>
+
       <h2 class="sec">Learning agreement</h2>
       <div class="grid"><div class="field wide"><label for="cs-tpl">Template</label><select id="cs-tpl">
         <option value=""${su.template ? "" : " selected"}>Automatic (the best match for the course and type)</option>
@@ -222,6 +272,7 @@
       if (!su.name || su.name === old) su.name = courseName(el.value);
       const pr = L().program(el.value) || {};
       if (!su.time) su.time = pr.hours || ""; if (!su.location) su.location = pr.location || "";
+      if (!(su.equipment || []).some(x => x.item)) { su.equipment = []; fillEquipment(su); }
       L().save(); rerender(); return;
     }
     if (el.id === "cs-tpl") { su.template = el.value; L().save(); return; }
@@ -260,6 +311,9 @@
       case "pick": v.sel = b.dataset.id; rerender(); break;
       case "add-fee": su.fees.push({ desc: "", amt: "", deposit: !su.fees.length }); L().save(); rerender(); break;
       case "rm-fee": su.fees.splice(i, 1); L().save(); rerender(); break;
+      case "add-eq": (su.equipment = su.equipment || []).push({ item: "", note: "" }); L().save(); rerender(); break;
+      case "rm-eq": su.equipment.splice(i, 1); L().save(); rerender(); break;
+      case "fill-eq": { const n = fillEquipment(su); L().save(); rerender(); L().toast(n ? n + " item" + (n === 1 ? "" : "s") + " added from the standards" : "Everything the standards list is already here"); break; }
       case "add-inc": (su.included = su.included || []).push({ item: "", cost: "" }); L().save(); rerender(); break;
       case "rm-inc": su.included.splice(i, 1); L().save(); rerender(); break;
       case "dup": { const n = Object.assign(JSON.parse(JSON.stringify(su)), { id: newId(), name: (su.name || "Class") + " (copy)", created: new Date().toISOString() }); list().push(n); v.sel = n.id; L().save(); rerender(); break; }
@@ -277,7 +331,7 @@
   });
 
   function open(id) { if (id) v.sel = id; L().go("classes"); }
-  window.LDClassSetup = { render, open, list };
+  window.LDClassSetup = { render, open, list, equipFor };
   // Setups are made (from the current course prices) the first time Classes is opened, not on page load,
   // so visitors' browsers never get any.
   L().render();
