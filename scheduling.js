@@ -86,6 +86,9 @@ ${STUDENT_DUTIES}
 ## Course Investment
 {{fees}}
 
+## Required Equipment
+{{equipment}}
+
 ## Payment Policy
 {{payment_policy}}
 
@@ -155,6 +158,7 @@ ${STUDENT_DUTIES}`
     ["student_certs", "Certifications the student holds"],
     ["event_title", "Class, event, tour or session name"], ["event_type", "Class, Event, Tour, Coaching…"],
     ["dates", "Dates"], ["time", "Time"], ["location", "Location"], ["price", "Fee"], ["notes", "Notes on this schedule"],
+    ["equipment", "Required equipment (bullets, from Business → Classes)"],
     ["agency", "Agency of the class (NAUI, TDI, or NAUI and TDI)"],
     ["fees", "Fee lines, what's included and the total (bullets, from Business → Classes)"], ["deposit", "Deposit amount"],
     ["course_name", "Course name (classes)"], ["min_age", "Minimum age"], ["prerequisites", "Prerequisites"],
@@ -180,6 +184,11 @@ ${STUDENT_DUTIES}`
       st.feesSectionAdded = true;
       const t = st.agreementTemplates.find(x => x.id === "t-class");
       if (t && !/\{\{\s*fees\s*\}\}/.test(t.body || "") && (t.body || "").includes("## Payment Policy")) t.body = t.body.replace("## Payment Policy", "## Course Investment\n{{fees}}\n\n## Payment Policy");
+    }
+    if (!st.equipSectionAdded) {
+      st.equipSectionAdded = true;
+      const t = st.agreementTemplates.find(x => x.id === "t-class");
+      if (t && !/\{\{\s*equipment\s*\}\}/.test(t.body || "") && (t.body || "").includes("## Payment Policy")) t.body = t.body.replace("## Payment Policy", "## Required Equipment\n{{equipment}}\n\n## Payment Policy");
     }
     return st;
   }
@@ -329,7 +338,10 @@ ${STUDENT_DUTIES}`
     const base = su ? Math.max(0, price - L().feeLines(su).filter(x => !x.deposit).reduce((a, x) => a + x.amt, 0)) : price;
     const cat = ev && ev.course && window.LDCatalog && window.LDCatalog.find(ev.course);
     const ag = su && su.agency ? (su.agency === "Both" ? "NAUI and TDI" : su.agency) : cat ? (/^TDI/.test(cat.agency) ? "TDI" : "NAUI") : "";
-    return { agency: ag, fees: rows.join("\n"), deposit: base && pct ? money(Math.round(base * pct) / 100) + " (" + pct + "% of the class fee)" : "" };
+    let equipment = ((su && su.equipment) || []).filter(x => x && x.item).map(x => "- " + x.item + (x.note ? " (" + x.note + ")" : "")).join("\n");
+    // A class with no setup: what the course's standards require (class-setup.js).
+    if (!equipment && !su && ev && ev.course && window.LDClassSetup && window.LDClassSetup.equipFor) equipment = window.LDClassSetup.equipFor(ev.course).items.map(x => "- " + x).join("\n");
+    return { equipment, agency: ag, fees: rows.join("\n"), deposit: base && pct ? money(Math.round(base * pct) / 100) + " (" + pct + "% of the class fee)" : "" };
   }
   // The course's proposal wording (Settings → that course), for the learning agreement.
   function proposal(ev, pr, priceTxt) {

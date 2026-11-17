@@ -6,3 +6,5 @@ ul.cs-std { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-d
 ul.cs-std li label.chk { display: flex; align-items: flex-start; gap: 10px; font-weight: 400; }
 ul.cs-std li input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
 .cs-std-count { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 8px; }
+table.cs-eq td:first-child { width: 62%; }
+table.cs-eq textarea { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); min-height: 0; resize: vertical; font: inherit; display: block; }
