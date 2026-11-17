@@ -111,7 +111,7 @@
         <button class="btn primary" data-csact="new">+ New class</button></div>`;
     }
     const ty = typeOf(su), isClass = !!ty.course, fees = su.fees || [], c = L().COURSES[su.course];
-    const tplList = templates(), items = savedItems(), ents = entries(su).slice().sort((a, b) => (G().firstDate(a.dates) || "").localeCompare(G().firstDate(b.dates) || ""));
+    const tplList = templates(), items = savedItems();
     const other = total(su) - classFee(su);
     return `<div class="rec-head"><div class="who"><span class="eyebrow">${esc(isClass ? courseName(su.course) || "Pick a course" : ty.name)}</span>
         <h1 id="cs-title">${esc(su.name || "Untitled class")}</h1></div>
@@ -151,14 +151,6 @@
         <option value=""${su.template ? "" : " selected"}>Automatic (the best match for the course and type)</option>
         ${tplList.map(t => `<option value="${esc(t.id)}"${t.id === su.template ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
         <span class="hint" style="margin:0">Use <code>{{fees}}</code> and <code>{{deposit}}</code> in a template to show these fees. Edit templates under Business → Scheduling.</span></div></div>
-
-      <h2 class="sec">On the calendar</h2>
-      ${ents.length ? `<div class="tablewrap"><table class="m"><thead><tr><th>Dates</th><th>Price</th><th>Students</th><th>Status</th><th></th></tr></thead><tbody>
-        ${ents.map(k => { const past = window.LDCalendar && window.LDCalendar.isPast(k), n = window.LDCalendar ? window.LDCalendar.roster(k).length : 0; return `<tr>
-          <td>${esc(G().range(k.dates) || "No dates yet")}</td><td class="money">${k.price === "" || k.price == null ? "" : money(k.price)}</td><td>${n}</td>
-          <td>${past ? "Finished" : k.published ? "Published" : "Draft"}</td>
-          <td><button class="btn small" data-csact="open-entry" data-id="${esc(k.id)}">Open</button></td></tr>`; }).join("")}</tbody></table></div>`
-        : `<p class="hint">Not on the calendar yet.</p>`}
 
       <div class="row-actions" style="margin-top:28px"><button class="btn" data-csact="dup">Duplicate</button>
         <button class="btn danger" data-csact="del">Delete…</button><span id="cs-del-confirm"></span></div>`;
@@ -224,7 +216,6 @@
       case "rm-fee": su.fees.splice(i, 1); L().save(); rerender(); break;
       case "add-inc": (su.included = su.included || []).push({ item: "", cost: "" }); L().save(); rerender(); break;
       case "rm-inc": su.included.splice(i, 1); L().save(); rerender(); break;
-      case "open-entry": if (window.LDCalendar) window.LDCalendar.show(b.dataset.id); break;
       case "dup": { const n = Object.assign(JSON.parse(JSON.stringify(su)), { id: newId(), name: (su.name || "Class") + " (copy)", created: new Date().toISOString() }); list().push(n); v.sel = n.id; L().save(); rerender(); break; }
       case "del": {
         const n = entries(su).length;
