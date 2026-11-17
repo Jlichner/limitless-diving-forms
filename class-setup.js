@@ -131,7 +131,7 @@
   function renderList() {
     const { esc, money } = L(), q = v.q.trim().toLowerCase();
     const shown = sorted().filter(x => !q || (x.name || "").toLowerCase().includes(q) || courseName(x.course).toLowerCase().includes(q));
-    return `<button class="btn primary" data-csact="new">+ New class</button>
+    return `<button class="btn primary" data-csact="new">Create class</button>
       ${list().length > 6 ? `<input type="search" id="cs-q" placeholder="Search classes" value="${esc(v.q)}" aria-label="Search classes">` : ""}
       <ul>${shown.map(x => {
         const n = upcoming(x).length;
@@ -155,7 +155,7 @@
       return `<div class="empty"><h2>Classes</h2>
         <p>Set up each class you teach once: the course, the fees, the deposit and the details. When it's time, pick it under “Class setup” on a Calendar entry.
         Its fees and deposit then fill in the learning agreement and the invoice for every student on it.</p>
-        <button class="btn primary" data-csact="new">+ New class</button></div>`;
+        <button class="btn primary" data-csact="new">Create class</button></div>`;
     }
     const ty = typeOf(su), isClass = !!ty.course, fees = su.fees || [], c = L().COURSES[su.course];
     const tplList = templates(), items = savedItems();
@@ -212,7 +212,7 @@
         ${tplList.map(t => `<option value="${esc(t.id)}"${t.id === su.template ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
         <span class="hint" style="margin:0">Use <code>{{fees}}</code> and <code>{{deposit}}</code> in a template to show these fees. Edit templates under Business → Scheduling.</span></div></div>
 
-      <div class="row-actions" style="margin-top:28px"><button class="btn" data-csact="dup">Duplicate</button>
+      <div class="row-actions" style="margin-top:28px"><button class="btn primary" data-csact="new">Create class</button>
         <button class="btn danger" data-csact="del">Delete…</button><span id="cs-del-confirm"></span></div>`;
   }
   // ---------- course standards checklist ----------
