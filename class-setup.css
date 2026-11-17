@@ -2,3 +2,7 @@
 table.cs-fees td.chkcell { text-align: center; width: 1%; }
 table.cs-fees td.chkcell input { width: 18px; height: 18px; }
 table.m td.amt input { text-align: right; }
+ul.cs-std { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+ul.cs-std li label.chk { display: flex; align-items: flex-start; gap: 10px; font-weight: 400; }
+ul.cs-std li input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.cs-std-count { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 8px; }

@@ -130,6 +130,8 @@
           ${AGENCIES.map(([k, l]) => `<option value="${k}"${agencyOf(su) === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
         ${isClass ? `<div class="field"><label for="cs-course">Course</label><select id="cs-course"><option value=""${c ? "" : " selected"}>Choose a course…</option>${L().courseOptions(su.course, coursesFor(agencyOf(su)).concat(su.course && !coursesFor(agencyOf(su)).includes(su.course) ? [su.course] : []))}</select></div>` : ""}</div>
 
+      ${typeOf(su).course ? renderStandards(su) : ""}
+
       <h2 class="sec">Fees</h2>
       <p class="hint">Each line is a line on the invoice and in the learning agreement. The deposit is ${esc(pct(su))}% of the lines marked <b>Class fee</b>; untick it for pass-through costs like eLearning or certification processing.</p>
       <div class="tablewrap"><table class="m cs-fees"><thead><tr><th>Description</th><th>Amount ($)</th><th>Class fee</th><th></th></tr></thead><tbody>
@@ -161,6 +163,34 @@
 
       <div class="row-actions" style="margin-top:28px"><button class="btn" data-csact="dup">Duplicate</button>
         <button class="btn danger" data-csact="del">Delete…</button><span id="cs-del-confirm"></span></div>`;
+  }
+  // ---------- course standards checklist ----------
+  // What the agency standards require for the course (catalog.js std, with any changes made under Settings →
+  // Course standards), as a list Jamie ticks off while setting the class up. Ticks are kept on the setup.
+  function stdItems(su) {
+    const CAT = window.LDCatalog, cat = CAT && su.course ? CAT.find(su.course) : null;
+    if (!su.course || !L().COURSES[su.course]) return null;
+    const std = (cat && cat.std) || {}, pr = L().program(su.course) || {}, out = [];
+    const age = pr.minAge || std.age; if (age) out.push(["age", "Minimum age", age]);
+    const pre = (std.prereqs && std.prereqs.length ? std.prereqs : (pr.prereqs || []).map(x => (x.item || x.label || "") + (x.detail ? " (" + x.detail + ")" : ""))).filter(Boolean);
+    pre.forEach((x, i) => out.push(["pre" + i, "Prerequisite", x]));
+    const dives = pr.minDives || (std.dives != null && std.dives !== "" ? std.dives + " open water dive" + (Number(std.dives) === 1 ? "" : "s") + (std.divesNote ? ". " + std.divesNote : "") : "");
+    if (dives) out.push(["dives", "Open water dives", dives]);
+    if (std.dives > 0 && CAT && CAT.minDays) out.push(["days", "Training days", "At least " + CAT.minDays(cat) + " (no more than " + CAT.DIVES_PER_DAY + " training dives a day)"]);
+    const depth = pr.maxDepth || std.depth; if (depth) out.push(["depth", "Maximum training depth", depth]);
+    out.push(["ratio", "Ratios and supervision", "Check the instructor-to-student ratios and any assistant needed for the planned group size"]);
+    out.push(["materials", "Materials and certification", "Student materials and certification processing are covered (a fee line or listed as included)"]);
+    const src = pr.standardsRef || (std.page ? (cat && /^TDI/.test(cat.agency) ? "TDI standards" : "2026 NAUI Standards and Policies Manual") + ", p. " + std.page : "");
+    return { items: out, src, missing: !cat || !cat.std };
+  }
+  function renderStandards(su) {
+    const { esc } = L(), s = stdItems(su);
+    if (!s) return `<h2 class="sec">Standards checklist</h2><p class="hint">Pick a course to see what its standards require.</p>`;
+    const done = su.stdChecked || {}, n = s.items.filter(([k]) => done[k]).length;
+    return `<h2 class="sec">Standards checklist <span class="cs-std-count" id="cs-std-count">${n} of ${s.items.length}</span></h2>
+      <p class="hint">${s.missing ? "This course's standards aren't entered yet. Add them under Settings → Course standards, or check the agency manual directly." : "From " + esc(s.src || "the agency standards") + ". Tick each one once the class covers it."}</p>
+      <ul class="cs-std">${s.items.map(([k, label, text]) => `<li><label class="chk"><input type="checkbox" data-csstd="${esc(k)}"${done[k] ? " checked" : ""}>
+        <span><b>${esc(label)}:</b> ${esc(text)}</span></label></li>`).join("")}</ul>`;
   }
   function depNote(su) { const cf = classFee(su); return cf ? pct(su) + "% of " + L().money(cf) : "Mark a line as Class fee"; }
 
@@ -209,6 +239,14 @@
     L().save(); refresh();
   });
   document.addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.dataset && t.dataset.csstd) {
+      const su = cur(); if (!su) return;
+      su.stdChecked = su.stdChecked || {}; su.stdChecked[t.dataset.csstd] = t.checked; L().save();
+      const s = stdItems(su), c = document.getElementById("cs-std-count");
+      if (s && c) c.textContent = s.items.filter(([k]) => su.stdChecked[k]).length + " of " + s.items.length;
+      return;
+    }
     // Checkboxes and selects fire input too in current browsers; this covers older Safari.
     const el = e.target; if (!el.dataset || !el.dataset.csl || el.type !== "checkbox") return;
     const su = cur(); if (!su) return; setPath(su, el.dataset.csl, el.checked); L().save(); refresh();
