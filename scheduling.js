@@ -155,6 +155,7 @@ ${STUDENT_DUTIES}`
     ["student_certs", "Certifications the student holds"],
     ["event_title", "Class, event, tour or session name"], ["event_type", "Class, Event, Tour, Coaching…"],
     ["dates", "Dates"], ["time", "Time"], ["location", "Location"], ["price", "Fee"], ["notes", "Notes on this schedule"],
+    ["agency", "Agency of the class (NAUI, TDI, or NAUI and TDI)"],
     ["fees", "Fee lines, what's included and the total (bullets, from Business → Classes)"], ["deposit", "Deposit amount"],
     ["course_name", "Course name (classes)"], ["min_age", "Minimum age"], ["prerequisites", "Prerequisites"],
     ["dives", "Required open water dives"], ["max_depth", "Maximum depth"], ["standards_source", "Where the standards come from"],
@@ -326,7 +327,9 @@ ${STUDENT_DUTIES}`
     if (price) rows.push("- Total: " + money(price));
     const pct = su && su.depositPct !== "" && su.depositPct != null ? Number(su.depositPct) || 0 : Number(pr.depositPct) || 0;
     const base = su ? Math.max(0, price - L().feeLines(su).filter(x => !x.deposit).reduce((a, x) => a + x.amt, 0)) : price;
-    return { fees: rows.join("\n"), deposit: base && pct ? money(Math.round(base * pct) / 100) + " (" + pct + "% of the class fee)" : "" };
+    const cat = ev && ev.course && window.LDCatalog && window.LDCatalog.find(ev.course);
+    const ag = su && su.agency ? (su.agency === "Both" ? "NAUI and TDI" : su.agency) : cat ? (/^TDI/.test(cat.agency) ? "TDI" : "NAUI") : "";
+    return { agency: ag, fees: rows.join("\n"), deposit: base && pct ? money(Math.round(base * pct) / 100) + " (" + pct + "% of the class fee)" : "" };
   }
   // The course's proposal wording (Settings → that course), for the learning agreement.
   function proposal(ev, pr, priceTxt) {

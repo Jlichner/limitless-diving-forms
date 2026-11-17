@@ -64,6 +64,11 @@
   function cur() { return list().find(x => x.id === v.sel) || null; }
   function types() { return window.LDCalendar && window.LDCalendar.types ? window.LDCalendar.types() : [{ id: "class", name: "Class", course: true }]; }
   function typeOf(su) { const t = types(); return t.find(x => x.id === (su.type || "class")) || t.find(x => x.course) || t[0]; }
+  // Agency: NAUI (with NAUI Technical), TDI, or Both. It narrows the Course list and fills {{agency}}.
+  const AGENCIES = [["NAUI", "NAUI"], ["TDI", "TDI"], ["Both", "Both (NAUI and TDI)"]];
+  function agencyOfCourse(id) { const c = window.LDCatalog && window.LDCatalog.find(id); return c ? (/^TDI/.test(c.agency) ? "TDI" : "NAUI") : ""; }
+  function agencyOf(su) { return su.agency || agencyOfCourse(su.course) || ""; }
+  function coursesFor(ag) { return L().COURSE_ORDER.filter(id => !ag || ag === "Both" || agencyOfCourse(id) === ag || !agencyOfCourse(id)); }
   function courseName(id) { const c = L().COURSES[id]; return c ? (c.fullName || c.name) : ""; }
   function entries(su) { return (L().state.classes || []).filter(k => k.setupId === su.id); }
   function upcoming(su) { const t = G().today(); return entries(su).filter(k => (G().lastDate(k.dates) || t) >= t); }
@@ -90,7 +95,7 @@
         const n = upcoming(x).length;
         return `<li><button data-csact="pick" data-id="${x.id}" class="${x.id === v.sel ? "sel" : ""}">
           <span class="nm">${esc(x.name || "Untitled class")}</span>
-          <span class="meta">${esc([typeOf(x).course ? courseName(x.course) : typeOf(x).name, L().feeLines(x).length ? money(total(x)) : "No fees yet"].filter(Boolean).join(" · "))}</span>
+          <span class="meta">${esc([agencyOf(x) === "Both" ? "NAUI + TDI" : agencyOf(x), typeOf(x).course ? courseName(x.course) : typeOf(x).name, L().feeLines(x).length ? money(total(x)) : "No fees yet"].filter(Boolean).join(" · "))}</span>
           ${n ? `<span class="meta">${n} on the calendar</span>` : ""}</button></li>`;
       }).join("") || `<li class="meta" style="padding:8px 10px">${list().length ? "No matches." : "No classes set up yet."}</li>`}</ul>`;
   }
@@ -121,7 +126,9 @@
       <h2 class="sec">Class</h2><div class="grid">
         ${fld("name", "Class name (shown on the calendar)", "text", "wide")}
         <div class="field"><label for="cs-type">Calendar type</label><select id="cs-type">${types().map(t => `<option value="${esc(t.id)}"${t === ty ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></div>
-        ${isClass ? `<div class="field"><label for="cs-course">Course</label><select id="cs-course"><option value=""${c ? "" : " selected"}>Choose a course…</option>${L().courseOptions(su.course)}</select></div>` : ""}</div>
+        <div class="field"><label for="cs-agency">Agency</label><select id="cs-agency"><option value=""${agencyOf(su) ? "" : " selected"}>Choose…</option>
+          ${AGENCIES.map(([k, l]) => `<option value="${k}"${agencyOf(su) === k ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></div>
+        ${isClass ? `<div class="field"><label for="cs-course">Course</label><select id="cs-course"><option value=""${c ? "" : " selected"}>Choose a course…</option>${L().courseOptions(su.course, coursesFor(agencyOf(su)).concat(su.course && !coursesFor(agencyOf(su)).includes(su.course) ? [su.course] : []))}</select></div>` : ""}</div>
 
       <h2 class="sec">Fees</h2>
       <p class="hint">Each line is a line on the invoice and in the learning agreement. The deposit is ${esc(pct(su))}% of the lines marked <b>Class fee</b>; untick it for pass-through costs like eLearning or certification processing.</p>
@@ -178,6 +185,7 @@
     if (el.id === "cs-q") { v.q = el.value; refresh(); return; }
     const su = cur(); if (!su) return;
     if (el.id === "cs-type") { su.type = el.value; if (!typeOf(su).course) su.course = ""; L().save(); rerender(); return; }
+    if (el.id === "cs-agency") { su.agency = el.value; L().save(); rerender(); return; }
     if (el.id === "cs-course") {
       const old = courseName(su.course); su.course = el.value;
       // A new setup is named after its course until it gets a name of its own.
