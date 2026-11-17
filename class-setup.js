@@ -12,7 +12,7 @@
   const L = () => window.LD;
   const G = () => window.LDCalGrid;
   const $ = (s, r) => (r || document).querySelector(s);
-  const v = { sel: null, q: "" };
+  const v = { sel: null, q: "", preview: false };
   const DEFAULT_DEPOSIT = 50;
 
   function newId() { return "cs" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -160,7 +160,7 @@
     const ty = typeOf(su), isClass = !!ty.course, fees = su.fees || [], c = L().COURSES[su.course];
     const tplList = templates(), items = savedItems();
     const other = total(su) - classFee(su);
-    return `<div class="rec-head"><div class="who"><span class="eyebrow">${esc(isClass ? courseName(su.course) || "Pick a course" : ty.name)}</span>
+    return `<div class="no-print"><div class="rec-head"><div class="who"><span class="eyebrow">${esc(isClass ? courseName(su.course) || "Pick a course" : ty.name)}</span>
         <h1 id="cs-title">${esc(su.name || "Untitled class")}</h1></div>
         <div class="stats"><div class="stat"><b class="money" id="cs-total">${money(total(su))}</b><span>Total</span></div>
           <div class="stat"><b class="money" id="cs-dep">${money(dep(su))}</b><span>Deposit</span></div></div></div>
@@ -206,14 +206,11 @@
       <div class="row-actions"><button class="btn" data-csact="add-eq">+ Add equipment</button>
         ${su.course && equipFor(su.course).items.length ? `<button class="btn" data-csact="fill-eq">Add what the standards require</button>` : ""}</div>
 
-      <h2 class="sec">Learning agreement</h2>
-      <div class="grid"><div class="field wide"><label for="cs-tpl">Template</label><select id="cs-tpl">
-        <option value=""${su.template ? "" : " selected"}>Automatic (the best match for the course and type)</option>
-        ${tplList.map(t => `<option value="${esc(t.id)}"${t.id === su.template ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
-        <span class="hint" style="margin:0">Use <code>{{fees}}</code> and <code>{{deposit}}</code> in a template to show these fees. Edit templates under Business → Scheduling.</span></div></div>
+      ${renderAgreement(su)}
 
       <div class="row-actions" style="margin-top:28px"><button class="btn primary" data-csact="new">Create class</button>
-        <button class="btn danger" data-csact="del">Delete…</button><span id="cs-del-confirm"></span></div>`;
+        <button class="btn danger" data-csact="del">Delete…</button><span id="cs-del-confirm"></span></div></div>
+      ${v.preview && L().COURSES[su.course] && L().proposalFor ? `<div id="cs-preview">${L().proposalFor(su)}</div>` : ""}`;
   }
   // ---------- course standards checklist ----------
   // What the agency standards require for the course (catalog.js std, with any changes made under Settings →
@@ -243,12 +240,91 @@
       <ul class="cs-std">${s.items.map(([k, label, text]) => `<li><label class="chk"><input type="checkbox" data-csstd="${esc(k)}"${done[k] ? " checked" : ""}>
         <span><b>${esc(label)}:</b> ${esc(text)}</span></label></li>`).join("")}</ul>`;
   }
+  // ---------- learning agreement (course proposal) ----------
+  // The class's own parts of the proposal (format, tagline, program structure, certifications and materials).
+  // They start from the course's settings; for a catalog course with no structure yet, one row per training
+  // day from the standards (no more than 2 training dives a day).
+  // Required subject areas and skills from the standards, for courses without a full skill matrix in the app.
+  const STD_CONTENT = {
+    "tdi-intro-tech": {
+      src: "TDI Part 2: Diver Standards, 3.10 Required Subject Areas and 3.11 Required Skill Performance (p. 13–14)",
+      topics: ["Physics: pressure review", "Physiology: ascent and descent rates, hyperthermia, hypothermia, psychological aspects",
+        "Equipment: single/double cylinders and valve options; regulator options; harness/BCD options; computer, bottom timer and depth gauge options; reels and spools; lift bags and surface marker buoys; exposure protection; minimum equipment (bring only what is needed); streamlining and stowing equipment",
+        "Dive planning: tables/computer planning and execution; surface air consumption (SAC) rate calculations; minimum gas reserve for no-decompression dives; environmental considerations",
+        "Procedures: entry and exit strategies; emergency strategies for gas failure or loss; ascent and descent strategies"],
+      skills: [
+        "Land: select and prepare equipment", "Land: team-oriented skills (buddy checks) for lift bag deployment", "Land: gas matching among buddy teams",
+        "Land: basic hand signals", "Land: pre-dive planning with limits based on the team's and personal gas consumption",
+        "Pre-dive: use S.T.A.R.T. before every dive (S-drill, Team, Air, Route, Tables)", "Pre-dive: stress analysis and mitigation",
+        "In water: weight check", "In water: hover at a fixed position without moving hands or feet",
+        "In water: maintain horizontal trim during descent, bottom and ascent", "In water: no-silt propulsion: frog, modified frog, modified flutter and back kick",
+        "In water, in trim and buoyancy: regulator exchange", "In water, in trim and buoyancy: regulator recovery",
+        "In water, in trim and buoyancy: mask partial flood and clear with minimal air loss", "In water, in trim and buoyancy: mask removal and clear with minimal air loss",
+        "In water, in trim and buoyancy: safety drill (S-drill)", "In water, in trim and buoyancy: valve drill (if double cylinders are used)",
+        "In water, in trim and buoyancy: deploy a surface marker buoy or lift bag", "Show good situational awareness",
+        "Complete all open water requirements safely and efficiently", "Show mature, sound judgment in dive planning and execution"]
+    }
+  };
+  function structureDefault(su) {
+    const pr = L().program(su.course) || {}, rows = (pr.days || []).filter(d => d && (d.focus || d.obj));
+    if (rows.length) return rows.map(d => ({ day: d.day || "", focus: d.focus || "", obj: d.obj || "" }));
+    const CAT = window.LDCatalog, cat = CAT && CAT.find(su.course), n = cat && cat.std ? Number(cat.std.dives) || 0 : 0;
+    const out = [{ day: "1", focus: "Academics", obj: "" }];
+    for (let d = 1, day = 2; d <= n; d += 2, day++) out.push({ day: String(day), focus: "Open Water — Dive" + (d + 1 <= n ? "s " + d + " & " + (d + 1) : " " + d), obj: "" });
+    return out;
+  }
+  function seedAgreement(su) {
+    if (!su.course || su.agreementSeeded === su.course) return;
+    su.agreementSeeded = su.course;
+    const pr = L().program(su.course) || {};
+    su.structure = structureDefault(su);
+    su.certs = (pr.included || []).filter(x => x && (x.item || x.detail)).map(x => ({ item: x.item || "", detail: x.detail || "" }));
+    const sc = STD_CONTENT[su.course];
+    su.topics = sc ? sc.topics.join("\n") : "";
+    su.skillList = sc ? sc.skills.join("\n") : "";
+  }
+  function renderAgreement(su) {
+    const { esc } = L(), tplList = templates(), pr = su.course ? L().program(su.course) || {} : {};
+    if (!L().COURSES[su.course]) return `<h2 class="sec">Learning agreement (course proposal)</h2><p class="hint">Pick a course to build its learning agreement.</p>`;
+    seedAgreement(su);
+    const row = (list, i, keys, ph) => keys.map((k, j) => `<td${j === 0 && keys.length === 3 ? ' class="ini"' : ""}><input id="cs-${list}-${i}-${k}" data-csl="${list}.${i}.${k}" value="${esc((su[list][i] || {})[k])}" placeholder="${esc(ph[j] || "")}" aria-label="${esc(ph[j] || k)}"></td>`).join("");
+    return `<h2 class="sec">Learning agreement (course proposal)</h2>
+      <p class="hint">Built like the Open Water proposal: this class's name, fees, deposit, what's included and required equipment from above, plus the parts below.
+        The rest of the wording (training philosophy, governing standards, expectations, payment notes, acknowledgment) is the course's, under Business → Settings.</p>
+      <div class="grid">
+        <div class="field wide"><label for="cs-f-format">Format</label><input id="cs-f-format" data-csf="format" value="${esc(su.format || "")}" placeholder="${esc(pr.format || "e.g. 1 day academics + 2 days open water")}"></div>
+        <div class="field wide"><label for="cs-f-tagline">Tagline</label><input id="cs-f-tagline" data-csf="tagline" value="${esc(su.tagline || "")}" placeholder="${esc(pr.tagline || "One line under the title")}"></div></div>
+      <h3 class="cs-sub">Program structure</h3>
+      <div class="tablewrap"><table class="m"><thead><tr><th>Day</th><th>Focus</th><th>Primary objectives</th><th></th></tr></thead><tbody>
+        ${su.structure.map((_, i) => `<tr>${row("structure", i, ["day", "focus", "obj"], ["Day", "e.g. Academics + Confined Water", "What the student will do and show"])}
+          <td class="x"><button class="btn small danger" data-csact="rm-row" data-list="structure" data-i="${i}">Remove</button></td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="row-actions"><button class="btn" data-csact="add-row" data-list="structure">+ Add day</button></div>
+      <h3 class="cs-sub">Included certifications &amp; materials</h3>
+      <div class="tablewrap"><table class="m"><thead><tr><th>Included</th><th>Details</th><th></th></tr></thead><tbody>
+        ${su.certs.map((_, i) => `<tr>${row("certs", i, ["item", "detail"], ["e.g. TDI Intro to Tech", "e.g. Certification on successful completion"])}
+          <td class="x"><button class="btn small danger" data-csact="rm-row" data-list="certs" data-i="${i}">Remove</button></td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="row-actions"><button class="btn" data-csact="add-row" data-list="certs">+ Add item</button></div>
+      ${L().COURSES[su.course].skills.length ? "" : `<h3 class="cs-sub">What you'll learn and required skills</h3>
+      <p class="hint">${STD_CONTENT[su.course] ? "Filled in from " + esc(STD_CONTENT[su.course].src) + ". " : "Copy these from the course's standards. "}One per line. The skills print as a checklist with Pass and Initials columns.</p>
+      <div class="grid"><div class="field wide"><label for="cs-f-topics">Academic topics</label><textarea id="cs-f-topics" data-csf="topics" rows="5">${esc(su.topics || "")}</textarea></div>
+        <div class="field wide"><label for="cs-f-skills">Required skills</label><textarea id="cs-f-skills" data-csf="skillList" rows="8">${esc(su.skillList || "")}</textarea></div></div>`}
+      <div class="row-actions" style="margin-top:14px"><button class="btn primary" data-csact="preview">${v.preview ? "Hide the learning agreement" : "Preview learning agreement"}</button>
+        ${v.preview ? `<button class="btn" data-csact="print">Print / save as PDF</button>` : ""}</div>
+      <p class="hint">Each student's own copy, with their name and class dates, is on the Proposal tab of their course record (Scheduling links to it).</p>
+      <div class="grid"><div class="field wide"><label for="cs-tpl">Agreement sent online to sign</label><select id="cs-tpl">
+        <option value=""${su.template ? "" : " selected"}>Automatic (the best match for the course)</option>
+        ${tplList.map(t => `<option value="${esc(t.id)}"${t.id === su.template ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select>
+        <span class="hint" style="margin:0">The text version a student signs in their Student portal, sent from Business → Scheduling. It uses this class's fees, deposit and equipment too.</span></div></div>`;
+  }
   function depNote(su) { const cf = classFee(su); return cf ? pct(su) + "% of " + L().money(cf) : "Mark a line as Class fee"; }
 
   // ---------- updates ----------
   function rerender() { if (document.getElementById("cs-panel")) L().render(); }
   function refresh() {
     const su = cur(); if (!su) return;
+    const pv = document.getElementById("cs-preview"); if (pv && L().proposalFor) pv.innerHTML = L().proposalFor(su);
     const { money } = L(), set = (id, t) => { const x = document.getElementById(id); if (x) x.textContent = t; };
     set("cs-title", su.name || "Untitled class"); set("cs-total", money(total(su))); set("cs-total2", money(total(su)));
     set("cs-dep", money(dep(su))); set("cs-dep2", money(dep(su))); set("cs-dep-note", depNote(su));
@@ -308,7 +384,11 @@
     const su = cur(), i = Number(b.dataset.i);
     switch (b.dataset.csact) {
       case "new": { const n = blank(); list().push(n); v.sel = n.id; L().save(); rerender(); const x = $("#cs-course") || $("#cs-f-name"); if (x) x.focus(); break; }
-      case "pick": v.sel = b.dataset.id; rerender(); break;
+      case "pick": v.sel = b.dataset.id; v.preview = false; rerender(); break;
+      case "preview": v.preview = !v.preview; rerender(); if (v.preview) { const x = document.getElementById("cs-preview"); if (x) x.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
+      case "print": window.print(); break;
+      case "add-row": { const l = b.dataset.list; su[l] = su[l] || []; su[l].push(l === "structure" ? { day: String(su[l].length + 1), focus: "", obj: "" } : { item: "", detail: "" }); L().save(); rerender(); break; }
+      case "rm-row": su[b.dataset.list].splice(i, 1); L().save(); rerender(); break;
       case "add-fee": su.fees.push({ desc: "", amt: "", deposit: !su.fees.length }); L().save(); rerender(); break;
       case "rm-fee": su.fees.splice(i, 1); L().save(); rerender(); break;
       case "add-eq": (su.equipment = su.equipment || []).push({ item: "", note: "" }); L().save(); rerender(); break;
