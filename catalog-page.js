@@ -19,7 +19,7 @@
     const std = c.std;
     return {
       minAge: std ? std.age : "", minDives: divesText(std), maxDepth: std ? std.depth : "",
-      standardsRef: std && std.page ? "2026 NAUI Standards and Policies Manual, p. " + std.page : ""
+      standardsRef: CAT.source(c)
     };
   }
   function agencyStandards(c) {
@@ -88,7 +88,7 @@
     };
     return `<div class="rec-head"><div class="who"><span class="eyebrow">Course catalog</span><h1>All courses</h1></div></div>
       <p class="hint">Every NAUI, NAUI Technical and TDI course you teach. Pick any of them when you add a class to the calendar.
-        NAUI standards are from the 2026 NAUI Standards and Policies Manual; TDI standards are yours to fill in. Edit any course's standards, price and proposal text under <b>Settings</b>.
+        NAUI standards are from the 2026 NAUI Standards and Policies Manual; TDI standards are from TDI Standards and Procedures, Part 2 (version 0126). Edit any course's standards, price and proposal text under <b>Settings</b>.
         Courses marked <span class="cat-full">Skill matrix</span> have a full skill matrix; others can get one later, one course at a time.</p>
       ${CAT.byAgency().map(g => `<h2 class="sec">${esc(g.agency)} <small class="meta">${g.courses.length} course${g.courses.length === 1 ? "" : "s"}</small></h2>
         <div class="tablewrap"><table class="m cat-table"><thead><tr><th>Course</th><th>Minimum age</th><th>Prerequisites</th><th>Open water dives</th><th>Maximum depth</th><th></th></tr></thead>
