@@ -105,6 +105,8 @@ alter table public.student_profiles add column if not exists zip    text not nul
 alter table public.student_profiles add column if not exists photo_path text not null default '';
 -- Elements of tech diving: the members-only section an Instructor or Admin switches on per student (added 2026-11-15).
 alter table public.student_profiles add column if not exists tech_access boolean not null default false;
+-- Dive log book switched on by hand for someone not (yet) registered for a class (added 2026-11-17).
+alter table public.student_profiles add column if not exists logbook_access boolean not null default false;
 alter table public.student_profiles drop constraint if exists student_profiles_address_parts;
 alter table public.student_profiles drop constraint if exists student_profiles_photo_own_folder;
 alter table public.student_profiles add constraint student_profiles_photo_own_folder
@@ -112,16 +114,16 @@ alter table public.student_profiles add constraint student_profiles_photo_own_fo
 alter table public.student_profiles add constraint student_profiles_address_parts
   check (length(street) <= 200 and length(city) <= 100 and length(state) <= 40 and length(zip) <= 20);
 
--- Only Instructors and Admins can switch Elements of tech diving on or off. A student saving their own
--- details can't change it; new profiles start with it off.
+-- Only Instructors and Admins can switch Elements of tech diving or the dive log book on or off. A student
+-- saving their own details can't change them; new profiles start with both off.
 create or replace function public.protect_tech_access()
 returns trigger
 language plpgsql set search_path = ''
 as $$
 begin
   if not public.has_role('instructor') then
-    if tg_op = 'INSERT' then new.tech_access := false;
-    else new.tech_access := old.tech_access;
+    if tg_op = 'INSERT' then new.tech_access := false; new.logbook_access := false;
+    else new.tech_access := old.tech_access; new.logbook_access := old.logbook_access;
     end if;
   end if;
   return new;
@@ -204,7 +206,7 @@ returns table (
   id uuid, email text, full_name text, address text, phone text,
   emergency_name text, emergency_relationship text, emergency_phone text,
   certifications jsonb, created_at timestamptz, updated_at timestamptz, email_confirmed boolean,
-  photo_path text, role text, tech_access boolean
+  photo_path text, role text, tech_access boolean, logbook_access boolean, logbook_auto boolean
 )
 language plpgsql stable security definer set search_path = ''
 as $$
@@ -216,7 +218,11 @@ begin
     select u.id, u.email::text, coalesce(p.full_name, ''), coalesce(p.address, ''), coalesce(p.phone, ''),
            coalesce(p.emergency_name, ''), coalesce(p.emergency_relationship, ''), coalesce(p.emergency_phone, ''),
            coalesce(p.certifications, '[]'::jsonb), coalesce(p.created_at, u.created_at), coalesce(p.updated_at, u.created_at),
-           u.email_confirmed_at is not null, p.photo_path, coalesce(r.role, 'student'), coalesce(p.tech_access, false)
+           u.email_confirmed_at is not null, p.photo_path, coalesce(r.role, 'student'), coalesce(p.tech_access, false),
+           coalesce(p.logbook_access, false),
+           -- the log book is on automatically: registered for a class (see my_logbook_access below)
+           exists (select 1 from public.student_progress sp where sp.student_id = u.id)
+             or exists (select 1 from public.event_signups es where es.student_id = u.id and es.kind = 'class' and es.status = 'enrolled')
     from auth.users u
     left join public.student_profiles p on p.id = u.id
     left join public.staff_roles r on r.user_id = u.id
@@ -731,12 +737,13 @@ grant execute on function public.dive_map_members() to anon, authenticated;
 -- Training dives can be signed off by an Instructor or Admin with sign_dive(). Nobody else can write a signature,
 -- and a signed dive is locked: the diver can't change or delete it unless an Instructor takes the signature back.
 
--- True when you may use the dive log book.
+-- True when you may use the dive log book: staff, anyone registered for a class, or switched on by hand.
 create or replace function public.my_logbook_access()
 returns boolean
 language sql stable security definer set search_path = ''
 as $$
   select public.has_role('divemaster')
+      or coalesce((select logbook_access from public.student_profiles where id = (select auth.uid())), false)
       or exists (select 1 from public.student_progress where student_id = (select auth.uid()))
       or exists (select 1 from public.event_signups
                  where student_id = (select auth.uid()) and kind = 'class' and status = 'enrolled');
@@ -916,6 +923,27 @@ end;
 $$;
 revoke all on function public.dives_to_sign() from public, anon;
 grant execute on function public.dives_to_sign() to authenticated;
+
+-- An Instructor or Admin switches the log book on (or off) by hand for one person, from Records → Students.
+-- Someone registered for a class has it anyway. Makes their profile row if they don't have one yet.
+create or replace function public.set_logbook_access(member uuid, allow boolean)
+returns boolean
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only Instructors and Admins can change log book access' using errcode = '42501';
+  end if;
+  if not exists (select 1 from auth.users where id = member) then
+    raise exception 'No account found' using errcode = 'P0002';
+  end if;
+  insert into public.student_profiles (id, logbook_access) values (member, coalesce(allow, false))
+  on conflict (id) do update set logbook_access = excluded.logbook_access;
+  return coalesce(allow, false);
+end;
+$$;
+revoke all on function public.set_logbook_access(uuid, boolean) from public, anon;
+grant execute on function public.set_logbook_access(uuid, boolean) to authenticated;
 
 revoke all on public.dive_logs from anon;
 grant select, insert, update, delete on public.dive_logs to authenticated;
