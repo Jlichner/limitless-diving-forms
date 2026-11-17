@@ -441,7 +441,7 @@
     view.busy = false;
     if (res.error) { setNote(C.explain(res.error), "bad"); render(); return; }
     // Came here from another page to log in (e.g. Request a class): go back there.
-    { const m = /^#then=(request|nitrox|diving-physics|tech-diving)$/.exec(location.hash); if (a === "signin" && m) { location.href = m[1] + ".html"; return; } }
+    { const m = /^#then=(request|nitrox|diving-physics|tech-diving|logbook)$/.exec(location.hash); if (a === "signin" && m) { location.href = m[1] + ".html"; return; } }
     // ...or the information page of a calendar entry (event.html), to join it or sign up.
     { const m = /^#then=event-([A-Za-z0-9_-]{1,80})$/.exec(location.hash); if (a === "signin" && m) { location.href = "event.html?id=" + encodeURIComponent(m[1]); return; } }
     if (a === "signup" && !(res.data && res.data.session)) {

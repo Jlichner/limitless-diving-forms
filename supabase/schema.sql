@@ -721,6 +721,205 @@ as $$ select count(distinct user_id)::integer from public.dive_sites; $$;
 revoke all on function public.dive_map_members() from public;
 grant execute on function public.dive_map_members() to anon, authenticated;
 
+-- ---------- the digital dive log book (logbook.html), added 2026-11-17 ----------
+-- Each member logs their dives: date, site, depth, time, gas, conditions, buddy and notes. A dive's site is one of
+-- their "Places I've dived" (dive_sites above), so every logged dive is a pin on their map and on the public Dive
+-- map. The site's name and location are copied onto the dive too, so the log keeps them if the place is removed.
+-- Who gets a log book: anyone registered for at least one class (a course record shared to their account, which
+-- the instructor app syncs from the class rosters, or a calendar class sign-up an Instructor has enrolled), plus
+-- all staff. Members see and change only their own dives; Dive Masters and up can read everyone's.
+-- Training dives can be signed off by an Instructor or Admin with sign_dive(). Nobody else can write a signature,
+-- and a signed dive is locked: the diver can't change or delete it unless an Instructor takes the signature back.
+
+-- True when you may use the dive log book.
+create or replace function public.my_logbook_access()
+returns boolean
+language sql stable security definer set search_path = ''
+as $$
+  select public.has_role('divemaster')
+      or exists (select 1 from public.student_progress where student_id = (select auth.uid()))
+      or exists (select 1 from public.event_signups
+                 where student_id = (select auth.uid()) and kind = 'class' and status = 'enrolled');
+$$;
+revoke all on function public.my_logbook_access() from public, anon;
+grant execute on function public.my_logbook_access() to authenticated;
+
+create table if not exists public.dive_logs (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  dive_no        integer not null check (dive_no between 1 and 100000),
+  dived_on       date not null,
+  time_in        text not null default '' check (time_in = '' or time_in ~ '^\d{2}:\d{2}$'),
+  site_id        uuid references public.dive_sites (id) on delete set null,
+  site_name      text not null check (char_length(site_name) between 1 and 120),
+  place          text not null default '' check (char_length(place) <= 200),
+  lat            double precision check (lat between -90 and 90),
+  lng            double precision check (lng between -180 and 180),
+  units          text not null default 'imperial' check (units in ('imperial', 'metric')),  -- ft/psi/°F or m/bar/°C
+  max_depth      numeric check (max_depth > 0 and max_depth <= 1500),
+  avg_depth      numeric check (avg_depth > 0 and avg_depth <= 1500),
+  bottom_time    integer check (bottom_time between 1 and 1440),          -- minutes
+  surface_interval integer check (surface_interval between 0 and 100000), -- minutes before this dive
+  gas            text not null default 'air' check (gas in ('air', 'nitrox', 'trimix', 'oxygen', 'other')),
+  o2_pct         numeric check (o2_pct between 5 and 100),
+  he_pct         numeric check (he_pct between 0 and 95),
+  tank           text not null default '' check (char_length(tank) <= 60),
+  start_pressure integer check (start_pressure between 0 and 6000),
+  end_pressure   integer check (end_pressure between 0 and 6000),
+  water_temp     numeric check (water_temp between -5 and 120),
+  air_temp       numeric check (air_temp between -60 and 140),
+  visibility     numeric check (visibility between 0 and 500),
+  entry          text not null default '' check (entry in ('', 'shore', 'boat', 'other')),
+  water          text not null default '' check (water in ('', 'salt', 'fresh')),
+  current        text not null default '' check (current in ('', 'none', 'light', 'moderate', 'strong')),
+  conditions     text not null default '' check (char_length(conditions) <= 300),
+  suit           text not null default '' check (char_length(suit) <= 80),
+  weight         numeric check (weight between 0 and 200),
+  tags           text[] not null default '{}' check (cardinality(tags) <= 12 and tags <@ array[
+                   'training', 'night', 'deep', 'deco', 'wreck', 'cave', 'overhead', 'drift', 'sidemount', 'dpv',
+                   'drysuit', 'ice']::text[]),
+  buddy          text not null default '' check (char_length(buddy) <= 200),
+  course         text not null default '' check (char_length(course) <= 200),     -- for training dives
+  instructor     text not null default '' check (char_length(instructor) <= 200), -- who taught it
+  notes          text not null default '' check (char_length(notes) <= 4000),
+  signed_by      uuid references auth.users (id) on delete set null,
+  signed_name    text,
+  signed_role    text,
+  signed_at      timestamptz,
+  sign_comment   text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create index if not exists dive_logs_user_idx on public.dive_logs (user_id, dived_on desc);
+create index if not exists dive_logs_unsigned_training_idx on public.dive_logs (dived_on)
+  where signed_at is null and 'training' = any (tags);
+alter table public.dive_logs enable row level security;
+
+drop policy if exists "Members see their own dive log; staff see all" on public.dive_logs;
+create policy "Members see their own dive log; staff see all" on public.dive_logs
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.has_role('divemaster')));
+
+drop policy if exists "Registered members log their own dives" on public.dive_logs;
+create policy "Registered members log their own dives" on public.dive_logs
+  for insert to authenticated
+  with check (user_id = (select auth.uid()) and (select public.my_logbook_access()));
+
+drop policy if exists "Members change their own unsigned dives" on public.dive_logs;
+create policy "Members change their own unsigned dives" on public.dive_logs
+  for update to authenticated
+  using (user_id = (select auth.uid()) and signed_at is null)
+  with check (user_id = (select auth.uid()) and (select public.my_logbook_access()));
+
+drop policy if exists "Members remove their own unsigned dives" on public.dive_logs;
+create policy "Members remove their own unsigned dives" on public.dive_logs
+  for delete to authenticated using (user_id = (select auth.uid()) and signed_at is null);
+
+-- Keeps the signature fields for sign_dive()/unsign_dive() only, stamps updated_at, and caps each log at 5000 dives.
+create or replace function public.check_dive_log()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    if (select count(*) from public.dive_logs where user_id = new.user_id) >= 5000 then
+      raise exception 'You can log up to 5000 dives.';
+    end if;
+    new.created_at := now();
+  else
+    new.user_id := old.user_id; new.created_at := old.created_at;
+  end if;
+  if coalesce(current_setting('ld.signing', true), '') <> 'on' then
+    if tg_op = 'INSERT' then
+      new.signed_by := null; new.signed_name := null; new.signed_role := null; new.signed_at := null; new.sign_comment := null;
+    else
+      new.signed_by := old.signed_by; new.signed_name := old.signed_name; new.signed_role := old.signed_role;
+      new.signed_at := old.signed_at; new.sign_comment := old.sign_comment;
+    end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists dive_logs_check on public.dive_logs;
+create trigger dive_logs_check before insert or update on public.dive_logs
+  for each row execute function public.check_dive_log();
+
+-- An Instructor or Admin signs off a training dive (with an optional comment). Not their own dives.
+create or replace function public.sign_dive(dive_id uuid, comment text default '')
+returns public.dive_logs
+language plpgsql security definer set search_path = ''
+as $$
+declare d public.dive_logs; me uuid := (select auth.uid()); who text;
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only an Instructor or Admin can sign off dives.' using errcode = '42501';
+  end if;
+  select * into d from public.dive_logs where id = dive_id for update;
+  if not found then raise exception 'That dive isn''t in the log book any more.'; end if;
+  if d.user_id = me then raise exception 'You can''t sign off your own dives.'; end if;
+  if d.signed_at is not null then raise exception 'This dive is already signed off.'; end if;
+  select coalesce(nullif(trim(p.full_name), ''), u.email::text) into who
+    from auth.users u left join public.student_profiles p on p.id = u.id where u.id = me;
+  perform set_config('ld.signing', 'on', true);
+  update public.dive_logs
+     set signed_by = me, signed_name = left(coalesce(who, ''), 200), signed_role = public.my_role(),
+         signed_at = now(), sign_comment = nullif(left(trim(coalesce(comment, '')), 500), '')
+   where id = d.id
+   returning * into d;
+  perform set_config('ld.signing', 'off', true);
+  return d;
+end $$;
+revoke all on function public.sign_dive(uuid, text) from public, anon;
+grant execute on function public.sign_dive(uuid, text) to authenticated;
+
+-- An Instructor or Admin takes a sign-off back (e.g. signed by mistake), which unlocks the dive again.
+create or replace function public.unsign_dive(dive_id uuid)
+returns public.dive_logs
+language plpgsql security definer set search_path = ''
+as $$
+declare d public.dive_logs;
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only an Instructor or Admin can take back a sign-off.' using errcode = '42501';
+  end if;
+  perform set_config('ld.signing', 'on', true);
+  update public.dive_logs
+     set signed_by = null, signed_name = null, signed_role = null, signed_at = null, sign_comment = null
+   where id = dive_id
+   returning * into d;
+  perform set_config('ld.signing', 'off', true);
+  if d.id is null then raise exception 'That dive isn''t in the log book any more.'; end if;
+  return d;
+end $$;
+revoke all on function public.unsign_dive(uuid) from public, anon;
+grant execute on function public.unsign_dive(uuid) to authenticated;
+
+-- Training dives waiting for a sign-off, with the diver's name: the Instructor's list on logbook.html.
+create or replace function public.dives_to_sign()
+returns table (id uuid, user_id uuid, diver text, dive_no integer, dived_on date, site_name text, place text,
+               course text, instructor text, max_depth numeric, bottom_time integer, units text)
+language plpgsql stable security definer set search_path = ''
+as $$
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only an Instructor or Admin can sign off dives.' using errcode = '42501';
+  end if;
+  return query
+    select d.id, d.user_id, coalesce(nullif(trim(p.full_name), ''), u.email::text), d.dive_no, d.dived_on,
+           d.site_name, d.place, d.course, d.instructor, d.max_depth, d.bottom_time, d.units
+    from public.dive_logs d
+    join auth.users u on u.id = d.user_id
+    left join public.student_profiles p on p.id = d.user_id
+    where d.signed_at is null and 'training' = any (d.tags) and d.user_id <> (select auth.uid())
+    order by d.dived_on, d.created_at
+    limit 200;
+end;
+$$;
+revoke all on function public.dives_to_sign() from public, anon;
+grant execute on function public.dives_to_sign() to authenticated;
+
+revoke all on public.dive_logs from anon;
+grant select, insert, update, delete on public.dive_logs to authenticated;
+
 -- ---------- table access for the API roles (row-level security above still applies) ----------
 revoke all on public.staff_roles, public.student_profiles, public.student_progress, public.classes, public.calendar_settings from anon;
 grant select on public.classes, public.calendar_settings to anon;
