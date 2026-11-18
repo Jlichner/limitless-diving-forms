@@ -407,10 +407,10 @@
       ["Tools", [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]].concat(window.LDCloud && window.LDCloud.techAccess ? [["tech", "Elements of tech diving"]] : [])],
       ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"]]],
-      allowed("divemaster") && ["Records", [["students", "Students"]].concat(window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
+      allowed("divemaster") && ["Records", [["students", "Student accounts"]].concat(window.LDCatalogPage ? [["catalog", "Courses"]] : [])],
       allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["program", "Settings"]]]
     ].filter(Boolean);
-    // A catalog course without its own nav entry lights up "All courses".
+    // A catalog course without its own nav entry lights up "Courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
     const LINKS = { account: "account.html", values: "core-values.html", available: "available-classes.html",
       coaching: "offering.html?id=coaching", hydra: "offering.html?id=hydra", nitrox: "nitrox.html", physics: "diving-physics.html", tech: "tech-diving.html", dt6: "dive-team-6.html", divemap: "dive-map.html",
@@ -805,7 +805,7 @@
         ${inp("p", "depositPurpose", "Deposit secures…")}${inp("p", "balanceDue", "Balance is…")}
         ${inp("p", "payment", "Payments accepted via")}${inp("p", "paymentUrl", "Payment link", "url")}</div>
       <h2 class="sec">Course standards</h2>
-      <p class="hint">Shown on the All courses page${sc.basic ? " and in the proposal" : ""}. Prerequisites are listed below.</p><div class="grid">
+      <p class="hint">Shown on the Courses page${sc.basic ? " and in the proposal" : ""}. Prerequisites are listed below.</p><div class="grid">
         ${inp("p", "minAge", "Minimum age")}${inp("p", "minDives", "Required open water dives", "text", "wide")}
         ${inp("p", "maxDepth", "Maximum training depth", "text", "wide")}${inp("p", "standardsRef", "Source (e.g. NAUI Standards 2026, p. 159)", "text", "wide")}</div>
       <h2 class="sec">Contact</h2><div class="grid">${inp("p", "instructor", "Instructor")}${inp("p", "phone", "Phone", "tel")}${inp("p", "email", "Email", "email")}</div>
