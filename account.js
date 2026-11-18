@@ -188,7 +188,7 @@
           <div><b>${esc(x.title || "Learning agreement")}</b><span>${x.signed_at ? "Signed " + esc(fmtWhen(x.signed_at)) : "Waiting for your signature"}</span></div>
           <button class="btn small${x.signed_at ? "" : " primary"}" data-act="agr-open" data-id="${esc(x.id)}">${x.signed_at ? "View or print" : "Read and sign"}</button></li>`).join("")}</ul></section>` : ""}
         ${C.techAccess ? `<section class="panel tech-card"><span class="eyebrow">Unlocked for you</span><h2 class="sec">Elements of tech diving</h2>
-          <p class="hint"><i lang="la">Submersio · per artem et disciplinam</i>. ${C.instructor ? "You can open it as staff. Switch it on for a student in Records → Students." : "Your instructor has opened the tech diving gear and configuration lessons for you."}</p>
+          <p class="hint"><i lang="la">Submersio · per artem et disciplinam</i>. ${C.instructor ? "You can open it as staff. Switch it on for a student in Records → Student accounts." : "Your instructor has opened the tech diving gear and configuration lessons for you."}</p>
           <a class="btn primary" href="tech-diving.html">Open Elements of tech diving</a></section>` : ""}
         <section class="panel"><h2 class="sec">Upcoming events</h2>
           ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">Nothing is scheduled right now.</p>`}

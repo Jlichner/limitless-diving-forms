@@ -428,14 +428,47 @@ Please log in, read it over, and sign it${by}:
 ${link}
 
 Once it's signed you can print it or save it as a PDF from the same page.
-
+${invoiceText(a)}
 If you have any questions, just reply to this email.
 
 ${vals.instructor || "Jamie"}
 ${vals.business}`
     };
   }
+  // ---------- the invoice that goes out with the agreement (invoice.js) ----------
+  const IV = () => window.LDInvoices && window.LDInvoices.makeFor ? window.LDInvoices : null;
+  function invoiceOf(a) { return IV() && a ? IV().forAssignment(a.id) : null; }
+  function makeInvoice(a) {
+    const p = person(a), ev = eventOf(a); if (!IV() || !p || !ev) return null;
+    const enr = ev.isClass ? L().state.enrollments.find(e => e.studentId === p.id && e.classId === ev.entry.id) : null;
+    return IV().makeFor({ assignmentId: a.id, studentId: p.id, email: accountEmail(p), enrollmentId: enr ? enr.id : "",
+      title: ev.title, price: ev.price });
+  }
+  function invoiceText(a) {
+    const sm = IV() && IV().summary(invoiceOf(a)); if (!sm) return "";
+    const m = L().money, lines = sm.items.map(r => "- " + (r.desc || "Item") + ": " + m(r.amt));
+    sm.payments.forEach(r => lines.push("- " + (r.desc || "Payment received") + ": -" + m(r.amt)));
+    return `
+Your invoice (${sm.number}):
+${lines.join("\n")}
+Total due: ${m(sm.due)}${sm.deposit ? "\nDeposit due now to hold your spot: " + m(sm.deposit) : ""}
+`;
+  }
+  function invoiceBlock(a, p, ev, sendable) {
+    const { esc, money } = L(); if (!IV() || !p || !ev) return "";
+    const inv = invoiceOf(a);
+    if (inv) {
+      const sm = IV().summary(inv);
+      return `<p class="hint sch-inv">Invoice <b>${esc(inv.number)}</b> (${money(sm.due)} due${sm.deposit ? ", deposit " + money(sm.deposit) : ""}) is made for ${esc(firstName(p))}. <button class="btn small" data-sact="open-inv">Open invoice</button></p>`;
+    }
+    if (sendable) return `<label class="chk sch-inv"><input type="checkbox" id="sch-make-inv"${a.makeInvoice === false ? "" : " checked"}> Also make ${esc(firstName(p))}'s invoice and put it in the email</label>`;
+    return `<p class="hint sch-inv"><button class="btn small" data-sact="make-inv">Make ${esc(firstName(p))}'s invoice</button> Fills in an invoice under Business → Invoices from this ${esc(ev.typeName.toLowerCase())}'s fees.</p>`;
+  }
   function portalBlock(a, p, ev) {
+    const sendable = canSendOnline() && v.signs && !v.signErr && p && p.accountId && !(cloudOf(a) && cloudOf(a).signed_at);
+    return portalInner(a, p, ev) + invoiceBlock(a, p, ev, sendable);
+  }
+  function portalInner(a, p, ev) {
     const { esc, fmtDate } = L(), row = cloudOf(a), first = esc(firstName(p));
     const on = (iso) => esc(fmtDate(String(iso || "").slice(0, 10)));
     if (!canSendOnline()) return `<p class="hint">To send this to the student to sign online, sign in with <b>Admin Log in</b> as an Instructor or Admin. You can still print it for them to sign on paper.</p>`;
@@ -448,7 +481,7 @@ ${vals.business}`
     if (!p) return "";
     if (!p.accountId) {
       return `<p class="hint">${esc(p.name || "This student")} doesn't have a Student portal account linked, so they can't sign online yet. Ask them to sign up at
-        <a href="${PORTAL_URL}" target="_blank" rel="noopener">limitless-diving.com/account.html</a>, then link their account under <b>Records → Students</b> (click their name, then Link under Course records). You can still print it for them to sign on paper.</p>`;
+        <a href="${PORTAL_URL}" target="_blank" rel="noopener">limitless-diving.com/account.html</a>, then link their account under <b>Records → Student accounts</b> (click their name, then Link under Course records). You can still print it for them to sign on paper.</p>`;
     }
     const busy = v.sending ? " disabled" : "";
     if (!row) {
@@ -473,7 +506,10 @@ ${vals.business}`
     catch (err) { r = { error: err }; }
     v.sending = false;
     if (r.error) { rerender(); L().toast("Not sent: " + C().explain(r.error)); return; }
-    v.signs = v.signs || {}; v.signs[a.id] = r.data; rerender();
+    v.signs = v.signs || {}; v.signs[a.id] = r.data;
+    let inv = invoiceOf(a);
+    if (!inv && a.makeInvoice !== false) { inv = makeInvoice(a); if (inv) L().toast("Invoice " + inv.number + " made"); }
+    rerender();
     const email = accountEmail(p);
     if (!window.LDEmail || !email) { L().toast("It's in " + firstName(p) + "'s Student portal. Add their email address to send them a note."); return; }
     const m = emailText(a, p, ev);
@@ -596,7 +632,7 @@ ${vals.business}`
       <div class="sch-pick">${studentSelect(a)}${p ? `<button class="btn small" data-sact="open-student">Open their record</button>` : ""}</div>
       ${v.accBusy ? `<p class="hint">Loading student portal accounts…</p>` : ""}
       ${p ? `<p class="hint">${esc([p.phone, p.email, p.dob ? "DOB " + fmtDate(p.dob) : ""].filter(Boolean).join(" · ") || "No contact details on file yet.")}</p>` : ""}
-      ${p && !p.accountId && online() ? `<p class="hint"><b>${esc(p.name || "This student")} isn't linked to a Student portal account</b>, so this won't show under “My training” when they log in. Pick their account under “Student portal accounts” above, or link it under <b>Records → Students</b> (click their name, then Link under Course records).</p>` : ""}
+      ${p && !p.accountId && online() ? `<p class="hint"><b>${esc(p.name || "This student")} isn't linked to a Student portal account</b>, so this won't show under “My training” when they log in. Pick their account under “Student portal accounts” above, or link it under <b>Records → Student accounts</b> (click their name, then Link under Course records).</p>` : ""}
 
       <h2 class="sec">2 · Class, event, tour or coaching</h2>
       ${building ? "" : `<div class="sch-pick">${targetSelect(a)}${canBuild ? `<span class="sch-or">or</span>
@@ -682,6 +718,7 @@ ${vals.business}`
   document.addEventListener("change", (e) => {
     const el = e.target; if (!$("#sch-panel")) return;
     const a = cur();
+    if (el.id === "sch-make-inv" && a) { a.makeInvoice = el.checked; L().save(); return; }
     if (el.id === "sch-student" && a) {
       let id = el.value;
       if (id === "new") {
@@ -757,6 +794,8 @@ ${vals.business}`
       }
       case "print": window.print(); break;
       case "send-sign": if (a) sendForSigning(a); break;
+      case "make-inv": if (a) { const inv = makeInvoice(a); if (inv) { rerender(); L().toast("Invoice " + inv.number + " made"); } } break;
+      case "open-inv": { const inv = invoiceOf(a); if (inv) IV().open(inv.id); break; }
       case "unsend": $("#sch-unsend-confirm").innerHTML = ` Take it out of their Student portal? <button class="btn small danger" data-sact="unsend-yes">Take it back</button>`; break;
       case "unsend-yes": if (a) unsend(a); break;
       case "proposal": {
