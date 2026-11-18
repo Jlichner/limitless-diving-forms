@@ -375,7 +375,7 @@
   // Instructors and Admins. Staff log in with Admin Log in (student-accounts.js, cloud.js). When online logins
   // aren't set up (no supabase-config.js values), everything stays open, as before.
   const RECORD_MODES = ["students", "catalog"];
-  const BUSINESS_MODES = ["classes", "scheduling", "invoices", "program"];
+  const BUSINESS_MODES = ["classes", "scheduling", "invoices", "accounting", "program"];
   function minRoleFor(mode) {
     if (BUSINESS_MODES.includes(mode)) return "instructor";
     if (RECORD_MODES.includes(mode) || isCourse(mode)) return "divemaster";
@@ -408,7 +408,7 @@
       ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"]]],
       allowed("divemaster") && ["Records", [["students", "Student accounts"]].concat(window.LDCatalogPage ? [["catalog", "Courses"]] : [])],
-      allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["program", "Settings"]]]
+      allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["accounting", "Accounting"], ["program", "Settings"]]]
     ].filter(Boolean);
     // A catalog course without its own nav entry lights up "Courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
@@ -459,6 +459,12 @@
     if (view.mode === "invoices" && window.LDInvoices) {
       main.className = "shell";
       main.innerHTML = window.LDInvoices.render();
+      return;
+    }
+    if (view.mode === "accounting" && window.LDAccounting) {
+      // The yearly income, expenses and mileage for taxes (accounting.js).
+      main.className = "shell full";
+      main.innerHTML = window.LDAccounting.render();
       return;
     }
     if (view.mode === "program") {
@@ -786,7 +792,7 @@
     const P = settingsProgram(), sc = settingsCourse();
     const picker = COURSE_ORDER.length > 1 ? `<div class="field" style="max-width:420px"><label for="settings-course">Course</label><select id="settings-course">${courseOptions(sc.id)}</select></div>` : "";
     return `<div class="rec-head"><h1>Settings — ${esc(sc.fullName || sc.name)}</h1></div>
-      <div class="backup-box"><div><b>Backup</b><p class="hint">Your student records, invoices and settings live in this browser. Download a backup now and then, or move them to another computer.</p></div>
+      <div class="backup-box"><div><b>Backup</b><p class="hint">Your student records, invoices, accounting and settings live in this browser. Download a backup now and then, or move them to another computer.</p></div>
         <div class="row-actions"><button class="btn" data-act="export">Download backup</button><button class="btn" data-act="import">Restore from backup…</button></div></div>
       ${window.LDCalendar && window.LDCalendar.renderTypes ? window.LDCalendar.renderTypes() : ""}
       ${window.LDOfferings ? window.LDOfferings.renderAdmin() : ""}
