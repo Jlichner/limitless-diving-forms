@@ -28,7 +28,9 @@
     // aliases: treat landmarks that share an id in data.py as one, as the original program did (see survey-data.js).
     const opt = Object.assign({ aliases: false, declination: 0 }, options || {});
     const key = lm => (opt.aliases && data.aliases && data.aliases[lm]) || lm;
-    const at = { [key("BAR")]: [0, 0] };
+    // Every site is measured from one starting point at (0, 0): Bonnie Castle's is the Bar.
+    const origin = data.origin || "BAR";
+    const at = { [key(origin)]: [0, 0] };
     const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], totalSurveyedFt: 0 };
     let box = [[0, 0], [0, 0]];
 
@@ -105,6 +107,13 @@
       } else {
         out.warnings.push(`Unknown plan step ${JSON.stringify(step)}`);
       }
+    }
+    // A site that names its starting point shows it, even before any line from it has a landmark there.
+    if (data.origin && !out.landmarks.some(l => l.landmark === origin)) {
+      const o = data.originPoint || {};
+      out.landmarks.unshift({ landmark: origin, x: 0, y: 0, icon: o.icon_path || null, transparent: false,
+        depth: o.depth == null ? null : Number(o.depth), run: null, index: null, origin: true });
+      if (o.depth != null) out.depths.unshift({ landmark: origin, depth: Number(o.depth), x: 0, y: 0, angle: 90, zoom: 1, run: null, index: null });
     }
     out.at = at;
     out.bounds = box;

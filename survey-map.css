@@ -82,3 +82,4 @@
 .se-list li.bad, ol li.bad { color: var(--bad); }
 .se-status.approved { color: var(--ok); } .se-status.declined { color: var(--bad); } .se-status.pending { color: var(--ip); }
 @media (max-width: 860px) { .sm-work.editing { grid-template-columns: 1fr; } .sm-work.editing .sm-map { height: 60vh; } .sm-edit { max-height: none; overflow: visible; } }
+.sm-thumb-empty { display: flex; align-items: center; justify-content: center; font-family: "Barlow Semi Condensed", sans-serif; font-weight: 600; font-size: 1.1rem; letter-spacing: .04em; text-transform: uppercase; color: #4a6470; background: repeating-linear-gradient(135deg, #eef6f8 0 14px, #e3eff2 14px 28px); }

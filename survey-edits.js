@@ -126,7 +126,7 @@
   // Apply changes to data. Returns { data, error, failedAt }: on an error, data has the changes before it.
   function apply(data, changes) {
     let d = copy(data);
-    const onMap = k => k === "BAR" || Object.values(d.runs).some(r => r.some(e => SAVES(e) === k));
+    const onMap = k => k === (d.origin || "BAR") || Object.values(d.runs).some(r => r.some(e => SAVES(e) === k));
     for (let i = 0; i < (changes || []).length; i++) {
       const before = copy(d);
       try { applyOne(d, changes[i], onMap); }

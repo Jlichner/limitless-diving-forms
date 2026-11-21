@@ -52,7 +52,7 @@
 
   function page() {
     main.innerHTML = `<a class="back" href="site-maps.html">← All site maps</a>
-      <section class="pub-hero dm-hero"><span class="eyebrow">Site map · ${esc(S.data.place || "")}</span>
+      <section class="pub-hero dm-hero"><span class="eyebrow">Site map${S.data.place ? " · " + esc(S.data.place) : ""}</span>
         <h1>${esc(S.data.title)}</h1><p>${esc(S.data.subtitle)}.</p></section>
       <p class="sm-test" role="note" id="sm-note"></p>
       <div class="dm-stats" id="sm-stats"></div>
@@ -80,7 +80,11 @@
   // The parts of the page that follow the data: note, stats, key, landmark list, credit.
   function details(d, geo) {
     const when = S.updatedAt ? new Date(S.updatedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }) : null;
-    main.querySelector("#sm-note").innerHTML = S.version
+    const started = geo.segments.length > 0;
+    main.querySelector("#sm-note").innerHTML = !started
+      ? `<b>Help us map this site.</b> No lines have been surveyed here yet. Every line is measured from the ${esc(S.name(d.origin || "BAR"))}.
+         Log in and tap <b>Edit map</b> to add the first line you surveyed: its length, compass heading, and what's at its end.`
+      : S.version
       ? `<b>Updated ${esc(when)}</b> (version ${S.version}). Zoom in, and tap a line or landmark to see what was measured.`
       : `<b>New:</b> the ${esc(String(d.version || "").replace(/^v[\d.]+ /, ""))} survey map, now drawn live from the survey data. Zoom in, and tap a line or landmark to see what was measured.`;
     let ft = 0;
@@ -105,12 +109,13 @@
       <li><span class="sm-sw" aria-hidden="true"><span class="sm-plat"></span></span>Platform</li>
       <li><span class="sm-sw" aria-hidden="true"><span class="sm-num">66'</span></span>Depth in feet</li>
       ${legendIcons.map(i => `<li><span class="sm-sw" aria-hidden="true"><span class="sm-lm${i.bg ? " bg" : ""}">${iconHtml(i.icon)}</span></span>${esc(i.label)}</li>`).join("")}`;
-    const places = geo.landmarks.filter(l => (l.icon && l.icon !== MOORING) || l.depth != null)
+    const places = geo.landmarks.filter(l => (l.icon && l.icon !== MOORING) || l.depth != null || l.origin)
       .filter((l, i, a) => a.findIndex(o => o.landmark === l.landmark) === i)
       .sort((a, b) => S.name(a.landmark).localeCompare(S.name(b.landmark)));
     main.querySelector("#sm-list").innerHTML = places.map(l => `<li><button type="button" data-lm="${esc(l.landmark)}"><b>${esc(S.name(l.landmark))}</b>
       <span>${l.depth != null ? esc(l.depth + " ft deep") : "Depth not recorded"}</span></button></li>`).join("");
-    main.querySelector("#sm-credit").textContent = `Surveyed by ${(d.surveyors || []).join(", ")}. Map program by Stephanie Yang. ${d.credit}, ${d.version}.
+    const by = (d.surveyors || []).length ? `Surveyed by ${d.surveyors.join(", ")}. ` : "";
+    main.querySelector("#sm-credit").textContent = `${by}Map program by Stephanie Yang. ${[d.credit, d.version].filter(Boolean).join(", ")}.
       Lengths and headings are as the divers measured them. Where two routes meet again, both are stretched and turned a little so they join up.`;
   }
 
@@ -120,7 +125,9 @@
   }
   function fit() {
     if (!S.map || !S.geo) return;
-    const [[x0, y0], [x1, y1]] = S.geo.bounds;
+    let [[x0, y0], [x1, y1]] = S.geo.bounds;
+    const grow = (lo, hi) => { const m = Math.max(0, (150 - (hi - lo)) / 2); return [lo - m, hi + m]; }; // at least 150 ft across
+    [x0, x1] = grow(x0, x1); [y0, y1] = grow(y0, y1);
     S.map.fitBounds([ll(x0, y0), ll(x1, y1)], { padding: [24, 24] });
   }
   function goTo(lm) {
@@ -134,7 +141,7 @@
   function landmarkPopup(f) {
     const d = S.shown, from = d.plan.filter(s => s.start === f.landmark).map(s => s.run2 ? `${S.runName(s.run)} and ${S.runName(s.run2)}` : S.runName(s.run));
     return `<b>${esc(S.name(f.landmark))}</b>${f.depth != null ? `<br>${esc(f.depth)} ft deep` : ""}
-      <br><span class="dm-pop">On ${esc(S.runName(f.run))}</span>
+      ${f.run ? `<br><span class="dm-pop">On ${esc(S.runName(f.run))}</span>` : f.origin ? `<br><span class="dm-pop">The starting point: every line is measured from here</span>` : ""}
       ${from.length ? `<br><span class="dm-pop">Lines from here: ${from.map(esc).join("; ")}</span>` : ""}`;
   }
   function segmentPopup(s) {
@@ -223,7 +230,7 @@
         layers.icons.addLayer(clickable(m, f, () => landmarkPopup(f)));
       } else {
         m = L.circleMarker(ll(l.x, l.y), { renderer: canvas, radius: 4.5, color: fresh ? NEW : "#0f7c8c", weight: 2, fillColor: "#ffffff", fillOpacity: 1 });
-        layers.icons.addLayer(clickable(m.bindTooltip(esc(S.name(l.landmark))), f, () => landmarkPopup(f)));
+        layers.icons.addLayer(clickable(m.bindTooltip(esc(S.name(l.landmark)), l.origin && !geo.segments.length ? { permanent: true, direction: "right", offset: [8, 0] } : {}), f, () => landmarkPopup(f)));
       }
       markerFor[l.landmark] = m;
     }
