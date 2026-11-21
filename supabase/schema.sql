@@ -1087,6 +1087,58 @@ grant execute on function public.sign_agreement(text, text, text) to authenticat
 revoke all on public.agreements from anon;
 grant select, insert, update, delete on public.agreements to authenticated;
 
+-- ---------- Dive site admins (added 2026-11-21) ----------
+-- A Dive site admin runs the Site maps (publishes changes, rates lines, places maps, manages layers, grants
+-- access, approves photos) without any of the website's other Admin powers. Admins are Dive site admins too.
+-- Admins switch it on per person in Records → Student accounts (set_site_map_admin below).
+create table if not exists public.site_map_admins (
+  user_id     uuid primary key references auth.users (id) on delete cascade,
+  granted_by  uuid default auth.uid() references auth.users (id) on delete set null,
+  granted_at  timestamptz not null default now()
+);
+alter table public.site_map_admins enable row level security;
+drop policy if exists "Dive site admins: see your own; Admins see all" on public.site_map_admins;
+create policy "Dive site admins: see your own; Admins see all" on public.site_map_admins for select to authenticated
+  using (user_id = (select auth.uid()) or (select public.has_role('admin')));
+revoke all on public.site_map_admins from anon;
+grant select on public.site_map_admins to authenticated;
+
+-- True for Admins and Dive site admins. Callable by visitors who aren't logged in (then false), so the
+-- site map policies that visitors use can call it.
+create or replace function public.is_site_map_admin()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select (select auth.uid()) is not null and (public.has_role('admin')
+    or exists (select 1 from public.site_map_admins where user_id = (select auth.uid())));
+$$;
+revoke all on function public.is_site_map_admin() from public;
+grant execute on function public.is_site_map_admin() to anon, authenticated;
+
+create or replace function public.set_site_map_admin(member uuid, allow boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.has_role('admin') then
+    raise exception 'Only Admins can make someone a Dive site admin' using errcode = '42501';
+  end if;
+  if coalesce(allow, false) then
+    insert into public.site_map_admins (user_id) values (member) on conflict (user_id) do nothing;
+  else
+    delete from public.site_map_admins where user_id = member;
+  end if;
+end $$;
+revoke all on function public.set_site_map_admin(uuid, boolean) from public, anon;
+grant execute on function public.set_site_map_admin(uuid, boolean) to authenticated;
+
+-- Members' names for the Dive site admin granting access to restricted layers (they can't read profiles otherwise).
+create or replace function public.site_map_people()
+returns table (id uuid, full_name text) language sql stable security definer set search_path = '' as $$
+  select u.id, coalesce(nullif(p.full_name, ''), split_part(u.email::text, '@', 1))
+    from auth.users u left join public.student_profiles p on p.id = u.id
+   where public.is_site_map_admin()
+   order by 2;
+$$;
+revoke all on function public.site_map_people() from public, anon;
+grant execute on function public.site_map_people() to authenticated;
+
 -- ---------- Site maps: published survey maps, suggested changes and history (added 2026-11-21) ----------
 -- Anyone can read a published map. Any logged-in member can suggest changes; Admins approve or decline
 -- them and publish. Every published version is kept in site_map_history so a map can be put back.
@@ -1117,7 +1169,7 @@ create table if not exists public.site_map_history (
 alter table public.site_map_history enable row level security;
 drop policy if exists "Admins read site map history" on public.site_map_history;
 create policy "Admins read site map history" on public.site_map_history for select to authenticated
-  using ((select public.has_role('admin')));
+  using ((select public.is_site_map_admin()));
 
 create table if not exists public.site_map_edits (
   id            uuid primary key default gen_random_uuid(),
@@ -1138,7 +1190,7 @@ create index if not exists site_map_edits_site_status on public.site_map_edits (
 alter table public.site_map_edits enable row level security;
 drop policy if exists "Members see their own suggestions; admins see all" on public.site_map_edits;
 create policy "Members see their own suggestions; admins see all" on public.site_map_edits for select to authenticated
-  using (author = (select auth.uid()) or (select public.has_role('admin')));
+  using (author = (select auth.uid()) or (select public.is_site_map_admin()));
 drop policy if exists "Members suggest changes" on public.site_map_edits;
 create policy "Members suggest changes" on public.site_map_edits for insert to authenticated
   with check (author = (select auth.uid()) and status = 'pending' and review_note = '' and reviewed_by is null and reviewed_at is null);
@@ -1167,8 +1219,8 @@ returns integer
 language plpgsql security definer set search_path = '' as $$
 declare cur integer; nv integer; who text;
 begin
-  if not public.has_role('admin') then
-    raise exception 'Only Admins can publish site maps' using errcode = '42501';
+  if not public.is_site_map_admin() then
+    raise exception 'Only Admins and Dive site admins can publish site maps' using errcode = '42501';
   end if;
   if new_data is null or jsonb_typeof(new_data) <> 'object' or jsonb_typeof(new_data -> 'runs') <> 'object'
      or jsonb_typeof(new_data -> 'plan') <> 'array' then
@@ -1202,7 +1254,7 @@ create or replace function public.decline_site_map_edit(edit_id uuid, note text 
 returns void
 language plpgsql security definer set search_path = '' as $$
 begin
-  if not public.has_role('admin') then
+  if not public.is_site_map_admin() then
     raise exception 'Only Admins can review site map suggestions' using errcode = '42501';
   end if;
   update public.site_map_edits set status = 'declined', review_note = left(coalesce(note, ''), 2000),
@@ -1229,3 +1281,167 @@ revoke all on public.site_maps, public.site_map_history, public.site_map_edits f
 grant select on public.site_maps to anon, authenticated;
 grant select on public.site_map_history to authenticated;
 grant select, insert on public.site_map_edits to authenticated;
+
+-- ---------- Site map layers: extra survey lines and pictures, some only for divers an Admin grants (added 2026-11-21) ----------
+-- Each site map can have layers on top of its published survey (site_maps):
+--   survey  more lines of survey (runs, plan, landmarks, runNames, like the site's own data) that start from
+--           landmarks on the main survey. Used for line not every diver should follow (e.g. under the river).
+--   image   a picture laid over the map, e.g. a topographic map. The file is in the private Storage bucket
+--           'site-map-layers' at <site>/<layer id>/<file name>; bounds says where it sits, in feet on the map.
+-- A restricted layer is only readable by Admins and the members listed in site_map_layer_access.
+-- Restricted lines must NOT also be in the site's public data file or in site_maps, which anyone can read.
+create table if not exists public.site_map_layers (
+  id          uuid primary key default gen_random_uuid(),
+  site_id     text not null check (site_id ~ '^[a-z0-9-]{1,60}$'),
+  name        text not null check (length(name) between 1 and 120),
+  kind        text not null check (kind in ('survey', 'image')),
+  restricted  boolean not null default false,
+  note        text not null default '' check (length(note) <= 500),   -- e.g. "Cave/overhead divers only"
+  sort        integer not null default 0,
+  opacity     real not null default 1 check (opacity between 0 and 1),
+  survey      jsonb check (survey is null or (jsonb_typeof(survey) = 'object' and pg_column_size(survey) <= 3000000)),
+  image_path  text not null default '' check (length(image_path) <= 300),
+  bounds      jsonb check (bounds is null or jsonb_typeof(bounds) = 'object'),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists site_map_layers_site on public.site_map_layers (site_id, sort);
+-- Ski-style difficulty: a survey layer can hold all the lines of one rating. Green circle (novice) lines stay
+-- on the main survey, which everyone sees; blue square, black diamond and double black diamond each get a layer.
+alter table public.site_map_layers add column if not exists rating text;
+alter table public.site_map_layers drop constraint if exists site_map_layers_rating;
+alter table public.site_map_layers add constraint site_map_layers_rating
+  check (rating is null or (kind = 'survey' and rating in ('blue', 'black', 'double-black')));
+create unique index if not exists site_map_layers_one_per_rating on public.site_map_layers (site_id, rating) where rating is not null;
+drop trigger if exists site_map_layers_touch on public.site_map_layers;
+create trigger site_map_layers_touch before update on public.site_map_layers
+  for each row execute function public.touch_updated_at();
+
+create table if not exists public.site_map_layer_access (
+  layer_id    uuid not null references public.site_map_layers (id) on delete cascade,
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  granted_by  uuid default auth.uid() references auth.users (id) on delete set null,
+  granted_at  timestamptz not null default now(),
+  primary key (layer_id, user_id)
+);
+
+-- True when the person looking may see this layer.
+create or replace function public.can_see_site_map_layer(layer uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.site_map_layers l
+    where l.id = layer and (not l.restricted
+      or (select auth.uid()) is not null and ((select public.is_site_map_admin())
+        or exists (select 1 from public.site_map_layer_access a where a.layer_id = l.id and a.user_id = (select auth.uid())))));
+$$;
+revoke all on function public.can_see_site_map_layer(uuid) from public;
+grant execute on function public.can_see_site_map_layer(uuid) to anon, authenticated;
+
+alter table public.site_map_layers enable row level security;
+drop policy if exists "Layers: open ones for everyone, restricted ones for granted members" on public.site_map_layers;
+create policy "Layers: open ones for everyone, restricted ones for granted members" on public.site_map_layers
+  for select to anon, authenticated using (public.can_see_site_map_layer(id));
+drop policy if exists "Layers: Admins add" on public.site_map_layers;
+create policy "Layers: Admins add" on public.site_map_layers for insert to authenticated with check ((select public.is_site_map_admin()));
+drop policy if exists "Layers: Admins change" on public.site_map_layers;
+create policy "Layers: Admins change" on public.site_map_layers for update to authenticated
+  using ((select public.is_site_map_admin())) with check ((select public.is_site_map_admin()));
+drop policy if exists "Layers: Admins remove" on public.site_map_layers;
+create policy "Layers: Admins remove" on public.site_map_layers for delete to authenticated using ((select public.is_site_map_admin()));
+
+alter table public.site_map_layer_access enable row level security;
+drop policy if exists "Layer access: members see their own; Admins see all" on public.site_map_layer_access;
+create policy "Layer access: members see their own; Admins see all" on public.site_map_layer_access
+  for select to authenticated using (user_id = (select auth.uid()) or (select public.is_site_map_admin()));
+drop policy if exists "Layer access: Admins grant" on public.site_map_layer_access;
+create policy "Layer access: Admins grant" on public.site_map_layer_access for insert to authenticated with check ((select public.is_site_map_admin()));
+drop policy if exists "Layer access: Admins take away" on public.site_map_layer_access;
+create policy "Layer access: Admins take away" on public.site_map_layer_access for delete to authenticated using ((select public.is_site_map_admin()));
+
+revoke all on public.site_map_layers, public.site_map_layer_access from anon;
+grant select on public.site_map_layers to anon;
+grant select, insert, update, delete on public.site_map_layers to authenticated;
+grant select, insert, delete on public.site_map_layer_access to authenticated;
+
+-- Pictures for image layers: a private bucket. A picture can be read by whoever may see its layer
+-- (the second folder of its path is the layer id); only Admins add, replace or remove them.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('site-map-layers', 'site-map-layers', false, 26214400, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+drop policy if exists "Site map pictures: whoever may see the layer" on storage.objects;
+create policy "Site map pictures: whoever may see the layer" on storage.objects for select to anon, authenticated
+  using (bucket_id = 'site-map-layers' and (storage.foldername(name))[2] ~ '^[0-9a-f-]{36}$'
+         and public.can_see_site_map_layer(((storage.foldername(name))[2])::uuid));
+drop policy if exists "Site map pictures: Admins add" on storage.objects;
+create policy "Site map pictures: Admins add" on storage.objects for insert to authenticated
+  with check (bucket_id = 'site-map-layers' and (select public.is_site_map_admin()));
+drop policy if exists "Site map pictures: Admins replace" on storage.objects;
+create policy "Site map pictures: Admins replace" on storage.objects for update to authenticated
+  using (bucket_id = 'site-map-layers' and (select public.is_site_map_admin()))
+  with check (bucket_id = 'site-map-layers' and (select public.is_site_map_admin()));
+drop policy if exists "Site map pictures: Admins remove" on storage.objects;
+create policy "Site map pictures: Admins remove" on storage.objects for delete to authenticated
+  using (bucket_id = 'site-map-layers' and (select public.is_site_map_admin()));
+
+-- ---------- Site map landmark photos (added 2026-11-21) ----------
+-- Tap a landmark on a site map to see its photos. Any logged-in member can add one; it shows for everyone
+-- once an Admin approves it (an Admin's own photos show straight away). Files are in the private bucket
+-- 'site-map-photos' at <site>/<uploader id>/<file name>.
+create table if not exists public.site_map_photos (
+  id          uuid primary key default gen_random_uuid(),
+  site_id     text not null check (site_id ~ '^[a-z0-9-]{1,60}$'),
+  landmark    text not null check (landmark ~ '^[A-Z][A-Z0-9_]{0,59}$'),
+  path        text not null check (length(path) between 1 and 300),
+  caption     text not null default '' check (length(caption) <= 300),
+  author      uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  author_name text not null default '' check (length(author_name) <= 200),
+  approved    boolean not null default false,
+  created_at  timestamptz not null default now()
+);
+create index if not exists site_map_photos_site on public.site_map_photos (site_id, landmark);
+alter table public.site_map_photos enable row level security;
+drop policy if exists "Photos: approved for everyone; your own; Admins all" on public.site_map_photos;
+create policy "Photos: approved for everyone; your own; Admins all" on public.site_map_photos for select to anon, authenticated
+  using (approved or author = (select auth.uid()) or (select public.is_site_map_admin()));
+drop policy if exists "Photos: members add" on public.site_map_photos;
+create policy "Photos: members add" on public.site_map_photos for insert to authenticated
+  with check (author = (select auth.uid()) and (not approved or (select public.is_site_map_admin()))
+              and split_part(path, '/', 2) = (select auth.uid())::text);
+drop policy if exists "Photos: Admins approve and edit" on public.site_map_photos;
+create policy "Photos: Admins approve and edit" on public.site_map_photos for update to authenticated
+  using ((select public.is_site_map_admin())) with check ((select public.is_site_map_admin()));
+drop policy if exists "Photos: yours or an Admin removes" on public.site_map_photos;
+create policy "Photos: yours or an Admin removes" on public.site_map_photos for delete to authenticated
+  using (author = (select auth.uid()) or (select public.is_site_map_admin()));
+
+create or replace function public.site_map_photo_author()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  new.author := (select auth.uid());
+  select coalesce(nullif(p.full_name, ''), split_part(u.email::text, '@', 1), '') into new.author_name
+    from auth.users u left join public.student_profiles p on p.id = u.id where u.id = new.author;
+  new.author_name := coalesce(new.author_name, '');
+  return new;
+end $$;
+drop trigger if exists site_map_photos_author on public.site_map_photos;
+create trigger site_map_photos_author before insert on public.site_map_photos
+  for each row execute function public.site_map_photo_author();
+
+revoke all on public.site_map_photos from anon;
+grant select on public.site_map_photos to anon;
+grant select, insert, update, delete on public.site_map_photos to authenticated;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('site-map-photos', 'site-map-photos', false, 10485760, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+drop policy if exists "Site map photos: approved, your own, or Admins" on storage.objects;
+create policy "Site map photos: approved, your own, or Admins" on storage.objects for select to anon, authenticated
+  using (bucket_id = 'site-map-photos' and ((storage.foldername(name))[2] = (select auth.uid())::text
+         or (select public.is_site_map_admin())
+         or exists (select 1 from public.site_map_photos p where p.path = name and p.approved)));
+drop policy if exists "Site map photos: members add to their own folder" on storage.objects;
+create policy "Site map photos: members add to their own folder" on storage.objects for insert to authenticated
+  with check (bucket_id = 'site-map-photos' and (storage.foldername(name))[2] = (select auth.uid())::text);
+drop policy if exists "Site map photos: yours or an Admin removes" on storage.objects;
+create policy "Site map photos: yours or an Admin removes" on storage.objects for delete to authenticated
+  using (bucket_id = 'site-map-photos' and ((storage.foldername(name))[2] = (select auth.uid())::text or (select public.is_site_map_admin())));

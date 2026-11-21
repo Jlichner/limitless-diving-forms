@@ -352,6 +352,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       ${certs.length ? `<ul class="dir-certs">${certs.map(c => `<li>${esc(certText(c))}</li>`).join("")}</ul>` : `<p class="hint">None listed yet.</p>`}
       ${techBlock(acc)}
       ${logbookBlock(acc)}
+      ${siteAdminBlock(acc)}
       <h2 class="sec">Course records</h2>
       ${p ? `<p class="hint">${enrolled.length ? enrolled.map(e => esc(L().COURSES[e.course].name)).join(", ") : "No courses yet"} · <button class="linkbtn" data-sa="open" data-id="${esc(p.id)}">Open ${esc(p.name || "their")} record</button></p>`
         : `<p class="hint">Not linked to a course record in this browser yet.${C().can("instructor") ? "" : " An Instructor can link it."}</p>`}
@@ -373,6 +374,30 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
   }
   // Dive log book (logbook.html): on automatically for anyone registered for a class and for staff.
   // Instructors and Admins can also switch it on by hand for one person.
+  // Dive site admin (site_map_admins): runs the Site maps without the website's other Admin powers. Admins only.
+  function siteAdminBlock(acc) {
+    const { esc } = L();
+    if (!C().can("admin")) return "";
+    if (acc.role === "admin") return `<h2 class="sec">Dive site admin</h2><p class="hint">Admins can always run the site maps.</p>`;
+    if (!v.siteAdmins) {
+      if (!v.siteAdminsLoading) {
+        v.siteAdminsLoading = true;
+        C().client.from("site_map_admins").select("user_id").then(({ data, error }) => {
+          v.siteAdminsLoading = false;
+          v.siteAdmins = error ? { error: /site_map_admins|does not exist|schema cache/i.test(error.message || "") ? "setup" : C().explain(error) } : new Set(data.map(r => r.user_id));
+          rerender();
+        });
+      }
+      return `<h2 class="sec">Dive site admin</h2><p class="hint">Loading…</p>`;
+    }
+    if (v.siteAdmins.error) return `<h2 class="sec">Dive site admin</h2><p class="hint">${v.siteAdmins.error === "setup" ? "Run the latest <code>supabase/schema.sql</code> to use this." : esc(v.siteAdmins.error)}</p>`;
+    const on = v.siteAdmins.has(acc.id);
+    return `<h2 class="sec">Dive site admin</h2>
+      <p class="hint tech-state"><span class="sa-badge${on ? "" : " wait"}">${on ? "On" : "Off"}</span> ${on
+        ? "They run the site maps: publish changes, rate lines, choose who sees which ratings, place maps, add layers and approve photos. No other Admin powers."
+        : "Turn on to let them run the site maps without any of the website's other Admin powers."}</p>
+      <div class="row-actions"><button class="btn${on ? "" : " primary"}" data-sa="siteadmin" data-acc="${esc(acc.id)}" data-on="${on ? "0" : "1"}" aria-pressed="${on}"${v.busy ? " disabled" : ""}>${on ? "Turn off Dive site admin" : "Make Dive site admin"}</button></div>`;
+  }
   function logbookBlock(acc) {
     const { esc } = L();
     const staff = ["divemaster", "instructor", "admin"].includes(acc.role || "student");
@@ -511,6 +536,18 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         (v.members || []).concat(v.accounts || []).forEach(a => { if (a.id === acc.id) a.tech_access = allow; });
         setNote(""); rerender();
         L().toast(allow ? "Elements of tech diving is on for " + (acc.full_name || "them") : "Elements of tech diving is off for " + (acc.full_name || "them"));
+        break;
+      }
+      case "siteadmin": {
+        if (!acc) break;
+        const allow = b.dataset.on === "1";
+        v.busy = true; rerender();
+        const { error } = await C().client.rpc("set_site_map_admin", { member: acc.id, allow });
+        v.busy = false;
+        if (error) { rerender(); L().toast("Not changed: " + C().explain(error)); break; }
+        if (v.siteAdmins && !v.siteAdmins.error) { if (allow) v.siteAdmins.add(acc.id); else v.siteAdmins.delete(acc.id); }
+        setNote(""); rerender();
+        L().toast(allow ? (acc.full_name || "They") + " can now run the site maps" : (acc.full_name || "They") + " no longer run the site maps");
         break;
       }
       case "logbook": {

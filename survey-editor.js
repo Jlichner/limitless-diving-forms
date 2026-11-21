@@ -16,7 +16,7 @@
   const st = { open: false, draft: [], groups: [], baseVersion: 0, sel: null, mode: "idle", add: null, confirm: null, review: null,
     msg: null, busy: false, summary: "", pending: [], mine: [], history: null, declining: null };
 
-  const isAdmin = () => !!(C && C.user && C.can("admin"));
+  const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
   const say = (text, kind) => { st.msg = text ? { text, kind: kind || "" } : null; };
   const lineFeet = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
   const ftIn = e => { const ft = Number(e.length_ft) || 0, inch = Number(e.length_in) || 0; return inch ? `${ft} ft ${inch} in` : `${ft} ft`; };
@@ -348,11 +348,13 @@
     if (st.review) return;
     if (st.mode === "add") {
       if (!st.add.pickingEnd) return;
+      if (f.layer) { say("Pick a point on the main survey.", "bad"); return render(); }
       const d = current().data, a = anchor(f, d);
       if (a.key === st.add.start.key) { say("That's where the line starts. Pick the point it ends at.", "bad"); return render(); }
       st.add.end = a; st.add.pickingEnd = false; say(null); return render();
     }
     if (st.mode === "confirm") return;
+    if (f.layer) { st.sel = null; say("That line is in a rated layer. A Dive site admin changes it from Map setup.", "bad"); return render(); }
     st.sel = f; say(null); render();
   }
 
@@ -420,5 +422,6 @@
   if (C && C.available) {
     btn.hidden = false;
     C.onChange(() => { if (st.open) { st.history = null; loadLists().then(render); } });
+    S.adminListeners.push(() => { if (st.open) { st.history = null; loadLists().then(render); } });
   }
 })();
