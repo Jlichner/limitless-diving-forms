@@ -1,13 +1,15 @@
 /* Limitless Diving — Site maps (site-maps.html): a card for every dive site survey map.
-   Each site's data file (e.g. bonnie-castle-data.js) adds itself to window.SITE_MAPS; its map page is
-   <id>-map.html. To add a site: make its data file and map page, and load the data file here too.
+   Each site's data file (e.g. bonnie-castle-data.js) adds its title and credits to window.SITE_MAPS; its map
+   page is <id>-map.html. To add a site: make its data file and map page, and load the data file here too.
+   The surveys are in the database (site_maps), readable only by members with a Site maps access level, so the
+   cards show each map's drawing only to them; everyone else sees the titles and a log in link.
    A site with no survey yet (lake-hydra-data.js) names its starting point as origin; divers add lines in the editor. */
 (function () {
   "use strict";
 
   const main = document.getElementById("sitemaps"), G = window.SurveyGeometry;
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  let sites = Object.values(window.SITE_MAPS || {});
+  let sites = Object.values(window.SITE_MAPS || {}), access = null;
 
   // A small north-up drawing of the site's lines for its card.
   function thumbnail(geo) {
@@ -23,9 +25,13 @@
     const ft = geo.segments.filter(s => s.kind === "surveyed" || s.kind === "marina")
       .reduce((t, s) => { const e = d.runs[s.run][s.index]; return t + (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12; }, 0);
     const named = geo.landmarks.filter(l => l.icon && !/mooringblock/.test(l.icon)).length;
+    if (!geo.segments.length && d.privateSurvey) return `<a class="sm-card" href="${esc(d.id)}-map.html"><span class="sm-thumb sm-thumb-empty" aria-hidden="true">Members only</span>
+      <span class="sm-card-body"><b>${esc(d.title)}</b><span>${esc(d.place || "")}</span>
+      <em>${access === "none" ? "Ask an instructor for site maps access to open this map." : "Log in to open this map."}</em>
+      <span class="sm-card-by">${esc(d.credit)}</span></span></a>`;
     if (!geo.segments.length) return `<a class="sm-card" href="${esc(d.id)}-map.html"><span class="sm-thumb sm-thumb-empty" aria-hidden="true">Survey coming soon</span>
       <span class="sm-card-body"><b>${esc(d.title)}</b><span>${esc(d.place || "")}</span>
-      <em>Not surveyed yet. Help us map it: log in, open the map and add the lines you survey.</em></span></a>`;
+      <em>Not surveyed yet. Our survey team adds the lines as they map it.</em></span></a>`;
     return `<a class="sm-card" href="${esc(d.id)}-map.html">${thumbnail(geo)}
       <span class="sm-card-body"><b>${esc(d.title)}</b><span>${esc(d.place || "")}</span>
       <em>${Math.round(ft).toLocaleString()} ft of line surveyed · ${named} landmarks · ${geo.stakes.length} stakes</em>
@@ -35,7 +41,9 @@
   function render() {
   main.innerHTML = `<section class="pub-hero dm-hero"><span class="eyebrow">Under the water</span><h1>Site maps</h1>
       <p>Maps of the dive sites we dive, made from our divers' surveys: every line, stake and tie-off measured with a compass and a tape.
-      Open a map to zoom in and see the landmarks and depths.</p></section>
+      Open a map to zoom in and see the landmarks and depths.</p>
+      <p>The maps are for registered members. Each diver sees the lines they're trained for: green circles for open water divers,
+      blue squares for advanced, black diamonds for tech, and double black diamonds for tech on scooters.</p></section>
     ${sites.length ? `<div class="sm-cards">${sites.map(card).join("")}</div>` : `<div class="msg">No site maps yet.</div>`}`;
   }
   render();
@@ -44,6 +52,10 @@
   (async () => {
     const C = window.LDCloud;
     if (!C || !C.available) return;
+    await (C.ready || Promise.resolve());
+    if (!C.user) return;
+    const lv = await C.client.rpc("my_site_map_level");
+    if (!lv.error && lv.data === "none") { access = "none"; render(); return; }
     const { data, error } = await C.client.from("site_maps").select("id, data");
     if (error || !data || !data.length) return;
     const pub = Object.fromEntries(data.map(r => [r.id, r.data]));

@@ -374,29 +374,39 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
   }
   // Dive log book (logbook.html): on automatically for anyone registered for a class and for staff.
   // Instructors and Admins can also switch it on by hand for one person.
-  // Dive site admin (site_map_admins): runs the Site maps without the website's other Admin powers. Admins only.
+  // Site maps access (site_map_members): which lines of the site maps they see, or whether they help survey or run
+  // the maps. Same levels as SurveyMap.LEVELS in survey-map.js. Admins only.
+  const SITE_LEVELS = [
+    ["none", "No access", "They can't open the site maps."],
+    ["green", "Green circle: open water divers", "They see the green circle lines."],
+    ["blue", "Blue square: advanced divers", "They see the green circle and blue square lines."],
+    ["black", "Black diamond: tech divers", "They see the green circle, blue square and black diamond lines."],
+    ["double-black", "Double black diamond: tech on scooters", "They see every rated line."],
+    ["survey", "Survey team", "They see every line and can suggest changes to the maps. An admin approves each change before it goes on."],
+    ["site-admin", "Dive site admin", "They run the site maps: publish changes, rate lines, place maps, add layers, approve photos and set other members' access below Dive site admin. None of the website's other Admin powers."],
+  ];
   function siteAdminBlock(acc) {
     const { esc } = L();
     if (!C().can("admin")) return "";
-    if (acc.role === "admin") return `<h2 class="sec">Dive site admin</h2><p class="hint">Admins can always run the site maps.</p>`;
-    if (!v.siteAdmins) {
-      if (!v.siteAdminsLoading) {
-        v.siteAdminsLoading = true;
-        C().client.from("site_map_admins").select("user_id").then(({ data, error }) => {
-          v.siteAdminsLoading = false;
-          v.siteAdmins = error ? { error: /site_map_admins|does not exist|schema cache/i.test(error.message || "") ? "setup" : C().explain(error) } : new Set(data.map(r => r.user_id));
+    const h = `<h2 class="sec">Site maps access</h2>`;
+    if (acc.role === "admin") return `${h}<p class="hint">Admins always see and run all the site maps.</p>`;
+    if (!v.siteLevels) {
+      if (!v.siteLevelsLoading) {
+        v.siteLevelsLoading = true;
+        C().client.from("site_map_members").select("user_id, level").then(({ data, error }) => {
+          v.siteLevelsLoading = false;
+          v.siteLevels = error ? { error: /site_map_members|does not exist|schema cache/i.test(error.message || "") ? "setup" : C().explain(error) } : new Map(data.map(r => [r.user_id, r.level]));
           rerender();
         });
       }
-      return `<h2 class="sec">Dive site admin</h2><p class="hint">Loading…</p>`;
+      return `${h}<p class="hint">Loading…</p>`;
     }
-    if (v.siteAdmins.error) return `<h2 class="sec">Dive site admin</h2><p class="hint">${v.siteAdmins.error === "setup" ? "Run the latest <code>supabase/schema.sql</code> to use this." : esc(v.siteAdmins.error)}</p>`;
-    const on = v.siteAdmins.has(acc.id);
-    return `<h2 class="sec">Dive site admin</h2>
-      <p class="hint tech-state"><span class="sa-badge${on ? "" : " wait"}">${on ? "On" : "Off"}</span> ${on
-        ? "They run the site maps: publish changes, rate lines, choose who sees which ratings, place maps, add layers and approve photos. No other Admin powers."
-        : "Turn on to let them run the site maps without any of the website's other Admin powers."}</p>
-      <div class="row-actions"><button class="btn${on ? "" : " primary"}" data-sa="siteadmin" data-acc="${esc(acc.id)}" data-on="${on ? "0" : "1"}" aria-pressed="${on}"${v.busy ? " disabled" : ""}>${on ? "Turn off Dive site admin" : "Make Dive site admin"}</button></div>`;
+    if (v.siteLevels.error) return `${h}<p class="hint">${v.siteLevels.error === "setup" ? "Run the latest <code>supabase/schema.sql</code> to use this." : esc(v.siteLevels.error)}</p>`;
+    const cur = v.siteLevels.get(acc.id) || "none", info = SITE_LEVELS.find(l => l[0] === cur) || SITE_LEVELS[0];
+    return `${h}<div class="row-actions"><label>Level <select id="sa-sitelevel" data-acc="${esc(acc.id)}"${v.busy ? " disabled" : ""}>
+        ${SITE_LEVELS.map(l => `<option value="${l[0]}"${l[0] === cur ? " selected" : ""}>${esc(l[1])}</option>`).join("")}</select></label>
+        <button class="btn primary" data-sa="sitelevel" data-acc="${esc(acc.id)}"${v.busy ? " disabled" : ""}>Save</button></div>
+      <p class="hint">${esc(info[2])} Each level also sees everything below it.</p>`;
   }
   function logbookBlock(acc) {
     const { esc } = L();
@@ -538,16 +548,16 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         L().toast(allow ? "Elements of tech diving is on for " + (acc.full_name || "them") : "Elements of tech diving is off for " + (acc.full_name || "them"));
         break;
       }
-      case "siteadmin": {
+      case "sitelevel": {
         if (!acc) break;
-        const allow = b.dataset.on === "1";
+        const sel = document.getElementById("sa-sitelevel"), level = sel ? sel.value : "none";
         v.busy = true; rerender();
-        const { error } = await C().client.rpc("set_site_map_admin", { member: acc.id, allow });
+        const { error } = await C().client.rpc("set_site_map_level", { member: acc.id, new_level: level });
         v.busy = false;
         if (error) { rerender(); L().toast("Not changed: " + C().explain(error)); break; }
-        if (v.siteAdmins && !v.siteAdmins.error) { if (allow) v.siteAdmins.add(acc.id); else v.siteAdmins.delete(acc.id); }
+        if (v.siteLevels && !v.siteLevels.error) { if (level === "none") v.siteLevels.delete(acc.id); else v.siteLevels.set(acc.id, level); }
         setNote(""); rerender();
-        L().toast(allow ? (acc.full_name || "They") + " can now run the site maps" : (acc.full_name || "They") + " no longer run the site maps");
+        L().toast("Site maps access for " + (acc.full_name || "them") + ": " + SITE_LEVELS.find(l => l[0] === level)[1]);
         break;
       }
       case "logbook": {

@@ -1,15 +1,16 @@
 /* Limitless Diving — layers, landmark photos and map setup for a site map (e.g. bonnie-castle-map.html).
-   - Layers panel (everyone): turn each layer on or off and fade it with a slider: the satellite pictures (once
-     the map is placed on the earth), picture layers such as a topographic map, the main survey lines, and extra
-     survey layers. Restricted layers only reach the members an Admin has granted (the database enforces it).
-   - Landmark photos (everyone sees approved ones; logged-in members add them, Admins approve).
+   - Layers panel: turn each layer on or off and fade it with a slider: the satellite pictures (once the map is
+     placed on the earth), picture layers such as a topographic map, the main survey lines, and the rated layers.
+     A member only gets the rated layers their Site maps access level allows (the database enforces it).
+   - Landmark photos (members see approved ones and add their own; Admins approve).
    - Map setup (Admins and Dive site admins): place the map on the earth, add and line up picture layers,
      rate lines ski-style (green circle on the main survey; blue square, black diamond and double black diamond
-     each in a restricted layer of their own), set the highest rating each diver may see, and approve photos.
+     each in a layer of their own), set members' Site maps access levels, and approve photos.
    Uses SurveyMap (survey-map.js), SurveyEdits (survey-edits.js), SurveyGeometry and LDCloud (cloud.js).
-   Database: site_map_layers, site_map_layer_access, site_map_photos and the Storage buckets
+   Database: site_map_members (levels), site_map_layers, site_map_layer_access (restricted pictures), site_map_photos and the Storage buckets
    'site-map-layers' and 'site-map-photos' (supabase/schema.sql). */
-(function () {
+// Starts once survey-map.js has checked the member's access and drawn the map (SurveyMap.ready).
+(window.SurveyMap ? window.SurveyMap.ready : Promise.resolve()).then(function () {
   "use strict";
 
   const S = window.SurveyMap, E = window.SurveyEdits, G = window.SurveyGeometry, R = window.SurveyRatings, C = window.LDCloud, L = window.L;
@@ -70,7 +71,7 @@
     if (S.geoRef()) out.push({ id: "satellite", name: "Satellite pictures", hint: "Esri World Imagery" });
     for (const l of st.layers.filter(l => l.kind === "image")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note,
       hint: !l.imageUrl ? "Picture not added yet" : !l.bounds ? "Not lined up yet" : l.bounds.north != null && !S.geoRef() ? "Shows once the map is placed on the earth" : "" });
-    out.push({ id: "survey", name: "Survey lines", rating: "green", hint: "The main survey: green circle lines, open to every diver" });
+    out.push({ id: "survey", name: "Survey lines", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
     for (const l of st.layers.filter(l => l.kind === "survey")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note, rating: l.rating,
       hint: l.survey && Object.keys(l.survey.runs || {}).length ? `${Object.keys(l.survey.runs).length} runs of line` : "No lines yet" });
     return out;
@@ -80,13 +81,13 @@
     box.innerHTML = `<ul class="sm-layer-list">${rows().map(r => {
       const vv = v(r.id), pct = Math.round(vv.opacity * 100);
       return `<li><label class="sm-layer-on"><input type="checkbox" data-lv="${esc(r.id)}"${vv.visible ? " checked" : ""}>
-          ${r.rating ? S.ratingSvg(r.rating) : ""}<b>${esc(r.name)}</b>${r.restricted ? ` <span class="sm-lock" title="Only divers who've been granted this layer can see it">Restricted</span>` : ""}</label>
+          ${r.rating ? S.ratingSvg(r.rating) : ""}<b>${esc(r.name)}</b>${r.rating && r.rating !== "green" ? ` <span class="sm-lock" title="Only divers whose Site maps access is ${esc(rating(r.rating).name.toLowerCase())} or higher see it">${esc(rating(r.rating).divers)} and up</span>` : r.restricted ? ` <span class="sm-lock" title="Only divers who've been granted this layer can see it">Restricted</span>` : ""}</label>
         <span class="sm-layer-hint">${esc([r.note, r.hint].filter(Boolean).join(" · "))}</span>
         <label class="sm-slider"><span class="sr-only">How see-through: ${esc(r.name)}</span>
           <input type="range" min="0" max="100" step="5" value="${pct}" data-lo="${esc(r.id)}" aria-valuetext="${pct}% visible"><output>${pct}%</output></label></li>`;
     }).join("")}</ul>
       ${st.loadErr === "setup" ? `<p class="hint">Extra layers need the latest <code>supabase/schema.sql</code> run in Supabase.</p>` : st.loadErr ? `<p class="hint">${esc(st.loadErr)}</p>` : ""}
-      ${cloud() && !(C && C.user) ? `<p class="hint">Cleared for lines that not every diver may follow? <a href="account.html#then=map-${esc(site)}">Log in</a> to see the layers you've been given.</p>` : ""}`;
+      ${S.level && S.rank < 4 ? `<p class="hint">You see the lines for your Site maps access: ${esc(S.levelName(S.level))}. Ask an instructor about the training for more.</p>` : ""}`;
     renderSetup();
   }
   box.addEventListener("input", e => {
@@ -242,7 +243,7 @@
 
       <details class="sm-su"${st.open.rate ? " open" : ""} data-sec="rate"><summary>Rate lines (green circle to double black diamond)</summary>${rateCard()}</details>
 
-      <details class="sm-su"${st.open.levels ? " open" : ""} data-sec="levels"><summary>Which divers see which ratings</summary>${levelsCard()}</details>
+      <details class="sm-su"${st.open.levels ? " open" : ""} data-sec="levels"><summary>Site maps access for members</summary>${levelsCard()}</details>
 
       ${st.layers.some(l => l.restricted && !l.rating) ? `<details class="sm-su"${st.open.access ? " open" : ""} data-sec="access"><summary>Who can see restricted picture layers</summary>${accessCard()}</details>` : ""}
 
@@ -371,7 +372,7 @@
       <div class="se-acts"><button type="button" class="btn primary" data-su="rate-go"${r.sel.length && !st.busy ? "" : " disabled"}>Apply the rating</button>
         <button type="button" class="btn" data-su="rate-stop">Cancel</button></div>
       <p class="hint">Runs that start from these lines move with them when they're rated lower. Removing a rating: rate it green.
-        The original survey file in the website's code still holds every line; ask for restricted lines to be taken out of it.</p>`;
+        Each member sees the ratings their Site maps access allows.</p>`;
   }
   let rateHi = null;
   function highlight() {
@@ -438,49 +439,34 @@
     if (have) return have;
     const r = rating(id);
     const ins = await C.client.from("site_map_layers").insert({ site_id: site, name: `${r.name} · ${r.level}`, kind: "survey", rating: id, restricted: true,
-      note: `Divers you give ${r.name.toLowerCase()} or higher`, sort: 100 + RANK[id], survey: EMPTY() }).select().single();
+      note: `${r.divers} and up`, sort: 100 + RANK[id], survey: EMPTY() }).select().single();
     if (ins.error) throw ins.error;
     st.layers.push(ins.data);
     return ins.data;
   }
 
-  // ----- which divers see which ratings -----
-  // A diver's level is the highest rating they can see: they get access to that rating's layer and every lower one.
-  function levelOf(uid) {
-    let best = "green";
-    for (const l of st.layers.filter(l => l.rating)) if ((st.access[l.id] || []).includes(uid) && RANK[l.rating] > RANK[best]) best = l.rating;
-    return best;
-  }
+  // ----- members' Site maps access levels (site_map_members; also in Records → Student accounts) -----
   function levelsCard() {
     if (!st.people) return `<p class="hint">Loading members…</p>`;
-    const rated = st.people.filter(p => levelOf(p.id) !== "green");
-    const opts = cur => S.RATINGS.map(r => `<option value="${r.id}"${r.id === cur ? " selected" : ""}>${esc(r.name)}${r.id === "green" ? " (everyone)" : ""}</option>`).join("");
-    return `<p class="hint">Everyone sees green circle lines. Give a diver blue, black or double black and they see that rating and every one below it.
-        Admins and Dive site admins see everything.</p>
-      ${rated.length ? `<ul class="sm-su-list">${rated.map(p => `<li><b>${esc(p.full_name || "(no name)")}</b> ${S.ratingSvg(levelOf(p.id), 12)}
-        <label>Highest rating <select data-lvl="${esc(p.id)}">${opts(levelOf(p.id))}</select></label></li>`).join("")}</ul>` : `<p class="hint">No divers have been given a rating yet.</p>`}
-      <div class="sm-form"><label>Diver <select id="su-lvl-who"><option value="">Choose a member…</option>${st.people.filter(p => levelOf(p.id) === "green")
-        .map(p => `<option value="${esc(p.id)}">${esc(p.full_name || "(no name)")}</option>`).join("")}</select></label>
-        <label>Highest rating <select id="su-lvl-what">${opts("blue")}</select></label></div>
-      <button type="button" class="btn primary" data-su="lvl-add">Give this rating</button>`;
+    if (!st.people.length) return `<p class="hint">No members found.</p>`;
+    const admin = C.can("admin");
+    const opts = cur => S.LEVELS.filter(l => admin || l.id !== "site-admin" || cur === "site-admin")
+      .map(l => `<option value="${l.id}"${l.id === cur ? " selected" : ""}>${esc(l.label)}</option>`).join("");
+    return `<p class="hint">Members see the lines for their level and every level below it. The survey team can also suggest changes, which an admin approves.
+        Members with no access can't open the site maps.${admin ? "" : " Only Admins can make someone a Dive site admin."}</p>
+      <ul class="sm-su-list">${st.people.map(p => `<li><b>${esc(p.full_name || "(no name)")}</b>
+        <label><span class="sr-only">Site maps access for ${esc(p.full_name || "this member")}</span><select data-lvl="${esc(p.id)}"${p.level === "site-admin" && !admin ? " disabled" : ""}>${opts(p.level)}</select></label></li>`).join("")}</ul>`;
   }
   async function setLevel(uid, level) {
-    for (const id of ["blue", "black", "double-black"]) {
-      const want = RANK[id] <= RANK[level];
-      let l = st.layers.find(x => x.rating === id);
-      if (!l && !want) continue;
-      if (!l) l = await ensureRatingLayer(id);
-      const has = (st.access[l.id] || []).includes(uid);
-      if (want && !has) { const { error } = await C.client.from("site_map_layer_access").insert({ layer_id: l.id, user_id: uid }); if (error) throw error; }
-      if (!want && has) { const { error } = await C.client.from("site_map_layer_access").delete().eq("layer_id", l.id).eq("user_id", uid); if (error) throw error; }
-    }
+    const { error } = await C.client.rpc("set_site_map_level", { member: uid, new_level: level });
+    if (error) throw error;
     await loadAccess();
   }
 
   // ----- who can see restricted layers -----
   function accessCard() {
     if (!st.people) return `<p class="hint">Loading members…</p>`;
-    return st.layers.filter(l => l.restricted).map(l => {
+    return st.layers.filter(l => l.restricted && !l.rating).map(l => {
       const ids = st.access[l.id] || [];
       const name = id => (st.people.find(p => p.id === id) || {}).full_name || "A member";
       return `<div class="sm-access"><h3>${esc(l.name)}</h3>${l.note ? `<p class="hint">${esc(l.note)}</p>` : ""}
@@ -492,9 +478,10 @@
     }).join("");
   }
   async function loadAccess() {
+    const pics = st.layers.filter(l => l.restricted && !l.rating).map(l => l.id);
     const [p, a] = await Promise.all([
       C.client.rpc("site_map_people"),
-      C.client.from("site_map_layer_access").select("layer_id, user_id").in("layer_id", st.layers.map(l => l.id)),
+      pics.length ? C.client.from("site_map_layer_access").select("layer_id, user_id").in("layer_id", pics) : Promise.resolve({ data: [] }),
     ]);
     st.people = p.error ? [] : p.data;
     st.access = {};
@@ -528,11 +515,6 @@
     if (act === "rate-stop") { stopRate(); say(null); return renderSetup(); }
     if (act === "rate-del") { st.rate.sel.splice(Number(b.dataset.i), 1); renderSetup(); return highlight(); }
     if (act === "rate-go") return run(applyRating);
-    if (act === "lvl-add") return run(async () => {
-      const who = setupBox.querySelector("#su-lvl-who").value, what = setupBox.querySelector("#su-lvl-what").value;
-      if (!who) { say("Choose a diver first.", "bad"); return; }
-      await setLevel(who, what); st.clearForms = true; say("Saved.", "ok");
-    });
     if (act === "place" || act === "unplace") return run(async () => {
       let gr = null;
       if (act === "place") {
@@ -643,4 +625,4 @@
   S.onPublished(() => render());
   S.adminListeners.push(() => { if (!isAdmin()) { st.setupOpen = false; stopRate(); stopAlign(); } render(); });
   S.onShown = () => { if (st.rate) highlight(); };
-})();
+});

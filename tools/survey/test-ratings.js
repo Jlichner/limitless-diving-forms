@@ -1,7 +1,7 @@
 // Tests for survey-ratings.js. Run: node tools/survey/test-ratings.js
 const assert = require("assert");
 const E = require("../../survey-edits.js"), G = require("../../survey-geometry.js"), R = require("../../survey-ratings.js");
-const base = require("../../bonnie-castle-data.js");
+const base = require("./local-data.js")("bonnie-castle");
 let n = 0; const t = (name, fn) => { fn(); n++; console.log("ok -", name); };
 const EMPTY = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
 const fresh = () => ({ green: E.copy(base), blue: EMPTY(), black: EMPTY(), "double-black": EMPTY() });
