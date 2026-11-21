@@ -1,11 +1,12 @@
 /* Limitless Diving — the Site maps editor (on each site map page, e.g. bonnie-castle-map.html).
-   Logged-in members tap a stake, tie-off, landmark or line to add a new run of line from it, or to delete
+   The survey team (Site maps access "Survey team" and up) taps a stake, tie-off, landmark or line to add a new run of line from it, or to delete
    or mark as removed a run or part of one. The map previews the changes as they go (new in orange, deleted
-   in red). Members send their changes to the Admins as a suggestion; Admins preview suggestions, approve
+   in red). The survey team sends its changes to the admins as a suggestion; Admins preview suggestions, approve
    (publish) or decline them, publish their own changes straight away, and can put back any earlier version.
    Uses SurveyMap (survey-map.js), SurveyEdits (survey-edits.js) and LDCloud (cloud.js). Database tables:
    site_maps, site_map_edits, site_map_history (supabase/schema.sql). */
-(function () {
+// Starts once survey-map.js has checked the member's access and drawn the map (SurveyMap.ready).
+(window.SurveyMap ? window.SurveyMap.ready : Promise.resolve()).then(function () {
   "use strict";
 
   const S = window.SurveyMap, E = window.SurveyEdits, C = window.LDCloud;
@@ -17,6 +18,7 @@
     msg: null, busy: false, summary: "", pending: [], mine: [], history: null, declining: null };
 
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
+  const hasFile = !!(fileData && fileData.plan && fileData.plan.length);   // a survey in the page's data file (not for private sites)
   const say = (text, kind) => { st.msg = text ? { text, kind: kind || "" } : null; };
   const lineFeet = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
   const ftIn = e => { const ft = Number(e.length_ft) || 0, inch = Number(e.length_in) || 0; return inch ? `${ft} ft ${inch} in` : `${ft} ft`; };
@@ -335,8 +337,8 @@
           <br><button type="button" class="btn" data-act="review" data-id="${esc(x.id)}">Preview and review</button></li>`).join("")}</ul>` : `<p class="hint">None waiting.</p>`}</section>
         <section class="se-sec"><h3>History</h3>${st.history && st.history.length ? `<ul class="se-list plain">${st.history.map(h => `<li><b>Version ${h.version}</b>${h.version === S.version ? " (on the map now)" : ""} · ${esc(when(h.published_at))}${h.published_by_name ? " · " + esc(h.published_by_name) : ""}<br>${esc(h.summary)}
           ${h.version !== S.version ? `<br><button type="button" class="btn" data-act="version" data-v="${h.version}">Preview</button>` : ""}</li>`).join("")}
-          <li><b>Original survey map</b> (${esc(fileData.version || "")})<br><button type="button" class="btn" data-act="version" data-v="0">Preview</button></li></ul>`
-          : `<p class="hint">Not published from the editor yet. The map shows the original survey (${esc(fileData.version || "")}).</p>`}</section>` : ""}
+          ${hasFile ? `<li><b>Original survey map</b> (${esc(fileData.version || "")})<br><button type="button" class="btn" data-act="version" data-v="0">Preview</button></li>` : ""}</ul>`
+          : `<p class="hint">Not published yet.${hasFile ? ` The map shows the original survey (${esc(fileData.version || "")}).` : ""}</p>`}</section>` : ""}
       ${!isAdmin() && st.mine.length && !st.review ? `<section class="se-sec"><h3>Your suggestions</h3><ul class="se-list plain">${st.mine.map(x => `<li>${esc(when(x.created_at))} · <b class="se-status ${esc(x.status)}">${esc({ pending: "Waiting for an Admin", approved: "On the map", declined: "Declined", withdrawn: "Taken back" }[x.status] || x.status)}</b>
           <br>${esc(x.summary)}${x.review_note ? `<br><i>Admin's note: ${esc(x.review_note)}</i>` : ""}
           ${x.status === "pending" ? `<br><button type="button" class="btn" data-act="withdraw" data-id="${esc(x.id)}">Take back</button>` : ""}</li>`).join("")}</ul></section>` : ""}`;
@@ -419,9 +421,9 @@
   btn.addEventListener("click", () => (st.open ? close() : open()));
   S.onPublished(() => { if (st.open) render(); else S.show(S.data); });
   loadDraft();
-  if (C && C.available) {
+  if (C && C.available && S.canEdit()) {
     btn.hidden = false;
     C.onChange(() => { if (st.open) { st.history = null; loadLists().then(render); } });
     S.adminListeners.push(() => { if (st.open) { st.history = null; loadLists().then(render); } });
   }
-})();
+});

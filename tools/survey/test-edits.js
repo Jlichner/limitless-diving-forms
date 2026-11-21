@@ -1,7 +1,7 @@
 // Tests for survey-edits.js. Run: node tools/survey/test-edits.js
 const assert = require("assert");
 const E = require("../../survey-edits.js"), G = require("../../survey-geometry.js");
-const base = require("../../bonnie-castle-data.js");
+const base = require("./local-data.js")("bonnie-castle");
 let n = 0; const t = (name, fn) => { fn(); n++; console.log("ok -", name); };
 const geo0 = G.compute(base);
 assert.deepStrictEqual(geo0.warnings, []);

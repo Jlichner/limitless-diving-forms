@@ -1,7 +1,9 @@
 /* Limitless Diving — a dive site survey map in Site maps (e.g. bonnie-castle-map.html).
    The page's <main id="surveymap" data-site="..."> names the site. Its data file (e.g. bonnie-castle-data.js)
-   puts the survey in window.SITE_MAPS; once an Admin has published the map from the editor, the published
-   version in the database (site_maps) is drawn instead. survey-geometry.js does the math and survey-icons.js
+   has the title and credits in window.SITE_MAPS; the survey itself is in the database (site_maps).
+   Site maps are only for logged-in members with a Site maps access level (site_map_members, set in Records →
+   Student accounts); the page shows a log in or "no access yet" card to everyone else, and the database
+   enforces it. Each level sees its own rated lines and every level below (S.LEVELS). survey-geometry.js does the math and survey-icons.js
    has the landmark icons. The map is in feet, magnetic north up, on a plain Leaflet map (no world tiles), until an
    Admin places it on the earth (data.georef, see SurveyGeometry.georef): then it's drawn on real coordinates,
    turned to true north, over satellite pictures. Layers (survey-layers.js) add more survey lines and pictures
@@ -17,7 +19,10 @@
      S.onPublished(fn)     called when the published survey changes
      S.setLayers(list)     extra layers: { id, name, kind: "survey" | "image", survey, imageUrl, bounds, ... }
      S.setLayerView(id, { visible, opacity })   show, hide or fade a layer ("survey" = the main lines, "satellite")
-     S.popupHooks          functions (feature, element) called when a landmark's popup opens (photos) */
+     S.popupHooks          functions (feature, element) called when a landmark's popup opens (photos)
+     S.ready               a promise that resolves once the member's access is checked and the map is drawn
+     S.level, S.rank       the member's Site maps access ("green" … "site-admin", "admin") and its rank (1-6)
+     S.canEdit()           survey team and up: may suggest changes;  S.isSiteAdmin(): Admins and Dive site admins */
 (function () {
   "use strict";
 
@@ -35,10 +40,20 @@
   const NEW = "#e8590c", GONE = "#d7263d";
   // Ski-style difficulty. Green lines are on the main survey; the others are in a layer of their own (survey-layers.js).
   const RATINGS = [
-    { id: "green", name: "Green circle", level: "Novice", color: "#2b8a3e", line: null },
-    { id: "blue", name: "Blue square", level: "Intermediate", color: "#1c7ed6", line: "#1c7ed6" },
-    { id: "black", name: "Black diamond", level: "Advanced", color: "#111111", line: "#111111" },
-    { id: "double-black", name: "Double black diamond", level: "Expert", color: "#111111", line: "#111111" },
+    { id: "green", name: "Green circle", level: "Novice", divers: "Open water divers", color: "#2b8a3e", line: null },
+    { id: "blue", name: "Blue square", level: "Intermediate", divers: "Advanced divers", color: "#1c7ed6", line: "#1c7ed6" },
+    { id: "black", name: "Black diamond", level: "Advanced", divers: "Tech divers", color: "#111111", line: "#111111" },
+    { id: "double-black", name: "Double black diamond", level: "Expert", divers: "Tech divers on scooters", color: "#111111", line: "#111111" },
+  ];
+  // Site maps access levels (site_map_members in supabase/schema.sql), lowest first. Same list in student-accounts.js.
+  const LEVELS = [
+    { id: "none", label: "No access" },
+    { id: "green", label: "Green circle: open water divers" },
+    { id: "blue", label: "Blue square: advanced divers" },
+    { id: "black", label: "Black diamond: tech divers" },
+    { id: "double-black", label: "Double black diamond: tech on scooters" },
+    { id: "survey", label: "Survey team: sees everything, suggests changes" },
+    { id: "site-admin", label: "Dive site admin: runs the site maps" },
   ];
   function ratingSvg(id, size) {
     const z = size || 14;
@@ -55,12 +70,15 @@
     site, data: (window.SITE_MAPS || {})[site], version: 0, updatedAt: null, map: null, esc,
     show, reset, setPicker, select, focusChanges, onPublished: fn => published.push(fn), setPublished,
     layers: [], view: {}, setLayers, setLayerView, popupHooks: [], ll, geoRef: () => GEO, toXY: (lat, lng) => GEO ? GEO.toXY(lat, lng) : [lng, lat],
-    runLayer: {}, RATINGS, ratingSvg, siteAdmin: false, adminListeners: [],
-    isSiteAdmin: () => !!(window.LDCloud && window.LDCloud.user && (window.LDCloud.can("admin") || S.siteAdmin)),
+    runLayer: {}, RATINGS, ratingSvg, LEVELS, adminListeners: [], level: null, rank: 0,
+    levelName: id => id === "admin" ? "Admin (everything)" : (LEVELS.find(l => l.id === id) || LEVELS[0]).label,
+    isSiteAdmin: () => S.rank >= 6, canEdit: () => S.rank >= 5,
     ratingOf: run => { const id = S.runLayer[run], l = id && S.layers.find(x => x.id === id); return (l && l.rating) || (id ? null : "green"); },
     name: lm => (S.shown && S.shown.landmarks && S.shown.landmarks[lm]) || (S.data.landmarks && S.data.landmarks[lm]) || lm,
     runName: r => (S.shown && S.shown.runNames && S.shown.runNames[r]) || (S.data.runNames && S.data.runNames[r]) || r,
   };
+  let started;
+  S.ready = new Promise(res => { started = res; });
   if (!S.data) { main.innerHTML = `<div class="msg">This site map couldn't be loaded. Refresh the page to try again.</div>`; return; }
   const published = [];
   let picker = null, layers = {}, markerFor = {}, ring = null, firstDraw = true, canvases = {}, images = {}, sat = null, geoKey = "";
@@ -115,7 +133,7 @@
     const started = geo.segments.length > 0;
     main.querySelector("#sm-note").innerHTML = !started
       ? `<b>Help us map this site.</b> No lines have been surveyed here yet. Every line is measured from the ${esc(S.name(d.origin || "BAR"))}.
-         Log in and tap <b>Edit map</b> to add the first line you surveyed: its length, compass heading, and what's at its end.`
+         ${S.canEdit() ? `Tap <b>Edit map</b> to add the first line you surveyed: its length, compass heading, and what's at its end.` : "Our survey team adds the lines as they map it."}`
       : S.version
       ? `<b>Updated ${esc(when)}</b> (version ${S.version}). Zoom in, and tap a line or landmark to see what was measured.`
       : `<b>New:</b> the ${esc(String(d.version || "").replace(/^v[\d.]+ /, ""))} survey map, now drawn live from the survey data. Zoom in, and tap a line or landmark to see what was measured.`;
@@ -402,7 +420,7 @@ ${marks}
     const stakeIcon = fresh => L.divIcon({ className: "sm-stake" + (fresh ? " new" : ""), iconSize: [7, 7] });
     const arrowIcon = h => L.divIcon({ className: "sm-arrow", iconSize: [10, 10], html: `<svg viewBox="0 0 12 12" style="transform:rotate(${h}deg)"><polygon points="6,1 11,11 1,11"/></svg>` });
     layers.points = L.layerGroup([
-      ...geo.tieoffs.map(p => clickable(L.circleMarker(ll(p.x, p.y), { renderer: cv(p), pane: paneOf(p), radius: 3, stroke: false, fillColor: isNew(p) ? NEW : "#1d4ed8", fillOpacity: 1 }),
+      ...geo.tieoffs.map(p => clickable(L.circleMarker(ll(p.x, p.y), { renderer: cv(p), pane: paneOf(p), radius: 3, stroke: false, fillColor: isNew(p) ? NEW : "#e64980", fillOpacity: 1 }),
         Object.assign({ kind: "tieoff", layer: runLayer[p.run] || null }, p), () => pointPopup(Object.assign({ kind: "tieoff" }, p)))),
       ...geo.stakes.filter(p => p.kind === "stake").map(p => clickable(L.marker(ll(p.x, p.y), { pane: paneOf(p), icon: stakeIcon(isNew(p)), keyboard: false }),
         Object.assign({ kind: "stake", layer: runLayer[p.run] || null }, p), () => pointPopup(Object.assign({ kind: "stake" }, p)))),
@@ -502,27 +520,45 @@ ${marks}
     return c;
   }
 
-  // The published version from the database, if an Admin has published one; otherwise the data file stays.
-  async function loadPublished() {
-    const C = window.LDCloud;
-    if (!C || !C.available) return;
-    const { data, error } = await C.client.from("site_maps").select("data, version, updated_at").eq("id", site).maybeSingle();
-    if (error || !data) return;
-    setPublished(data.data, data.version, data.updated_at);
-    if (!S.editing) show(S.data);
+  // ----- who may see the map -----
+  function gate(html) { main.innerHTML = `<section class="pub members-gate"><div class="panel gate-card">${html}</div></section>`; }
+  const RANKS = { green: 1, blue: 2, black: 3, "double-black": 4, survey: 5, "site-admin": 6, admin: 6 };
+  async function myLevel(C) {
+    const r = await C.client.rpc("my_site_map_level");
+    if (r.error) return { error: /my_site_map_level|does not exist|schema cache|404/i.test((r.error.message || "") + (r.error.code || "")) ? "setup" : C.explain(r.error) };
+    return { level: r.data || "none" };
   }
-
-  // Dive site admins (site_map_admins) can run the map without being website Admins.
-  async function checkSiteAdmin() {
-    const C = window.LDCloud;
-    if (!C || !C.available) return;
+  async function boot() {
+    const C = window.LDCloud, then = `account.html#then=map-${esc(site)}`;
+    const title = `<span class="eyebrow">Site map${S.data.place ? " · " + esc(S.data.place) : ""}</span><h1>${esc(S.data.title)}</h1>`;
+    if (!C || !C.configured || !C.available) return gate(`${title}<p>Site maps are for registered members, and the log in service couldn't be loaded. Check your connection and refresh the page.</p>`);
+    gate(`<p class="hint">Checking your log in…</p>`);
     await (C.ready || Promise.resolve());
-    let v = false;
-    if (C.user) { const r = await C.client.rpc("is_site_map_admin"); v = !r.error && r.data === true; }
-    if (v !== S.siteAdmin) { S.siteAdmin = v; S.adminListeners.forEach(fn => { try { fn(); } catch (e) { console.error(e); } }); }
+    if (!C.user) return gate(`<span class="eyebrow">Members only</span><h1>${esc(S.data.title)}</h1>
+      <p>Our site maps are for registered Limitless Diving divers. Log in, or create a free account in a minute.
+      Once you're registered, an instructor gives you access to the lines you're trained for.</p>
+      <div class="row-actions"><a class="btn primary" href="${then}">Log in</a><a class="btn" href="${then}">Create a free account</a></div>`);
+    const me = await myLevel(C);
+    if (me.error) return gate(`${title}<p>${me.error === "setup" ? "Site maps access isn't switched on yet. An Admin needs to run the latest <code>supabase/schema.sql</code> in Supabase." : esc(me.error)}</p>`);
+    if (!RANKS[me.level]) return gate(`${title}<p><b>Your account doesn't have site maps access yet.</b> An instructor sets it to match your training:
+      open water divers see the green circle lines, advanced divers the blue squares, tech divers the black diamonds, and so on.</p>
+      <p>Ask Jamie at <a href="mailto:jamie@limitless-diving.com">jamie@limitless-diving.com</a>, then refresh this page.</p>
+      <p><a href="site-maps.html">← All site maps</a></p>`);
+    S.level = me.level; S.rank = RANKS[me.level];
+    const { data, error } = await C.client.from("site_maps").select("data, version, updated_at").eq("id", site).maybeSingle();
+    if (error) return gate(`${title}<p>This site map couldn't be loaded: ${esc(C.explain(error))}. Refresh the page to try again.</p>`);
+    if (data) { S.data = data.data; S.version = data.version; S.updatedAt = data.updated_at; }
+    else if (S.data.privateSurvey) return gate(`${title}<p>This map's survey hasn't been loaded into the website yet.${S.isSiteAdmin()
+      ? ` Run its seed file (<code>site-maps-seed-${esc(site)}.sql</code>, in the project files) in the Supabase SQL editor, after <code>supabase/schema.sql</code>.` : " Check back soon."}</p>
+      <p><a href="site-maps.html">← All site maps</a></p>`);
+    page();
+    if (L) { placeOnEarth(S.data); show(S.data); }
+    // Logging out, or another member logging in, changes what this page may show: start again.
+    C.onChange(async () => {
+      const now = C.user ? await myLevel(C) : { level: "none" };
+      if (!now.error && now.level !== S.level) location.reload();
+    });
+    started();
   }
-  if (window.LDCloud && window.LDCloud.available) { checkSiteAdmin(); window.LDCloud.onChange(() => checkSiteAdmin()); }
-
-  page();
-  if (L) { placeOnEarth(S.data); show(S.data); loadPublished().catch(e => console.warn("Published map not loaded:", e)); }
+  boot().catch(e => { console.error(e); gate(`<p>This site map couldn't be loaded. Refresh the page to try again.</p>`); });
 })();
