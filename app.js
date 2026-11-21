@@ -143,7 +143,7 @@
 
   // ---------- state ----------
   let state = load();
-  let view = { mode: "calendar", sel: firstId(courseList("open-water")), psel: firstId(state.students), tab: "details", q: "", pq: "", enrolling: false };
+  let view = { mode: location.hash === "#calendar" ? "calendar" : "home", sel: firstId(courseList("open-water")), psel: firstId(state.students), tab: "details", q: "", pq: "", enrolling: false };
 
   function newId(prefix) { return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function firstId(list) { return list[0] ? list[0].id : null; }
@@ -401,7 +401,7 @@
     // The left navigation column. Student portal (a link to account.html) sits on top; the rest is grouped.
     // Staff sign in with the Admin Log in button in the header (mode "staff", drawn by student-accounts.js).
     const groups = [
-      [null, [["account", "Student portal"]]],
+      [null, [["home", "Home"], ["account", "Student portal"]]],
       ["About", [["values", "Core values"]]],
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"], ["coaching", "Coaching sessions"], ["hydra", "Lake Hydra tours"]]],
       ["Tools", [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]].concat(window.LDCloud && window.LDCloud.techAccess ? [["tech", "Elements of tech diving"]] : [])],
@@ -425,6 +425,12 @@
     const main = $("#main");
     const need = minRoleFor(view.mode);
     if (!allowed(need)) { main.className = "shell full"; main.innerHTML = lockedPanel(need); return; }
+    if (view.mode === "home") {
+      // The landing page: who we are and what we do (home.js).
+      main.className = "shell home-shell";
+      main.innerHTML = window.LDHome ? window.LDHome.render() : "";
+      return;
+    }
     if (view.mode === "calendar") {
       // calendar.js draws the landing page; it loads after this file and calls render() again.
       main.className = "shell single";
