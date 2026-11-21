@@ -1086,3 +1086,146 @@ grant execute on function public.sign_agreement(text, text, text) to authenticat
 
 revoke all on public.agreements from anon;
 grant select, insert, update, delete on public.agreements to authenticated;
+
+-- ---------- Site maps: published survey maps, suggested changes and history (added 2026-11-21) ----------
+-- Anyone can read a published map. Any logged-in member can suggest changes; Admins approve or decline
+-- them and publish. Every published version is kept in site_map_history so a map can be put back.
+-- Until a map is first published here, its page draws the survey from its data file (e.g. bonnie-castle-data.js).
+create table if not exists public.site_maps (
+  id          text primary key check (id ~ '^[a-z0-9-]{1,60}$'),
+  data        jsonb not null check (jsonb_typeof(data) = 'object' and pg_column_size(data) <= 3000000),
+  version     integer not null default 1,
+  updated_at  timestamptz not null default now(),
+  updated_by  uuid references auth.users (id) on delete set null
+);
+alter table public.site_maps enable row level security;
+drop policy if exists "Anyone can read published site maps" on public.site_maps;
+create policy "Anyone can read published site maps" on public.site_maps for select to anon, authenticated using (true);
+-- Written only by publish_site_map() below.
+
+create table if not exists public.site_map_history (
+  id            bigint generated always as identity primary key,
+  site_id       text not null references public.site_maps (id) on delete cascade,
+  version       integer not null,
+  data          jsonb not null,
+  summary       text not null default '' check (length(summary) <= 2000),
+  published_at  timestamptz not null default now(),
+  published_by  uuid references auth.users (id) on delete set null,
+  published_by_name text not null default '',
+  unique (site_id, version)
+);
+alter table public.site_map_history enable row level security;
+drop policy if exists "Admins read site map history" on public.site_map_history;
+create policy "Admins read site map history" on public.site_map_history for select to authenticated
+  using ((select public.has_role('admin')));
+
+create table if not exists public.site_map_edits (
+  id            uuid primary key default gen_random_uuid(),
+  site_id       text not null check (site_id ~ '^[a-z0-9-]{1,60}$'),
+  author        uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  author_name   text not null default '' check (length(author_name) <= 200),
+  summary       text not null default '' check (length(summary) <= 2000),
+  changes       jsonb not null check (jsonb_typeof(changes) = 'array' and jsonb_array_length(changes) between 1 and 200
+                                      and pg_column_size(changes) <= 300000),
+  base_version  integer not null default 0,
+  status        text not null default 'pending' check (status in ('pending', 'approved', 'declined', 'withdrawn')),
+  review_note   text not null default '' check (length(review_note) <= 2000),
+  reviewed_by   uuid references auth.users (id) on delete set null,
+  reviewed_at   timestamptz,
+  created_at    timestamptz not null default now()
+);
+create index if not exists site_map_edits_site_status on public.site_map_edits (site_id, status);
+alter table public.site_map_edits enable row level security;
+drop policy if exists "Members see their own suggestions; admins see all" on public.site_map_edits;
+create policy "Members see their own suggestions; admins see all" on public.site_map_edits for select to authenticated
+  using (author = (select auth.uid()) or (select public.has_role('admin')));
+drop policy if exists "Members suggest changes" on public.site_map_edits;
+create policy "Members suggest changes" on public.site_map_edits for insert to authenticated
+  with check (author = (select auth.uid()) and status = 'pending' and review_note = '' and reviewed_by is null and reviewed_at is null);
+-- Status changes go through the functions below, so there's no update policy.
+
+-- The author's name comes from their profile (or email), not from what the page sends.
+create or replace function public.site_map_edit_author()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  new.author := (select auth.uid());
+  select coalesce(nullif(p.full_name, ''), u.email::text, '') into new.author_name
+    from auth.users u left join public.student_profiles p on p.id = u.id where u.id = new.author;
+  new.author_name := coalesce(new.author_name, '');
+  return new;
+end $$;
+drop trigger if exists site_map_edits_author on public.site_map_edits;
+create trigger site_map_edits_author before insert on public.site_map_edits
+  for each row execute function public.site_map_edit_author();
+
+-- Publish a new version of a site map (Admins). expected_version is the version the Admin's page was showing
+-- (0 when the map has never been published), so two Admins can't overwrite each other's work by accident.
+-- With edit_id, that suggestion is marked approved.
+create or replace function public.publish_site_map(site text, new_data jsonb, expected_version integer,
+                                                   summary text default '', edit_id uuid default null)
+returns integer
+language plpgsql security definer set search_path = '' as $$
+declare cur integer; nv integer; who text;
+begin
+  if not public.has_role('admin') then
+    raise exception 'Only Admins can publish site maps' using errcode = '42501';
+  end if;
+  if new_data is null or jsonb_typeof(new_data) <> 'object' or jsonb_typeof(new_data -> 'runs') <> 'object'
+     or jsonb_typeof(new_data -> 'plan') <> 'array' then
+    raise exception 'That map data isn''t complete' using errcode = '22023';
+  end if;
+  select version into cur from public.site_maps where id = site for update;
+  if coalesce(cur, 0) <> coalesce(expected_version, -1) then
+    raise exception 'Someone else published this map while you were working. Refresh the page and check your changes again.'
+      using errcode = '40001';
+  end if;
+  nv := coalesce(cur, 0) + 1;
+  select coalesce(nullif(p.full_name, ''), u.email::text, '') into who
+    from auth.users u left join public.student_profiles p on p.id = u.id where u.id = (select auth.uid());
+  insert into public.site_maps (id, data, version, updated_at, updated_by)
+    values (site, new_data, nv, now(), (select auth.uid()))
+    on conflict (id) do update set data = excluded.data, version = excluded.version,
+                                   updated_at = excluded.updated_at, updated_by = excluded.updated_by;
+  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name)
+    values (site, nv, new_data, left(coalesce(summary, ''), 2000), (select auth.uid()), coalesce(who, ''));
+  if edit_id is not null then
+    update public.site_map_edits set status = 'approved', reviewed_by = (select auth.uid()), reviewed_at = now()
+     where id = edit_id and site_id = site and status = 'pending';
+  end if;
+  return nv;
+end $$;
+revoke all on function public.publish_site_map(text, jsonb, integer, text, uuid) from public, anon;
+grant execute on function public.publish_site_map(text, jsonb, integer, text, uuid) to authenticated;
+
+-- An Admin declines a suggestion, with an optional note the member sees.
+create or replace function public.decline_site_map_edit(edit_id uuid, note text default '')
+returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if not public.has_role('admin') then
+    raise exception 'Only Admins can review site map suggestions' using errcode = '42501';
+  end if;
+  update public.site_map_edits set status = 'declined', review_note = left(coalesce(note, ''), 2000),
+         reviewed_by = (select auth.uid()), reviewed_at = now()
+   where id = edit_id and status = 'pending';
+  if not found then raise exception 'That suggestion has already been reviewed.'; end if;
+end $$;
+revoke all on function public.decline_site_map_edit(uuid, text) from public, anon;
+grant execute on function public.decline_site_map_edit(uuid, text) to authenticated;
+
+-- A member takes back their own suggestion before it's reviewed.
+create or replace function public.withdraw_site_map_edit(edit_id uuid)
+returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  update public.site_map_edits set status = 'withdrawn'
+   where id = edit_id and author = (select auth.uid()) and status = 'pending';
+  if not found then raise exception 'That suggestion has already been reviewed.'; end if;
+end $$;
+revoke all on function public.withdraw_site_map_edit(uuid) from public, anon;
+grant execute on function public.withdraw_site_map_edit(uuid) to authenticated;
+
+revoke all on public.site_maps, public.site_map_history, public.site_map_edits from anon;
+grant select on public.site_maps to anon, authenticated;
+grant select on public.site_map_history to authenticated;
+grant select, insert on public.site_map_edits to authenticated;

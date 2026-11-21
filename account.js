@@ -444,6 +444,7 @@
     { const m = /^#then=(request|nitrox|diving-physics|tech-diving|logbook)$/.exec(location.hash); if (a === "signin" && m) { location.href = m[1] + ".html"; return; } }
     // ...or the information page of a calendar entry (event.html), to join it or sign up.
     { const m = /^#then=event-([A-Za-z0-9_-]{1,80})$/.exec(location.hash); if (a === "signin" && m) { location.href = "event.html?id=" + encodeURIComponent(m[1]); return; } }
+    { const m = /^#then=map-([a-z0-9-]{1,60})$/.exec(location.hash); if (a === "signin" && m) { location.href = m[1] + "-map.html"; return; } }
     if (a === "signup" && !(res.data && res.data.session)) {
       view.auth = "signin"; setNote("Almost done: we sent a confirmation link to " + email + ". Open it to finish creating your account, then log in here.", "ok");
     } else if (a === "forgot") {
