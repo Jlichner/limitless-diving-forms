@@ -5,7 +5,7 @@
    - Landmark photos (members see approved ones and add their own; Admins approve).
    - Map setup (Admins and Dive site admins): place the map on the earth, add and line up picture layers,
      rate lines ski-style (green circle on the main survey; blue square, black diamond and double black diamond
-     each in a layer of their own), set members' Site maps access levels, and approve photos.
+     each in a layer of their own), and approve photos. Members' Site maps access is set in Records → Student accounts.
    Uses SurveyMap (survey-map.js), SurveyEdits (survey-edits.js), SurveyGeometry and LDCloud (cloud.js).
    Database: site_map_members (levels), site_map_layers, site_map_layer_access (restricted pictures), site_map_photos and the Storage buckets
    'site-map-layers' and 'site-map-photos' (supabase/schema.sql). */
@@ -243,7 +243,7 @@
 
       <details class="sm-su"${st.open.rate ? " open" : ""} data-sec="rate"><summary>Rate lines (green circle to double black diamond)</summary>${rateCard()}</details>
 
-      <details class="sm-su"${st.open.levels ? " open" : ""} data-sec="levels"><summary>Site maps access for members</summary>${levelsCard()}</details>
+      <p class="hint">Who sees which lines: each member's <b>Site maps access</b> is set in Records → Student accounts${C.can("admin") ? ` (<a href="index.html">open it</a>, then <b>Site maps access</b> under the list of registered students)` : ", by an Admin"}.</p>
 
       ${st.layers.some(l => l.restricted && !l.rating) ? `<details class="sm-su"${st.open.access ? " open" : ""} data-sec="access"><summary>Who can see restricted picture layers</summary>${accessCard()}</details>` : ""}
 
@@ -434,33 +434,25 @@
     stopRate();
     await loadLayers();
   }
+  // Adds a layer row. The id is made here and the row read back separately, rather than asking the insert to
+  // return it: a returning insert also has to pass the read rules for a row that's still being added, which
+  // older versions of schema.sql refused ("new row violates row-level security policy").
+  async function addLayerRow(row) {
+    const id = (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
+    const ins = await C.client.from("site_map_layers").insert(Object.assign({ id }, row));
+    if (ins.error) return ins;
+    const got = await C.client.from("site_map_layers").select("*").eq("id", id).maybeSingle();
+    return got.error ? got : { data: got.data || Object.assign({ id }, row), error: null };
+  }
   async function ensureRatingLayer(id) {
     const have = st.layers.find(l => l.rating === id);
     if (have) return have;
     const r = rating(id);
-    const ins = await C.client.from("site_map_layers").insert({ site_id: site, name: `${r.name} · ${r.level}`, kind: "survey", rating: id, restricted: true,
-      note: `${r.divers} and up`, sort: 100 + RANK[id], survey: EMPTY() }).select().single();
+    const ins = await addLayerRow({ site_id: site, name: `${r.name} · ${r.level}`, kind: "survey", rating: id, restricted: true,
+      note: `${r.divers} and up`, sort: 100 + RANK[id], survey: EMPTY() });
     if (ins.error) throw ins.error;
     st.layers.push(ins.data);
     return ins.data;
-  }
-
-  // ----- members' Site maps access levels (site_map_members; also in Records → Student accounts) -----
-  function levelsCard() {
-    if (!st.people) return `<p class="hint">Loading members…</p>`;
-    if (!st.people.length) return `<p class="hint">No members found.</p>`;
-    const admin = C.can("admin");
-    const opts = cur => S.LEVELS.filter(l => admin || l.id !== "site-admin" || cur === "site-admin")
-      .map(l => `<option value="${l.id}"${l.id === cur ? " selected" : ""}>${esc(l.label)}</option>`).join("");
-    return `<p class="hint">Members see the lines for their level and every level below it. The survey team can also suggest changes, which an admin approves.
-        Members with no access can't open the site maps.${admin ? "" : " Only Admins can make someone a Dive site admin."}</p>
-      <ul class="sm-su-list">${st.people.map(p => `<li><b>${esc(p.full_name || "(no name)")}</b>
-        <label><span class="sr-only">Site maps access for ${esc(p.full_name || "this member")}</span><select data-lvl="${esc(p.id)}"${p.level === "site-admin" && !admin ? " disabled" : ""}>${opts(p.level)}</select></label></li>`).join("")}</ul>`;
-  }
-  async function setLevel(uid, level) {
-    const { error } = await C.client.rpc("set_site_map_level", { member: uid, new_level: level });
-    if (error) throw error;
-    await loadAccess();
   }
 
   // ----- who can see restricted layers -----
@@ -495,7 +487,6 @@
     if (el.id === "su-img-file") { st.imgFile = el.files[0] || null; return; }
     if (el.dataset.rtWhole) { st.rate.sel[Number(el.dataset.rtWhole)].whole = el.checked; renderSetup(); return highlight(); }
     if (el.name === "sm-rating") { st.rate.rating = el.value; return; }
-    if (el.dataset.lvl) { el.disabled = true; setLevel(el.dataset.lvl, el.value).then(() => say("Saved.", "ok"), err => say(C.explain(err), "bad")).then(renderSetup); }
   });
   setupBox.addEventListener("input", e => {
     const el = e.target;
@@ -558,8 +549,8 @@
       const name = setupBox.querySelector("#su-img-name").value.trim(), file = setupBox.querySelector("#su-img-file").files[0] || st.imgFile;
       if (!name || !file) { say("Give the layer a name and choose the picture.", "bad"); return; }
       if (file.size > 25 * 1048576) { say("That picture is over 25 MB. Save it smaller and try again.", "bad"); return; }
-      const ins = await C.client.from("site_map_layers").insert({ site_id: site, name, kind: "image", restricted: setupBox.querySelector("#su-img-restricted").checked,
-        sort: st.layers.length, opacity: 0.7 }).select().single();
+      const ins = await addLayerRow({ site_id: site, name, kind: "image", restricted: setupBox.querySelector("#su-img-restricted").checked,
+        sort: st.layers.length, opacity: 0.7 });
       if (ins.error) throw ins.error;
       const ext = (file.name.match(/\.(jpe?g|png|webp)$/i) || [".jpg"])[0].toLowerCase();
       const path = `${site}/${ins.data.id}/picture${ext}`;

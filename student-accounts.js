@@ -385,28 +385,50 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     ["survey", "Survey team", "They see every line and can suggest changes to the maps. An admin approves each change before it goes on."],
     ["site-admin", "Dive site admin", "They run the site maps: publish changes, rate lines, place maps, add layers, approve photos and set other members' access below Dive site admin. None of the website's other Admin powers."],
   ];
+  // Loads everyone's level once (site_map_members); returns null while loading, or { error }.
+  function siteLevels() {
+    if (!v.siteLevels && !v.siteLevelsLoading) {
+      v.siteLevelsLoading = true;
+      C().client.from("site_map_members").select("user_id, level").then(({ data, error }) => {
+        v.siteLevelsLoading = false;
+        v.siteLevels = error ? { error: /site_map_members|does not exist|schema cache/i.test(error.message || "") ? "setup" : C().explain(error) } : new Map(data.map(r => [r.user_id, r.level]));
+        rerender();
+      });
+    }
+    return v.siteLevels || null;
+  }
+  function siteLevelSelect(acc, label) {
+    const { esc } = L(), cur = v.siteLevels.get(acc.id) || "none";
+    return `<select data-sa-sitelevel="${esc(acc.id)}" aria-label="${esc(label)}"${v.siteBusy === acc.id ? " disabled" : ""}>
+        ${SITE_LEVELS.map(l => `<option value="${l[0]}"${l[0] === cur ? " selected" : ""}>${esc(l[1])}</option>`).join("")}</select>`;
+  }
+  function siteLevelsError() {
+    return v.siteLevels.error === "setup" ? "Run the latest <code>supabase/schema.sql</code> to use this." : L().esc(v.siteLevels.error);
+  }
   function siteAdminBlock(acc) {
     const { esc } = L();
     if (!C().can("admin")) return "";
     const h = `<h2 class="sec">Site maps access</h2>`;
     if (acc.role === "admin") return `${h}<p class="hint">Admins always see and run all the site maps.</p>`;
-    if (!v.siteLevels) {
-      if (!v.siteLevelsLoading) {
-        v.siteLevelsLoading = true;
-        C().client.from("site_map_members").select("user_id, level").then(({ data, error }) => {
-          v.siteLevelsLoading = false;
-          v.siteLevels = error ? { error: /site_map_members|does not exist|schema cache/i.test(error.message || "") ? "setup" : C().explain(error) } : new Map(data.map(r => [r.user_id, r.level]));
-          rerender();
-        });
-      }
-      return `${h}<p class="hint">Loading…</p>`;
-    }
-    if (v.siteLevels.error) return `${h}<p class="hint">${v.siteLevels.error === "setup" ? "Run the latest <code>supabase/schema.sql</code> to use this." : esc(v.siteLevels.error)}</p>`;
+    if (!siteLevels()) return `${h}<p class="hint">Loading…</p>`;
+    if (v.siteLevels.error) return `${h}<p class="hint">${siteLevelsError()}</p>`;
     const cur = v.siteLevels.get(acc.id) || "none", info = SITE_LEVELS.find(l => l[0] === cur) || SITE_LEVELS[0];
-    return `${h}<div class="row-actions"><label>Level <select id="sa-sitelevel" data-acc="${esc(acc.id)}"${v.busy ? " disabled" : ""}>
-        ${SITE_LEVELS.map(l => `<option value="${l[0]}"${l[0] === cur ? " selected" : ""}>${esc(l[1])}</option>`).join("")}</select></label>
-        <button class="btn primary" data-sa="sitelevel" data-acc="${esc(acc.id)}"${v.busy ? " disabled" : ""}>Save</button></div>
-      <p class="hint">${esc(info[2])} Each level also sees everything below it.</p>`;
+    return `${h}<div class="row-actions"><label>Level ${siteLevelSelect(acc, "Site maps access for " + (acc.full_name || "this member"))}</label>
+        <button class="btn small" data-sa="sitemaps">Everyone's site maps access</button></div>
+      <p class="hint">${esc(info[2])} Each level also sees everything below it. Changes save as soon as you pick.</p>`;
+  }
+  // Everyone in the list (as searched and filtered) with their site maps access, to set in one place.
+  function siteAccessPanel() {
+    const { esc } = L(), h = `<div class="rec-head"><div class="who"><div><span class="eyebrow">Registered students and staff</span><h1>Site maps access</h1></div></div></div>`;
+    if (!siteLevels()) return `${h}<p class="hint">Loading…</p>`;
+    if (v.siteLevels.error) return `${h}<p class="hint">${siteLevelsError()}</p>`;
+    const list = dirMatches();
+    return `${h}<p class="hint">Members see the lines for their level and every level below it: green circles for open water divers, blue squares for advanced,
+        black diamonds for tech, and double black diamonds for tech on scooters. The survey team sees everything and can suggest changes, which an admin approves.
+        Members with no access can't open the site maps. Changes save as soon as you pick. The search and level filter on the left narrow this list.</p>
+      ${list.length ? `<ul class="sa-sitelist">${list.map(a => `<li><button class="linkbtn" data-sa="dpick" data-acc="${esc(a.id)}">${esc(a.full_name || a.email || "No name yet")}</button>
+        ${(a.role || "student") === "admin" ? `<span class="hint">Admin: always sees and runs everything</span>` : siteLevelSelect(a, "Site maps access for " + (a.full_name || "this member"))}</li>`).join("")}</ul>`
+        : `<p class="hint">No one matches the search.</p>`}`;
   }
   function logbookBlock(acc) {
     const { esc } = L();
@@ -441,9 +463,10 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         ${v.membersOld ? `<p class="hint" style="margin:0">Showing students only. Run the latest <code>supabase/schema.sql</code> to include staff.</p>` : ""}
         <ul id="dir-list">${dirList()}</ul>
         <span class="row-actions" style="margin:0"><button class="btn small" data-sa="refresh">Refresh list</button>
-        ${C().can("instructor") && list.length ? `<button class="btn small" data-sa="demail" title="Email everyone in the list as it's filtered now">✉ Email this list</button>` : ""}</span></aside>
+        ${C().can("instructor") && list.length ? `<button class="btn small" data-sa="demail" title="Email everyone in the list as it's filtered now">✉ Email this list</button>` : ""}
+        ${C().can("admin") && list.length ? `<button class="btn small${v.dview === "sitemaps" ? " primary" : ""}" data-sa="sitemaps" aria-pressed="${v.dview === "sitemaps"}">Site maps access</button>` : ""}</span></aside>
       <section class="panel" id="record">${v.error ? `<p class="acct-note bad" role="alert">${esc(v.error)}</p>` : ""}
-        ${acc ? dirDetail(acc) : `<div class="empty"><h2>${v.loading ? "Loading students…" : "No registered students yet"}</h2>
+        ${v.dview === "sitemaps" && C().can("admin") ? siteAccessPanel() : acc ? dirDetail(acc) : `<div class="empty"><h2>${v.loading ? "Loading students…" : "No registered students yet"}</h2>
           <p>Students show up here once they create an account on the <a href="account.html">Student portal</a> page.</p></div>`}</section>`;
   }
 
@@ -489,9 +512,21 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     return true;
   }
   document.addEventListener("change", (e) => {
-    const el = e.target; if (!el.dataset || !el.dataset.saRole) return;
+    const el = e.target; if (!el.dataset) return;
+    if (el.dataset.saSitelevel) { setSiteLevel(el.dataset.saSitelevel, el.value); return; }
+    if (!el.dataset.saRole) return;
     setRole(el.dataset.saRole, el.value);
   });
+  async function setSiteLevel(id, level) {
+    const acc = (v.members || []).concat(v.accounts || []).find(a => a.id === id) || {};
+    v.siteBusy = id; rerender();
+    const { error } = await C().client.rpc("set_site_map_level", { member: id, new_level: level });
+    v.siteBusy = null;
+    if (error) { rerender(); L().toast("Not changed: " + C().explain(error)); return; }
+    if (v.siteLevels && !v.siteLevels.error) { if (level === "none") v.siteLevels.delete(id); else v.siteLevels.set(id, level); }
+    rerender();
+    L().toast("Site maps access for " + (acc.full_name || "them") + ": " + SITE_LEVELS.find(l => l[0] === level)[1]);
+  }
   document.addEventListener("submit", async (e) => {
     if (e.target.id !== "sa-addrole") return;
     e.preventDefault();
@@ -509,7 +544,8 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       case "signout": await C().signOut(); v.accounts = null; v.staff = null; v.members = null; setNote(""); rerender(); break;
       case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast("Still a student account. Ask an Admin for a staff role."); } break;
       case "refresh": setNote(""); loadAccounts(); break;
-      case "dpick": v.dsel = b.dataset.acc; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
+      case "sitemaps": v.dview = v.dview === "sitemaps" && !b.closest("#record") ? null : "sitemaps"; rerender(); break;
+      case "dpick": v.dsel = b.dataset.acc; v.dview = null; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
       case "demail": {
         const to = dirMatches().filter(a => a.email).map(a => ({ name: a.full_name || "", email: a.email }));
         const lvl = { student: "Students", divemaster: "Dive Masters", instructor: "Instructors", admin: "Admins" }[v.dlevel];
@@ -546,18 +582,6 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         (v.members || []).concat(v.accounts || []).forEach(a => { if (a.id === acc.id) a.tech_access = allow; });
         setNote(""); rerender();
         L().toast(allow ? "Elements of tech diving is on for " + (acc.full_name || "them") : "Elements of tech diving is off for " + (acc.full_name || "them"));
-        break;
-      }
-      case "sitelevel": {
-        if (!acc) break;
-        const sel = document.getElementById("sa-sitelevel"), level = sel ? sel.value : "none";
-        v.busy = true; rerender();
-        const { error } = await C().client.rpc("set_site_map_level", { member: acc.id, new_level: level });
-        v.busy = false;
-        if (error) { rerender(); L().toast("Not changed: " + C().explain(error)); break; }
-        if (v.siteLevels && !v.siteLevels.error) { if (level === "none") v.siteLevels.delete(acc.id); else v.siteLevels.set(acc.id, level); }
-        setNote(""); rerender();
-        L().toast("Site maps access for " + (acc.full_name || "them") + ": " + SITE_LEVELS.find(l => l[0] === level)[1]);
         break;
       }
       case "logbook": {
