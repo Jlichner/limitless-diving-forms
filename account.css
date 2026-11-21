@@ -200,3 +200,8 @@ body.reading-agreement #my-sites { display: none !important; }
   @page { size: letter; margin: 0.6in; }
 }
 .acct-paper .seats { align-self: flex-start; }
+/* Records → Student accounts → Site maps access: everyone's level in one list */
+.sa-sitelist { list-style: none; margin: 8px 0 0; padding: 0; }
+.sa-sitelist li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-bottom: 1px solid var(--line, #dfe7ea); }
+.sa-sitelist .linkbtn { font-weight: 700; text-align: left; }
+.sa-sitelist select { max-width: 100%; }
