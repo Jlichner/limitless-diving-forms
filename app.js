@@ -275,22 +275,25 @@
   function setupOf(k) { return k && k.setupId ? (state.classSetups || []).find(x => x.id === k.setupId) || null : null; }
   function feeLines(su) { return ((su && su.fees) || []).filter(x => x && (x.desc || x.amt)).map(x => ({ desc: x.desc || "", amt: Number(x.amt) || 0, deposit: x.deposit !== false })); }
   function setupTotal(su) { return feeLines(su).reduce((a, x) => a + x.amt, 0); }
+  // The class setup behind a course record: its calendar class's setup, or (for a preview of a class's
+  // proposal with no student yet) the one handed in as e._setup.
+  function suOf(e) { return e && e.pay ? e._setup || setupOf(classOfEnr(e)) : null; }
   function feeOf(e) {
     if (e && e.pay) {
-      const k = classOfEnr(e), su = setupOf(k);
+      const k = classOfEnr(e), su = suOf(e);
       if (k && k.price !== "" && k.price != null && isFinite(Number(k.price))) return Number(k.price);
       if (su && feeLines(su).length) return setupTotal(su);
     }
     return Number(P(e).price) || 0;
   }
   function depPctOf(e) {
-    const su = e && e.pay ? setupOf(classOfEnr(e)) : null;
+    const su = suOf(e);
     return su && su.depositPct !== "" && su.depositPct != null ? Number(su.depositPct) || 0 : Number(P(e).depositPct) || 0;
   }
   // The deposit is a share (50% unless the setup says otherwise) of the class fee only: fee lines marked
   // "Not in deposit" in the class setup (eLearning, processing…) are left out.
   function depositBase(e) {
-    const su = e && e.pay ? setupOf(classOfEnr(e)) : null, fee = feeOf(e);
+    const su = suOf(e), fee = feeOf(e);
     if (!su) return fee;
     const other = feeLines(su).filter((x, i) => !inDeposit(su, i)).reduce((a, x) => a + x.amt, 0);
     return Math.max(0, fee - other);
@@ -329,7 +332,7 @@
     enrs.forEach(e => {
       const pr = feeOf(e), dep = deposit(e), label = P(e).program || C(e).fullName || C(e).name;
       // A class set up under Business → Classes bills its own fee lines when they add up to the class price.
-      const k = classOfEnr(e), lines = feeLines(setupOf(k));
+      const k = classOfEnr(e), lines = feeLines(suOf(e));
       if (lines.length && Math.abs(lines.reduce((a, x) => a + x.amt, 0) - pr) < 0.005) lines.forEach(x => items.push({ desc: x.desc, amt: x.amt }));
       else items.push({ desc: ((k && k.title) || label) + " — course fee", amt: pr });
       (e.pay.extras || []).filter(x => x.desc || x.amt).forEach(x => items.push({ desc: "Additional training: " + (x.desc || ""), amt: Number(x.amt) || 0 }));
@@ -372,7 +375,7 @@
   // Instructors and Admins. Staff log in with Admin Log in (student-accounts.js, cloud.js). When online logins
   // aren't set up (no supabase-config.js values), everything stays open, as before.
   const RECORD_MODES = ["students", "catalog"];
-  const BUSINESS_MODES = ["classes", "scheduling", "invoices", "program"];
+  const BUSINESS_MODES = ["classes", "scheduling", "invoices", "accounting", "program"];
   function minRoleFor(mode) {
     if (BUSINESS_MODES.includes(mode)) return "instructor";
     if (RECORD_MODES.includes(mode) || isCourse(mode)) return "divemaster";
@@ -402,15 +405,16 @@
       ["About", [["values", "Core values"]]],
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"], ["coaching", "Coaching sessions"], ["hydra", "Lake Hydra tours"]]],
       ["Tools", [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]].concat(window.LDCloud && window.LDCloud.techAccess ? [["tech", "Elements of tech diving"]] : [])],
-      ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"]]],
-      ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"]]],
-      allowed("divemaster") && ["Records", [["students", "Students"]].concat(window.LDCatalogPage ? [["catalog", "All courses"]] : [])],
-      allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["program", "Settings"]]]
+      ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"], ["sitemaps", "Site maps"]]],
+      ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"]]],
+      allowed("divemaster") && ["Records", [["students", "Student accounts"]].concat(window.LDCatalogPage ? [["catalog", "Courses"]] : [])],
+      allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["accounting", "Accounting"], ["program", "Settings"]]]
     ].filter(Boolean);
-    // A catalog course without its own nav entry lights up "All courses".
+    // A catalog course without its own nav entry lights up "Courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
     const LINKS = { account: "account.html", values: "core-values.html", available: "available-classes.html",
-      coaching: "offering.html?id=coaching", hydra: "offering.html?id=hydra", nitrox: "nitrox.html", physics: "diving-physics.html", tech: "tech-diving.html", dt6: "dive-team-6.html", divemap: "dive-map.html" };  // separate public pages
+      coaching: "offering.html?id=coaching", hydra: "offering.html?id=hydra", nitrox: "nitrox.html", physics: "diving-physics.html", tech: "tech-diving.html", dt6: "dive-team-6.html", divemap: "dive-map.html", sitemaps: "site-maps.html",
+      swag: "swag.html" };  // separate public pages. Swag: when the t-shirt shop is ready, move swag to EXTERNAL with the shop URL.
     const EXTERNAL = { teamfinder: "https://www.diveteamfinder.com/", packing: "https://www.divepacking.com/", gear: "https://www.etsy.com/shop/TechdiveCreations" };  // other websites, new tab
     const btn = ([m, l]) => EXTERNAL[m] ? `<a class="navbtn ext" href="${EXTERNAL[m]}" target="_blank" rel="noopener">${esc(l)} <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></a>` :
       LINKS[m] ? `<a class="navbtn ${m}" href="${LINKS[m]}">${esc(l)}</a>` : `<button class="navbtn${on(m) ? " active" : ""}" data-mode="${m}"${on(m) ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
@@ -455,6 +459,12 @@
     if (view.mode === "invoices" && window.LDInvoices) {
       main.className = "shell";
       main.innerHTML = window.LDInvoices.render();
+      return;
+    }
+    if (view.mode === "accounting" && window.LDAccounting) {
+      // The yearly income, expenses and mileage for taxes (accounting.js).
+      main.className = "shell full";
+      main.innerHTML = window.LDAccounting.render();
       return;
     }
     if (view.mode === "program") {
@@ -782,7 +792,7 @@
     const P = settingsProgram(), sc = settingsCourse();
     const picker = COURSE_ORDER.length > 1 ? `<div class="field" style="max-width:420px"><label for="settings-course">Course</label><select id="settings-course">${courseOptions(sc.id)}</select></div>` : "";
     return `<div class="rec-head"><h1>Settings — ${esc(sc.fullName || sc.name)}</h1></div>
-      <div class="backup-box"><div><b>Backup</b><p class="hint">Your student records, invoices and settings live in this browser. Download a backup now and then, or move them to another computer.</p></div>
+      <div class="backup-box"><div><b>Backup</b><p class="hint">Your student records, invoices, accounting and settings live in this browser. Download a backup now and then, or move them to another computer.</p></div>
         <div class="row-actions"><button class="btn" data-act="export">Download backup</button><button class="btn" data-act="import">Restore from backup…</button></div></div>
       ${window.LDCalendar && window.LDCalendar.renderTypes ? window.LDCalendar.renderTypes() : ""}
       ${window.LDOfferings ? window.LDOfferings.renderAdmin() : ""}
@@ -801,7 +811,7 @@
         ${inp("p", "depositPurpose", "Deposit secures…")}${inp("p", "balanceDue", "Balance is…")}
         ${inp("p", "payment", "Payments accepted via")}${inp("p", "paymentUrl", "Payment link", "url")}</div>
       <h2 class="sec">Course standards</h2>
-      <p class="hint">Shown on the All courses page${sc.basic ? " and in the proposal" : ""}. Prerequisites are listed below.</p><div class="grid">
+      <p class="hint">Shown on the Courses page${sc.basic ? " and in the proposal" : ""}. Prerequisites are listed below.</p><div class="grid">
         ${inp("p", "minAge", "Minimum age")}${inp("p", "minDives", "Required open water dives", "text", "wide")}
         ${inp("p", "maxDepth", "Maximum training depth", "text", "wide")}${inp("p", "standardsRef", "Source (e.g. NAUI Standards 2026, p. 159)", "text", "wide")}</div>
       <h2 class="sec">Contact</h2><div class="grid">${inp("p", "instructor", "Instructor")}${inp("p", "phone", "Phone", "tel")}${inp("p", "email", "Email", "email")}</div>
@@ -855,8 +865,23 @@
         return `<tr><td>${esc(d)}</td><td>${esc(t)}</td>${mid}<td class="mk">${esc(r.ini || "")}</td></tr>`;
       }).join("")}</tbody></table></div>`;
   }
+  // The course proposal / learning agreement, laid out like Jamie's Open Water proposal. A course record in a
+  // class set up under Business → Classes takes that class's details: program name, format, tagline, program
+  // structure, certifications and materials, fees, deposit and required equipment. The course's own wording
+  // (philosophy, standards, expectations…) comes from Settings.
+  function proposalProgram(s) {
+    const base = P_(s), su = suOf(s); if (!su) return base;
+    const has = (list, keys) => (list || []).some(x => x && keys.some(k => String(x[k] || "").trim()));
+    return Object.assign({}, base, {
+      program: su.name || base.program, format: su.format || base.format, tagline: su.tagline || base.tagline,
+      docTitle: su.docTitle || base.docTitle,
+      days: has(su.structure, ["focus", "obj"]) ? su.structure : base.days,
+      included: has(su.certs, ["item", "detail"]) ? su.certs : base.included,
+      topics: String(su.topics || "").trim() ? su.topics : base.topics
+    });
+  }
   function proposalHtml(s) {
-    const P = P_(s), c = C(s);
+    const P = proposalProgram(s), c = C(s), su = suOf(s);
     const contact = `${esc(P.instructor)} | ${esc(P.phone)} | ${esc(P.email)}`;
     const head = (t) => `<div class="runhead"><span>${esc(P.business)}</span><span>${esc(t)}</span></div>`;
     const dlist = c.schedule.map((_, i) => s.dates["d" + (i + 1)]);
@@ -865,10 +890,14 @@
     const loc = s.location || P.location;
     const key = `<p class="key">Evaluation key: ${esc(c.key)}</p>`;
     const o = owed(s);
-    const showDives = c.alwaysRecords || s.dives.some(d => Object.values(d).some(Boolean));
-    const showRemed = c.alwaysRecords || s.remed.length;
+    const showDives = (c.alwaysRecords || !!su || s.dives.some(d => Object.values(d).some(Boolean))) && s.dives.length;
+    const showRemed = c.alwaysRecords || !!su || s.remed.length;
+    const equip = su ? (su.equipment || []).filter(x => x && x.item) : [];
+    const feeRows = su && feeLines(su).length && Math.abs(setupTotal(su) - feeOf(s)) < 0.005 ? feeLines(su) : [{ desc: P.feeLabel || P.program, amt: feeOf(s) }];
+    const invRows = su ? (su.included || []).filter(x => x && x.item) : (P.costRows || []);
+    const depBase = depositBase(s), dep = deposit(s);
     const topics = String(P.topics || "").split("\n").map(x => x.trim()).filter(Boolean);
-    const prereqs = P.prereqs || [], costRows = P.costRows || [];
+    const prereqs = P.prereqs || [];
     return `<article class="doc">
       ${head(P.docTitle)}
       <div class="cover"><h1>${esc(P.business)}</h1><div class="sub">${esc(P.docTitle)}</div><p class="tag">${esc(P.tagline)}</p></div>
@@ -880,7 +909,7 @@
         ${loc ? `<dt>${esc(c.siteLabel)}</dt><dd>${esc(loc)}</dd>` : ""}
         ${c.basic && P.minDives ? `<dt>Open water dives</dt><dd>${esc(P.minDives)}</dd>` : ""}
         ${c.basic && P.maxDepth ? `<dt>Maximum depth</dt><dd>${esc(P.maxDepth)}</dd>` : ""}
-        <dt>Investment</dt><dd>${money(P.price)}</dd>
+        <dt>Investment</dt><dd>${money(feeOf(s))}</dd>
         ${P.payment ? `<dt>Payment</dt><dd>${linkOrText(P.payment, P.paymentUrl)}</dd>` : ""}
         <dt>Contact</dt><dd>${contact}</dd>
       </dl>
@@ -899,6 +928,9 @@
       ${prereqs.length ? `<h2>Prerequisites</h2>
       <div class="tablewrap"><table><thead><tr><th>Requirement</th><th>Detail</th></tr></thead><tbody>
         ${prereqs.map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.detail)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${equip.length ? `<h2>Required Equipment</h2>
+      <div class="tablewrap"><table><thead><tr><th>Equipment</th><th>Notes</th></tr></thead><tbody>
+        ${equip.map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.note || "")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       ${topics.length ? `<h2>What You'll Learn — Academic Topics</h2><ul>${topics.map(t => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
       <h2>Performance Expectations</h2>${P.expectationsCallout ? `<p class="callout">${esc(P.expectationsCallout)}</p>` : ""}${para(P.expectations)}
       ${P.commitment ? `<h2>Instructor Commitment</h2>${para(P.commitment)}` : ""}
@@ -907,6 +939,11 @@
       <h2>${esc(P.matrixTitle || c.name + " — Required Skill Matrix")}</h2>${para(P.matrixIntro)}${key}
       ${matrixDoc(c, c.skills, s.skills)}` : ""}
 
+      ${!c.skills.length && su && String(su.skillList || "").trim() ? `<div class="pb"></div>${head("Required Skills")}
+      <h2>Required Skill Performance</h2><p>Each skill must be demonstrated to the required standard before certification.</p>
+      <div class="tablewrap"><table><thead><tr><th>Required skill</th><th>Pass</th><th>Initials</th></tr></thead><tbody>
+        ${String(su.skillList).split("\n").map(x => x.trim()).filter(Boolean).map(x => `<tr><td>${esc(x)}</td><td class="mk">☐</td><td class="mk"></td></tr>`).join("")}
+      </tbody></table></div>` : ""}
       ${c.final.length ? `<div class="pb"></div>${head(c.finalTitle)}
       <h2>${esc(c.finalTitle)} Matrix</h2>${key}${matrixDoc(c, c.final, s.final)}` : ""}
       ${showDives ? `<h2>${esc(c.diveTitle)}</h2>
@@ -923,13 +960,13 @@
       <div class="pb"></div>${head("Course Investment")}
       <h2>Course Investment</h2>
       <div class="tablewrap"><table><thead><tr><th>Description</th><th>Cost</th></tr></thead><tbody>
-        <tr><td>${esc(P.feeLabel || P.program)}</td><td class="money">${money(P.price)}</td></tr>
-        ${costRows.map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.cost)}</td></tr>`).join("")}
+        ${feeRows.map(x => `<tr><td>${esc(x.desc)}</td><td class="money">${money(x.amt)}</td></tr>`).join("")}
+        ${invRows.map(x => `<tr><td>${esc(x.item)}</td><td>${esc(x.cost)}</td></tr>`).join("")}
         ${s.pay.extras.filter(x => x.desc || x.amt).map(x => `<tr><td>Additional training: ${esc(x.desc)}</td><td class="money">${money(x.amt)}</td></tr>`).join("")}
         <tr><td><b>TOTAL COURSE FEE</b></td><td class="money"><b>${money(o.total)}</b></td></tr>
       </tbody></table></div>
       <h2>Payment Policy</h2>
-      <p>A ${esc(P.depositPct)}% non-refundable deposit of ${money(deposit(s))} is required to secure ${esc(P.depositPurpose || "training dates")}. ${esc(P.paymentNotes)}</p>
+      <p>A ${esc(depPctOf(s))}% non-refundable deposit of ${money(dep)}${su && Math.abs(depBase - feeOf(s)) > 0.005 ? " (" + esc(depPctOf(s)) + "% of the " + money(depBase) + " class fee)" : ""} is required to secure ${esc(P.depositPurpose || "training dates")}. ${esc(P.paymentNotes)}</p>
       ${P.payment ? `<p><b>Payments accepted via ${linkOrText(P.payment, P.paymentUrl)}</b></p>` : ""}
       <h2>Student Acknowledgment</h2>${para(P.acknowledgment)}
       <div class="sig"><div><b>${esc(s.ack.studentName || nameOf(s))}&nbsp;</b>Student name</div><div><b>&nbsp;</b>Student signature</div><div><b>${esc(fmtDate(s.ack.studentDate))}&nbsp;</b>Date</div></div>
@@ -1088,7 +1125,10 @@
     defaultProgram: () => clone(DEFAULT_PROGRAM), courseOptions, isCourse, view: () => view,
     COURSE_ORDER, program: (id) => P({ course: id }), enrollInClass, addStudent, go,
     get state() { return state; }, save, render, toast, esc, money, fmtDate, billing, progress, owed, nameOf, personById,
-    feeLines, setupTotal, setupOf, depositOf: deposit
+    feeLines, setupTotal, setupOf, depositOf: deposit,
+    // A class's proposal with no student yet (Business → Classes preview), and a student's proposal tab.
+    proposalFor: (su) => { const e = blankEnrollment(null, su.course); e._setup = su; return proposalHtml(e); },
+    openProposal: (enrId) => { const e = state.enrollments.find(x => x.id === enrId); if (!e) return; go(e.course, { sel: e.id }); view.tab = "proposal"; render(); }
   });
 
   render();

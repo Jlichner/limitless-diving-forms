@@ -77,11 +77,18 @@
 .acct-skills li { display: flex; gap: 8px; }
 .acct-skills li.done { color: var(--muted); }
 .acct-skills li.done span:first-child { color: var(--ok-mark); font-weight: 700; }
+.acct-paper { display: flex; flex-direction: column; gap: 6px; }
+.acct-paper ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; }
+.acct-paper li { display: flex; gap: 10px; align-items: flex-start; }
+.acct-paper li > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
+.acct-paper li > div > span { font-size: 13px; color: var(--muted); }
+.acct-paper li > div > span.acct-paper-act { color: var(--ink); }
+.acct-paper-ico { flex-shrink: 0; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 6px 5px; border-radius: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
 .acct-updated { margin: 0; font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
 .acct-class { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .acct-class div { display: flex; flex-direction: column; }
 .acct-class span { color: var(--muted); font-size: 13px; }
-.acct-class .seats { display: inline-block; color: var(--ok); background: var(--ok-bg); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px; border-radius: 99px; }
+.acct-class .seats, .acct-paper .seats { display: inline-block; color: var(--ok); background: var(--ok-bg); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px; border-radius: 99px; }
 .acct-class .cal-dot { margin-top: 6px; }
 
 /* Instructor app: Accounts tab */
@@ -192,3 +199,4 @@ body.reading-agreement #my-sites { display: none !important; }
   body.reading-agreement .acct { padding: 0; max-width: none; }
   @page { size: letter; margin: 0.6in; }
 }
+.acct-paper .seats { align-self: flex-start; }

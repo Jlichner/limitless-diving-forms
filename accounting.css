@@ -1,0 +1,61 @@
+/* Business → Accounting (accounting.js): yearly income, expenses and mileage, and the printable year summary. */
+.layout > .shell.full:has(#acct-panel) { max-width: 1100px; }
+#acct-panel .acct-year { min-width: 110px; }
+#acct-panel .acct-year select { width: auto; }
+#acct-panel .r { text-align: right; }
+#acct-panel .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#acct-panel table.acct-edit td.dt { width: 150px; }
+#acct-panel table.acct-edit td.amt { width: 120px; }
+#acct-panel table.acct-edit td.amt input { font-family: var(--font-mono); text-align: right; }
+#acct-panel table.acct-edit td input, #acct-panel table.acct-edit td select { min-width: 0; }
+#acct-panel table.acct-edit td select { min-width: 140px; }
+#acct-panel table.acct-edit td:nth-child(2) { min-width: 170px; }
+#acct-panel table.m td.x { width: 1%; }
+#acct-panel tr.acct-total td { font-weight: 700; border-bottom: 0; }
+#acct-panel .acct-tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 1px 8px; border-radius: 99px; background: var(--ip-bg); color: var(--ip); }
+#acct-panel .linkbtn { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#acct-panel .acct-rate { margin-bottom: 14px; }
+#acct-panel .acct-help { margin-top: 18px; font-size: 14px; max-width: 75ch; }
+#acct-panel .acct-help summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+#acct-panel .acct-help li { margin: 4px 0; }
+
+.acct-doc {
+  --a-navy: #1f3a5f; --a-ink: #222222; --a-muted: #666666;
+  background: #ffffff; color: var(--a-ink); border: 1px solid var(--line); border-radius: 4px;
+  padding: 36px clamp(16px, 5vw, 52px) 40px; max-width: 760px;
+  font: 14px/1.45 Georgia, "Times New Roman", Times, serif;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.acct-doc header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; border-bottom: 3px solid var(--a-navy); padding-bottom: 10px; margin-bottom: 8px; }
+.acct-doc .ab { font-size: 24px; font-weight: 700; letter-spacing: .08em; color: var(--a-navy); text-transform: uppercase; }
+.acct-doc .asub { color: var(--a-muted); font-size: 13px; }
+.acct-doc .at { font-size: 18px; font-weight: 700; color: var(--a-navy); }
+.acct-doc h3 { font-size: 15px; color: var(--a-navy); margin: 20px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+.acct-doc table { width: 100%; border-collapse: collapse; }
+.acct-doc td { padding: 5px 6px; border-bottom: 1px solid #e3e3e3; vertical-align: top; }
+.acct-doc td.ln { width: 44px; color: var(--a-muted); font-size: 12px; }
+.acct-doc td.r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; width: 120px; }
+.acct-doc tr.tot td { font-weight: 700; border-top: 2px solid var(--a-navy); border-bottom: 0; }
+.acct-doc table.net { margin-top: 18px; }
+.acct-doc table.net td { font-size: 17px; font-weight: 700; background: #eef2f7; border: 0; padding: 8px 6px; }
+.acct-doc .acct-note, #acct-panel .acct-note { color: var(--a-muted, var(--muted)); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.acct-doc > p.acct-note { margin-top: 18px; }
+
+@media print {
+  .acct-doc { border: 0; padding: 0; max-width: none; font-size: 11.5pt; }
+  .acct-doc tr { break-inside: avoid; }
+}
+
+/* Phones: each entry becomes a small card instead of a wide row. */
+@media (max-width: 640px) {
+  #acct-panel table.acct-edit thead { display: none; }
+  #acct-panel table.acct-edit, #acct-panel table.acct-edit tbody { display: block; }
+  #acct-panel table.acct-edit tr:not(.acct-total) { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  #acct-panel table.acct-edit td { display: flex; flex-direction: column; gap: 3px; padding: 0; border: 0; width: auto !important; min-width: 0 !important; }
+  #acct-panel table.acct-edit td[data-label]::before { content: attr(data-label); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  #acct-panel table.acct-edit tr:not(.acct-total) td:nth-child(2) { grid-column: 1 / -1; order: -1; }
+  #acct-panel table.acct-edit td select { min-width: 0; }
+  #acct-panel table.acct-edit td.x { grid-column: 1 / -1; align-items: flex-end; }
+  #acct-panel table.acct-edit tr.acct-total { display: flex; justify-content: space-between; padding: 10px 0; }
+  #acct-panel table.acct-edit tr.acct-total td:empty { display: none; }
+}

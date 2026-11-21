@@ -53,8 +53,15 @@
     const schedule = c.schedule.map((label, i) => ({ label, date: (e.dates && e.dates["d" + (i + 1)]) || "" }));
     const dates = k && (k.dates || []).filter(Boolean).length ? k.dates.filter(Boolean) : schedule.map(d => d.date).filter(Boolean);
     const name = c.fullName || c.name;
+    // Paperwork: the class setup's Agency (NAUI / TDI / Both), else the course's agency. The portal picks the
+    // forms from paperwork.js, so forms added there later show up without sharing again.
+    const PW = window.LDPaperwork, su = k && k.setupId ? (L().state.classSetups || []).find(x => x.id === k.setupId) : null;
+    const paperworkAgency = (su && su.agency) || (PW && PW.agencyOfCourse(e.course)) || "";
+    const person = L().personById(e.studentId), firstDay = dates.slice().sort()[0];
     return {
-      courseName: (pg && pg.program) || name, agency: /NAUI/i.test(((pg && pg.program) || "") + " " + name) ? "NAUI" : "",
+      courseName: (pg && pg.program) || name,
+      agency: paperworkAgency === "Both" ? "NAUI + TDI" : paperworkAgency || (/NAUI/i.test(((pg && pg.program) || "") + " " + name) ? "NAUI" : ""),
+      paperworkAgency, minor: PW ? PW.isMinor(person && person.dob, firstDay) : null,
       classId: k ? k.id : "", classTitle: k ? (k.title || "") : "", dates: dates.slice().sort(),
       time: (k && k.time) || "", location: (k && k.location) || e.location || "",
       schedule, pct: pr.pct,
@@ -344,6 +351,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       <h2 class="sec">Certifications</h2>
       ${certs.length ? `<ul class="dir-certs">${certs.map(c => `<li>${esc(certText(c))}</li>`).join("")}</ul>` : `<p class="hint">None listed yet.</p>`}
       ${techBlock(acc)}
+      ${logbookBlock(acc)}
       <h2 class="sec">Course records</h2>
       ${p ? `<p class="hint">${enrolled.length ? enrolled.map(e => esc(L().COURSES[e.course].name)).join(", ") : "No courses yet"} · <button class="linkbtn" data-sa="open" data-id="${esc(p.id)}">Open ${esc(p.name || "their")} record</button></p>`
         : `<p class="hint">Not linked to a course record in this browser yet.${C().can("instructor") ? "" : " An Instructor can link it."}</p>`}
@@ -362,6 +370,27 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         ${C().can("instructor") ? `<div class="row-actions"><button class="btn${on ? "" : " primary"}" data-sa="tech" data-acc="${esc(acc.id)}" data-on="${on ? "0" : "1"}" aria-pressed="${on}"${v.busy ? " disabled" : ""}>${on ? "Turn off access" : "Turn on access"}</button></div>` : ""}`;
     }
     return `<h2 class="sec">Elements of tech diving</h2>${body}`;
+  }
+  // Dive log book (logbook.html): on automatically for anyone registered for a class and for staff.
+  // Instructors and Admins can also switch it on by hand for one person.
+  function logbookBlock(acc) {
+    const { esc } = L();
+    const staff = ["divemaster", "instructor", "admin"].includes(acc.role || "student");
+    let body;
+    if (typeof acc.logbook_access !== "boolean") body = `<p class="hint">Run the latest <code>supabase/schema.sql</code> to switch this on for students.</p>`;
+    else if (staff) body = `<p class="hint">${esc(roleName(acc.role))}s always have a log book.</p>`;
+    else {
+      const on = acc.logbook_access, auto = acc.logbook_auto === true;
+      const state = on || auto;
+      const why = auto && !on ? "On automatically: they're registered for a class."
+        : auto && on ? "On. They're registered for a class, and you've switched it on too."
+        : on ? "On. You switched it on for them." : "Off until they're registered for a class. Switch it on to open it now.";
+      body = `<p class="hint tech-state"><span class="sa-badge${state ? "" : " wait"}">${state ? "On" : "Off"}</span> ${esc(why)}</p>
+        ${C().can("instructor") && !(auto && !on) ? `<div class="row-actions"><button class="btn${on ? "" : " primary"}" data-sa="logbook" data-acc="${esc(acc.id)}" data-on="${on ? "0" : "1"}" aria-pressed="${on}"${v.busy ? " disabled" : ""}>${on ? "Turn off log book" : "Turn on log book"}</button>
+          ${on ? `<a class="btn" style="text-decoration:none" href="logbook.html#member=${esc(acc.id)}" target="_blank" rel="noopener">Open their log book</a>` : ""}</div>`
+          : state ? `<div class="row-actions"><a class="btn" style="text-decoration:none" href="logbook.html#member=${esc(acc.id)}" target="_blank" rel="noopener">Open their log book</a></div>` : ""}`;
+    }
+    return `<h2 class="sec">Dive log book</h2>${body}`;
   }
   function renderDirectory(switchHtml) {
     const { esc } = L();
@@ -482,6 +511,18 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         (v.members || []).concat(v.accounts || []).forEach(a => { if (a.id === acc.id) a.tech_access = allow; });
         setNote(""); rerender();
         L().toast(allow ? "Elements of tech diving is on for " + (acc.full_name || "them") : "Elements of tech diving is off for " + (acc.full_name || "them"));
+        break;
+      }
+      case "logbook": {
+        if (!acc) break;
+        const allow = b.dataset.on === "1";
+        v.busy = true; rerender();
+        const { error } = await C().client.rpc("set_logbook_access", { member: acc.id, allow });
+        v.busy = false;
+        if (error) { rerender(); L().toast("Not changed: " + C().explain(error)); break; }
+        (v.members || []).concat(v.accounts || [], [acc]).forEach(a => { if (a.id === acc.id) a.logbook_access = allow; });
+        setNote(""); rerender();
+        L().toast(allow ? "Dive log book is on for " + (acc.full_name || "them") : "Dive log book switched off for " + (acc.full_name || "them") + (acc.logbook_auto ? " (still on: registered for a class)" : ""));
         break;
       }
       case "share": {

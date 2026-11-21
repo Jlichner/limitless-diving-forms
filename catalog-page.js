@@ -86,7 +86,7 @@
         <td>${esc(pr.minDives || "")}</td><td>${esc(pr.maxDepth || "")}</td>`}
         <td class="cat-acts"><button class="btn small" data-catact="std" data-id="${c.app}">Settings</button></td></tr>`;
     };
-    return `<div class="rec-head"><div class="who"><span class="eyebrow">Course catalog</span><h1>All courses</h1></div></div>
+    return `<div class="rec-head"><div class="who"><span class="eyebrow">Course catalog</span><h1>Courses</h1></div></div>
       <p class="hint">Every NAUI, NAUI Technical and TDI course you teach. Pick any of them when you add a class to the calendar.
         NAUI standards are from the 2026 NAUI Standards and Policies Manual; TDI standards are from TDI Standards and Procedures, Part 2 (version 0126). Edit any course's standards, price and proposal text under <b>Settings</b>.
         Courses marked <span class="cat-full">Skill matrix</span> have a full skill matrix; others can get one later, one course at a time.</p>

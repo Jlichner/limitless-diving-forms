@@ -113,10 +113,24 @@
         ${s.balanceDue != null ? `<div class="stat"><b class="money">${money(s.balanceDue)}</b><span>Balance due</span></div>` : ""}</div>
       ${sched.length ? `<h4>Schedule</h4><ul class="acct-sched">${sched.map(d => `<li><b>${esc(d.date ? G.fmt(d.date, { weekday: "short" }) : "Date TBD")}</b> ${esc(d.label)}</li>`).join("")}</ul>` : ""}
       ${s.time ? `<p class="hint">Time: ${esc(s.time)}</p>` : ""}
+      ${paperworkList(s, row.course)}
       ${skills.length ? `<details><summary>${left.length ? `${left.length} skill${left.length === 1 ? "" : "s"} still to master` : "Every required skill is mastered"}</summary>
         <ul class="acct-skills">${skills.map(x => `<li class="${x.done ? "done" : ""}"><span aria-hidden="true">${x.done ? "✓" : "○"}</span> ${esc(x.name)}${x.done ? `<span class="sr-only"> (mastered)</span>` : ""}</li>`).join("")}</ul></details>` : ""}
       ${updated && !isNaN(updated) ? `<p class="acct-updated">Updated ${esc(updated.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }))}</p>` : ""}
     </article>`;
+  }
+  // The forms this class needs (paperwork.js), picked by the class's agency. Each opens or downloads the PDF.
+  function paperworkList(s, course) {
+    // Records shared before paperwork existed have no paperworkAgency: use the course's own agency.
+    const PW = window.LDPaperwork, ag = PW && (s.paperworkAgency || PW.agencyOfCourse(course));
+    const forms = ag ? PW.forClass(ag, course, s.minor === true || s.minor === false ? s.minor : null) : [];
+    if (!forms.length) return "";
+    return `<div class="acct-paper"><h4>Class paperwork</h4>
+      <p class="hint">Print these, fill them in, and bring them to your first class. Questions? Email <a href="mailto:jamie@limitless-diving.com">jamie@limitless-diving.com</a>.</p>
+      <ul>${forms.map(f => `<li><span class="acct-paper-ico" aria-hidden="true">PDF</span><div>
+        <a href="${esc(f.file)}" target="_blank" rel="noopener"><b>${esc(f.title)}</b></a>${f.ifMinor ? ` <span class="seats">Only if you're under 18</span>` : f.minor ? ` <span class="seats">Under 18: parent or guardian signs</span>` : ""}
+        <span>${esc(f.how)}</span>
+        <span class="acct-paper-act"><a href="${esc(f.file)}" target="_blank" rel="noopener">Open</a> · <a href="${esc(f.file)}" download>Download</a></span></div></li>`).join("")}</ul></div>`;
   }
   // Each entry links to its information page (event.html) to join or sign up; the member's own sign-up shows as a badge.
   const SIGNUP_BADGE = { joined: "You're going", pending: "Sign-up sent", enrolled: "You're enrolled" };
@@ -174,7 +188,7 @@
           <div><b>${esc(x.title || "Learning agreement")}</b><span>${x.signed_at ? "Signed " + esc(fmtWhen(x.signed_at)) : "Waiting for your signature"}</span></div>
           <button class="btn small${x.signed_at ? "" : " primary"}" data-act="agr-open" data-id="${esc(x.id)}">${x.signed_at ? "View or print" : "Read and sign"}</button></li>`).join("")}</ul></section>` : ""}
         ${C.techAccess ? `<section class="panel tech-card"><span class="eyebrow">Unlocked for you</span><h2 class="sec">Elements of tech diving</h2>
-          <p class="hint"><i lang="la">Submersio · per artem et disciplinam</i>. ${C.instructor ? "You can open it as staff. Switch it on for a student in Records → Students." : "Your instructor has opened the tech diving gear and configuration lessons for you."}</p>
+          <p class="hint"><i lang="la">Submersio · per artem et disciplinam</i>. ${C.instructor ? "You can open it as staff. Switch it on for a student in Records → Student accounts." : "Your instructor has opened the tech diving gear and configuration lessons for you."}</p>
           <a class="btn primary" href="tech-diving.html">Open Elements of tech diving</a></section>` : ""}
         <section class="panel"><h2 class="sec">Upcoming events</h2>
           ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">Nothing is scheduled right now.</p>`}
@@ -427,7 +441,7 @@
     view.busy = false;
     if (res.error) { setNote(C.explain(res.error), "bad"); render(); return; }
     // Came here from another page to log in (e.g. Request a class): go back there.
-    { const m = /^#then=(request|nitrox|diving-physics|tech-diving)$/.exec(location.hash); if (a === "signin" && m) { location.href = m[1] + ".html"; return; } }
+    { const m = /^#then=(request|nitrox|diving-physics|tech-diving|logbook)$/.exec(location.hash); if (a === "signin" && m) { location.href = m[1] + ".html"; return; } }
     // ...or the information page of a calendar entry (event.html), to join it or sign up.
     { const m = /^#then=event-([A-Za-z0-9_-]{1,80})$/.exec(location.hash); if (a === "signin" && m) { location.href = "event.html?id=" + encodeURIComponent(m[1]); return; } }
     if (a === "signup" && !(res.data && res.data.session)) {

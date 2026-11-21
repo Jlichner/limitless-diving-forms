@@ -283,5 +283,41 @@
     }
   });
 
-  window.LDInvoices = { render };
+  // ---------- made from Business → Scheduling ----------
+  // When a learning agreement goes out with "Also make the invoice" ticked, scheduling.js calls makeFor.
+  // One invoice per scheduled student: sending again reuses it (looked up by assignmentId).
+  function forAssignment(aid) { return aid ? data().invoices.find(x => x.assignmentId === aid) || null : null; }
+  function makeFor(o) {
+    const have = forAssignment(o.assignmentId); if (have) return have;
+    const st = L().state, s = L().personById(o.studentId), inv = blank();
+    inv.assignmentId = o.assignmentId || "";
+    if (s) {
+      inv.studentId = s.id; inv.billName = s.name || "";
+      inv.billContact = [o.email || s.email, s.phone].filter(Boolean).join(" / ");
+      inv.billAddr = s.address || "";
+    }
+    const enr = o.enrollmentId ? (st.enrollments || []).find(e => e.id === o.enrollmentId) : null;
+    if (enr) {
+      const b = L().billing(enr);
+      inv.items = b.items.length ? b.items : [{ desc: o.title || "", amt: "" }];
+      inv.payments = b.payments;
+      const dep = L().depositOf ? L().depositOf(enr) : 0;
+      if (dep > 0 && !(enr.pay && enr.pay.depPaid)) inv.deposit = dep;
+    } else {
+      const price = o.price === "" || o.price == null ? "" : num(o.price);
+      inv.items = [{ desc: o.title || "", amt: price }];
+    }
+    if (inv.deposit) inv.note = "A deposit of " + L().money(inv.deposit) + " is due to hold your spot in " + (o.title || "the class") + ". The balance is due before the class starts.";
+    data().invoices.push(inv); L().save();
+    return inv;
+  }
+  function summary(inv) {
+    if (!inv) return null;
+    const t = totals(inv);
+    return { number: inv.number, items: inv.items.filter(r => r.desc || (r.amt !== "" && r.amt != null)),
+      payments: inv.payments.filter(r => r.desc || (r.amt !== "" && r.amt != null)), sub: t.sub, due: t.due, deposit: inv.deposit || 0, paid: !!inv.paid };
+  }
+  function open(id) { v.sel = id; v.settings = false; L().go("invoices"); window.scrollTo(0, 0); }
+
+  window.LDInvoices = { render, makeFor, forAssignment, summary, open };
 })();
