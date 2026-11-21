@@ -181,7 +181,43 @@
     };
   }
 
-  const api = { compute, extras, radians, georef };
+  // A latitude or longitude typed the way people copy it: decimal degrees (44.3421, -75.9165), with a letter
+  // (44.3421 N, W 75.9165), degrees and decimal minutes (44° 20.526' N), or degrees, minutes and seconds
+  // (44°20'31.6"N). axis is "lat" or "lon". Returns the decimal degrees, or NaN when it can't be read.
+  function parseCoord(text, axis) {
+    let t = String(text == null ? "" : text).trim().toUpperCase().replace(/[\u2212\u2013]/g, "-").replace(/,(?=\d)/g, ".");
+    if (!t) return NaN;
+    const hem = t.match(/[NSEW]/g) || [];
+    if (hem.length > 1 || /[A-DF-MO-RT-VX-Z]/.test(t)) return NaN;
+    if (hem.length && (axis === "lat" ? !/[NS]/.test(hem[0]) : !/[EW]/.test(hem[0]))) return NaN;
+    const neg = /^\s*-/.test(t.replace(/^[NSEW]\s*/, ""));
+    const nums = t.match(/\d+(?:\.\d+)?|\.\d+/g) || [];
+    if (!nums.length || nums.length > 3) return NaN;
+    const [d, m = 0, sec = 0] = nums.map(Number);
+    if (m >= 60 || sec >= 60 || (nums.length > 1 && /\./.test(nums[0]))) return NaN;
+    let v = d + m / 60 + sec / 3600;
+    if (neg || (hem.length && /[SW]/.test(hem[0]))) v = -v;
+    return Math.abs(v) <= (axis === "lat" ? 90 : 180) ? Math.round(v * 1e7) / 1e7 : NaN;
+  }
+  // A latitude and longitude together, e.g. pasted from Google Maps: "44.3421, -75.9165",
+  // "44.3421 -75.9165" or "44°20'31.6"N 75°54'59.4"W". Returns [lat, lon] or null.
+  function parseLatLon(text) {
+    const t = String(text == null ? "" : text).trim().replace(/[\u2212\u2013]/g, "-");
+    const tries = [];
+    const hem = t.match(/^(.*?[NS])\s*[,;]?\s*(.*[EW].*)$/i);
+    if (hem) tries.push([hem[1], hem[2]]);
+    const parts = t.split(/\s*[,;]\s*/);
+    if (parts.length === 2) tries.push(parts);
+    const sp = t.match(/^(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/);
+    if (sp && /\./.test(sp[1]) && /\./.test(sp[2])) tries.push([sp[1], sp[2]]);
+    for (const [a, b] of tries) {
+      const la = parseCoord(a, "lat"), lo = parseCoord(b, "lon");
+      if (!isNaN(la) && !isNaN(lo)) return [la, lo];
+    }
+    return null;
+  }
+
+  const api = { compute, extras, radians, georef, parseCoord, parseLatLon };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveyGeometry = api;
 })(typeof window !== "undefined" ? window : globalThis);
