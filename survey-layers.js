@@ -220,12 +220,12 @@
           With a second known point, the turn and scale are worked out from the two points instead.</p>
         <div class="sm-form">
           <label>Landmark <select data-g="landmark">${landmarkOptions(gr.landmark || S.data.origin || "BAR")}</select></label>
-          <label>Latitude <input data-g="lat" inputmode="decimal" value="${esc(gr.lat ?? "")}" placeholder="44.3421"></label>
-          <label>Longitude <input data-g="lon" inputmode="decimal" value="${esc(gr.lon ?? "")}" placeholder="-75.9165"></label>
+          <label>Latitude <input data-g="lat" autocomplete="off" value="${esc(gr.lat ?? "")}" placeholder="44.3421"></label>
+          <label>Longitude <input data-g="lon" autocomplete="off" value="${esc(gr.lon ?? "")}" placeholder="-75.9165"></label>
           <label>Declination ° <input data-g="declination" inputmode="decimal" value="${esc(gr.declination ?? "")}" placeholder="-12.8"></label>
           <label>Second landmark (optional) <select data-g="landmark2">${landmarkOptions(gr.landmark2 || "", true)}</select></label>
-          <label>Its latitude <input data-g="lat2" inputmode="decimal" value="${esc(gr.lat2 ?? "")}"></label>
-          <label>Its longitude <input data-g="lon2" inputmode="decimal" value="${esc(gr.lon2 ?? "")}"></label></div>
+          <label>Its latitude <input data-g="lat2" autocomplete="off" value="${esc(gr.lat2 ?? "")}"></label>
+          <label>Its longitude <input data-g="lon2" autocomplete="off" value="${esc(gr.lon2 ?? "")}"></label></div>
         <p class="hint">Tip: you can paste "44.3421, -75.9165" into the latitude box.</p>
         ${g ? `<p class="hint">Now placed: turned ${g.turn.toFixed(1)}° from the compass${g.twoPoint ? `, drawn at ${(g.scale * 100).toFixed(1)}% of the measured lengths to fit both points` : ""}.</p>` : ""}
         <div class="se-acts"><button type="button" class="btn primary" data-su="place"${st.busy ? " disabled" : ""}>Save and publish</button>
@@ -499,10 +499,14 @@
   });
   setupBox.addEventListener("input", e => {
     const el = e.target;
-    if (el.dataset.g === "lat" && /,/.test(el.value)) {
-      const [la, lo] = el.value.split(",").map(x => x.trim());
-      el.value = la; const lon = setupBox.querySelector('[data-g="lon"]'); if (lon) lon.value = lo;
-    }
+  });
+  // A latitude and longitude pasted together into one box (e.g. from Google Maps) are split into both boxes.
+  setupBox.addEventListener("change", e => {
+    const el = e.target, g = el.dataset && el.dataset.g;
+    if (g !== "lat" && g !== "lat2") return;
+    const pair = G.parseLatLon(el.value);
+    const lon = setupBox.querySelector(`[data-g="${g === "lat" ? "lon" : "lon2"}"]`);
+    if (pair && lon) { el.value = pair[0]; lon.value = pair[1]; }
   });
   setupBox.addEventListener("click", async e => {
     const b = e.target.closest("[data-su]");
@@ -520,12 +524,24 @@
       if (act === "place") {
         const v = k => (setupBox.querySelector(`[data-g="${k}"]`) || {}).value || "";
         const num = k => v(k).trim() === "" ? "" : Number(v(k).replace("−", "-"));
-        gr = { landmark: v("landmark"), lat: num("lat"), lon: num("lon"), declination: num("declination") || 0 };
-        if (!(gr.lat >= -90 && gr.lat <= 90) || !(gr.lon >= -180 && gr.lon <= 180) || gr.lat === "" || gr.lon === "") { say("Enter the landmark's latitude and longitude in decimal degrees, e.g. 44.3421 and -75.9165.", "bad"); return; }
-        if (!(Math.abs(gr.declination) <= 40)) { say("The declination should be between -40 and 40 degrees.", "bad"); return; }
+        // Latitude and longitude in any common format; both pasted into the latitude box works too.
+        const point = (la, lo) => {
+          const pair = !v(lo).trim() ? G.parseLatLon(v(la)) : null;
+          return pair || [G.parseCoord(v(la), "lat"), G.parseCoord(v(lo), "lon")];
+        };
+        const FORMATS = "Any of these work: 44.3421 and -75.9165, 44.3421 N and 75.9165 W, 44° 20.526' N and 75° 54.990' W, or 44°20'31.6\"N 75°54'59.4\"W pasted from Google Maps.";
+        const bad = (pt, which) => isNaN(pt[0]) ? `The ${which}latitude "${v(which ? "lat2" : "lat")}" couldn't be read.` : isNaN(pt[1]) ? `The ${which}longitude "${v(which ? "lon2" : "lon")}" couldn't be read.` : "";
+        const p1 = point("lat", "lon");
+        if (!v("lat").trim()) { say("Enter the landmark's latitude and longitude. " + FORMATS, "bad"); return; }
+        if (bad(p1, "")) { say(bad(p1, "") + " " + FORMATS + " West longitudes are negative, or end in W.", "bad"); return; }
+        if (p1[1] > 0 && !/[EW]/i.test(v("lat") + v("lon"))) { say(`Longitude ${p1[1]} is east of Greenwich. Sites in North America are west of it: make it negative (e.g. -75.9165) or end it in W.`, "bad"); return; }
+        gr = { landmark: v("landmark"), lat: p1[0], lon: p1[1], declination: num("declination") || 0 };
+        if (!(Math.abs(gr.declination) <= 40)) { say("The declination should be between -40 and 40 degrees (west is negative: about -12.8 at Alexandria Bay).", "bad"); return; }
         if (v("landmark2")) {
-          Object.assign(gr, { landmark2: v("landmark2"), lat2: num("lat2"), lon2: num("lon2") });
-          if (gr.lat2 === "" || gr.lon2 === "" || gr.landmark2 === gr.landmark) { say("For a second point, pick a different landmark and enter its latitude and longitude, or set it to None.", "bad"); return; }
+          const p2 = point("lat2", "lon2");
+          if (!v("lat2").trim() || gr.landmark === v("landmark2")) { say("For a second point, pick a different landmark and enter its latitude and longitude, or set it to None.", "bad"); return; }
+          if (bad(p2, "second point's ")) { say(bad(p2, "second point's ") + " " + FORMATS, "bad"); return; }
+          Object.assign(gr, { landmark2: v("landmark2"), lat2: p2[0], lon2: p2[1] });
         }
       }
       const data = Object.assign({}, S.data);

@@ -18,6 +18,7 @@ Copy `lake-hydra-data.js` and `lake-hydra-map.html`, change the id, title and da
 
 ## Layers, ratings, photos and GPS (survey-layers.js, survey-ratings.js)
 
+- `test-coords.js`: tests for reading latitudes and longitudes in Map setup (decimal, N/W letters, degrees and minutes, degrees-minutes-seconds, Google Maps pastes). Run `node tools/survey/test-coords.js`.
 - `test-ratings.js`: tests for rating lines (green circle stays on the main survey; blue, black and double black each move to a restricted layer). Run `node tools/survey/test-ratings.js`.
 - A map is placed on the earth by `data.georef` (see `SurveyGeometry.georef`): one landmark's latitude/longitude plus the magnetic declination, or two landmarks. It is published like any other change, so it's in the map's history.
 - Blue, black and double black lines live only in `site_map_layers`, readable by members whose Site maps access level is that rating or higher.
