@@ -1372,16 +1372,24 @@ create table if not exists public.site_map_layer_access (
   primary key (layer_id, user_id)
 );
 
--- True when the person looking may see this layer.
+-- True when the person looking may see a layer with this id, rating and restricted setting. The row policy
+-- passes the row's own values: looking the row up by id would miss a row that is being added right now
+-- (insert ... returning), which made adding a layer fail with "new row violates row-level security policy".
+create or replace function public.site_map_layer_visible(layer uuid, layer_rating text, layer_restricted boolean)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select public.site_map_rank() >= 1 and (
+    public.site_map_rank() >= 5
+    or (layer_rating is not null and array_position(array['green', 'blue', 'black', 'double-black'], layer_rating) <= public.site_map_rank())
+    or (layer_rating is null and (not coalesce(layer_restricted, false)
+        or exists (select 1 from public.site_map_layer_access a where a.layer_id = layer and a.user_id = (select auth.uid())))));
+$$;
+revoke all on function public.site_map_layer_visible(uuid, text, boolean) from public;
+grant execute on function public.site_map_layer_visible(uuid, text, boolean) to anon, authenticated;
+
+-- The same, by the layer's id alone (for its picture in Storage).
 create or replace function public.can_see_site_map_layer(layer uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1 from public.site_map_layers l
-    where l.id = layer and public.site_map_rank() >= 1 and (
-      public.site_map_rank() >= 5
-      or (l.rating is not null and array_position(array['green', 'blue', 'black', 'double-black'], l.rating) <= public.site_map_rank())
-      or (l.rating is null and (not l.restricted
-          or exists (select 1 from public.site_map_layer_access a where a.layer_id = l.id and a.user_id = (select auth.uid()))))));
+  select exists (select 1 from public.site_map_layers l where l.id = layer and public.site_map_layer_visible(l.id, l.rating, l.restricted));
 $$;
 revoke all on function public.can_see_site_map_layer(uuid) from public;
 grant execute on function public.can_see_site_map_layer(uuid) to anon, authenticated;
@@ -1390,7 +1398,7 @@ alter table public.site_map_layers enable row level security;
 drop policy if exists "Layers: open ones for everyone, restricted ones for granted members" on public.site_map_layers;
 drop policy if exists "Layers: by site map level" on public.site_map_layers;
 create policy "Layers: by site map level" on public.site_map_layers
-  for select to authenticated using (public.can_see_site_map_layer(id));
+  for select to authenticated using (public.site_map_layer_visible(id, rating, restricted));
 drop policy if exists "Layers: Admins add" on public.site_map_layers;
 create policy "Layers: Admins add" on public.site_map_layers for insert to authenticated with check ((select public.is_site_map_admin()));
 drop policy if exists "Layers: Admins change" on public.site_map_layers;
