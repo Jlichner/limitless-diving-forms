@@ -405,7 +405,7 @@
       ["About", [["values", "Core values"]]],
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"], ["coaching", "Coaching sessions"], ["hydra", "Lake Hydra tours"]]],
       ["Tools", [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]].concat(window.LDCloud && window.LDCloud.techAccess ? [["tech", "Elements of tech diving"]] : [])],
-      ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"]]],
+      ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"], ["sitemaps", "Site maps"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"]]],
       allowed("divemaster") && ["Records", [["students", "Student accounts"]].concat(window.LDCatalogPage ? [["catalog", "Courses"]] : [])],
       allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["accounting", "Accounting"], ["program", "Settings"]]]
@@ -413,7 +413,7 @@
     // A catalog course without its own nav entry lights up "Courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
     const LINKS = { account: "account.html", values: "core-values.html", available: "available-classes.html",
-      coaching: "offering.html?id=coaching", hydra: "offering.html?id=hydra", nitrox: "nitrox.html", physics: "diving-physics.html", tech: "tech-diving.html", dt6: "dive-team-6.html", divemap: "dive-map.html",
+      coaching: "offering.html?id=coaching", hydra: "offering.html?id=hydra", nitrox: "nitrox.html", physics: "diving-physics.html", tech: "tech-diving.html", dt6: "dive-team-6.html", divemap: "dive-map.html", sitemaps: "site-maps.html",
       swag: "swag.html" };  // separate public pages. Swag: when the t-shirt shop is ready, move swag to EXTERNAL with the shop URL.
     const EXTERNAL = { teamfinder: "https://www.diveteamfinder.com/", packing: "https://www.divepacking.com/", gear: "https://www.etsy.com/shop/TechdiveCreations" };  // other websites, new tab
     const btn = ([m, l]) => EXTERNAL[m] ? `<a class="navbtn ext" href="${EXTERNAL[m]}" target="_blank" rel="noopener">${esc(l)} <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></a>` :

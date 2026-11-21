@@ -1,0 +1,44 @@
+/* Limitless Diving — Bonnie Castle survey map (survey-map.html). Builds on the Dive map styles in calendar.css. */
+.sm-test { margin: 0; padding: 10px 14px; border-radius: 10px; background: var(--ip-bg); color: var(--ip); font-size: 14px; }
+.sm-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 8px 12px; font-size: 14px; }
+.sm-tools label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; min-height: 32px; }
+.sm-tools .btn { margin-left: auto; }
+.sm-map { height: min(78vh, 720px); background: #eef6f8; }
+.sm-map .leaflet-popup-content { font-size: 14px; line-height: 1.45; }
+.sm-stake { background: #8b3a1f; }
+.sm-mooring { background: #b9c3c7; border: 1px solid #7d8a90; }
+.sm-arrow svg { display: block; width: 100%; height: 100%; }
+.sm-arrow polygon { fill: #ffffff; stroke: #1c2b33; stroke-width: 1.4; }
+.sm-lm { display: grid; place-items: center; color: #1c2b33; }
+.sm-lm svg { width: 22px; height: 22px; stroke-width: 1.8; }
+.sm-lm img { width: 24px; height: 24px; object-fit: contain; }
+.sm-lm.bg { background: #aadaff; border-radius: 4px; }
+.sm-num { font: 600 11px/16px var(--font-mono); color: #1c2b33; text-align: center; text-shadow: 0 0 2px #eef6f8, 0 0 2px #eef6f8, 0 0 2px #eef6f8; white-space: nowrap; }
+.sm-north { width: 30px; padding: 4px 3px 2px; background: rgba(255, 255, 255, .85); border-radius: 6px; border: 1px solid #c9dce0; }
+.sm-north svg { display: block; width: 100%; fill: #1c2b33; }
+.sm-north text { font: 700 10px var(--font-body); }
+.sm-scale { display: grid; gap: 4px; padding: 4px 6px; background: rgba(255, 255, 255, .85); border-radius: 6px; font: 11px var(--font-mono); color: #1c2b33; }
+.sm-scale div { border: 1.5px solid #1c2b33; border-top: 0; height: 12px; line-height: 10px; padding-left: 3px; box-sizing: border-box; }
+.sm-key { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px 16px; font-size: 14px; }
+.sm-key li { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.sm-key .sm-sw { flex: none; width: 40px; height: 30px; display: grid; place-items: center; border-radius: 6px; background: #eef6f8; color: #1c2b33; }
+.sm-key .sm-sw > svg { width: 34px; }
+.sm-key .sm-stake { width: 8px; height: 8px; }
+.sm-key .sm-tie { width: 8px; height: 8px; border-radius: 50%; background: #1d4ed8; }
+.sm-key .sm-arrow { width: 12px; height: 12px; }
+.sm-key .sm-plat { width: 18px; height: 12px; background: #1c2b33; }
+.sm-key .sm-num { text-shadow: none; }
+.sm-key .sm-lm { width: 26px; height: 26px; }
+.sm-key .sm-lm svg { width: 20px; height: 20px; }
+.sm-key .sm-lm img { width: 22px; height: 22px; }
+@media (max-width: 560px) { .sm-tools .btn { margin-left: 0; } .sm-map { height: 70vh; } }
+/* Site maps index (site-maps.html) */
+.sm-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.sm-card { display: grid; grid-template-rows: auto 1fr; background: var(--surface); border: 1px solid var(--line); border-top: 4px solid var(--shallows); border-radius: 12px; overflow: hidden; color: var(--ink); text-decoration: none; }
+.sm-card:hover, .sm-card:focus-visible { border-color: var(--accent); }
+.sm-thumb { display: block; width: 100%; height: 220px; padding: 12px; background: #eef6f8; color: #1c2b33; box-sizing: border-box; }
+.sm-card-body { display: grid; gap: 4px; padding: 14px 16px 16px; }
+.sm-card-body b { font-family: var(--font-display); font-size: 22px; }
+.sm-card-body span { color: var(--muted); font-size: 14px; }
+.sm-card-body em { font-style: normal; font-size: 13px; font-weight: 700; color: var(--accent); }
+.sm-card-body .sm-card-by { font-size: 12px; }
