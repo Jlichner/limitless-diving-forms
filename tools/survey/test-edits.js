@@ -89,4 +89,19 @@ t("descriptions read plainly", () => {
   assert.match(d[1], /^Delete Car to Lisas Gift from line \d+ to the end$|^Delete Car to Lisa's Gift from line \d+ to the end$/);
 });
 
+t("a site with no survey yet starts from its own starting point", () => {
+  const hydra = require("../../lake-hydra-data.js");
+  const g = G.compute(hydra);
+  assert.deepStrictEqual(g.warnings, []);
+  assert.strictEqual(g.landmarks.length, 1);
+  assert.strictEqual(g.landmarks[0].landmark, "ENTRY");
+  const r = E.apply(hydra, [{ op: "add_run", run: "R1", name: "First line", start: "ENTRY",
+    entries: [{ type: "SurveyedLine", length_ft: 50, angle: 90 }, { type: "SaveLandmark", landmark: "BUS", depth: 30 }], landmarks: { BUS: "Bus" } }]);
+  assert.strictEqual(r.error, null);
+  const g2 = G.compute(r.data);
+  assert.strictEqual(g2.segments.length, 1);
+  assert.ok(Math.abs(g2.at.BUS[0] - 50) < 1e-9 && Math.abs(g2.at.BUS[1]) < 1e-9);
+  assert.ok(E.apply(base, [{ op: "add_run", run: "R2", name: "x", start: "ENTRY", entries: [{ type: "SurveyedLine", length_ft: 5, angle: 0 }] }]).error);
+});
+
 console.log(`${n} tests passed`);
