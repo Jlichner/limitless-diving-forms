@@ -20,7 +20,7 @@
     whoTitle: "Who we are",
     who: [
       ["Explorers with a thirst for adventure", "We dive because there is always something new beyond the next bend, the next wreck or the next drop-off. That curiosity is what we want to share with every student."],
-      ["Highly trained to exacting standards", "Our instructors and divemasters keep training, keep diving and hold themselves to the same exacting standards they teach. Every Limitless divemaster is DPV certified."]
+      ["Highly trained to exacting standards", "Our instructors and divemasters keep training, keep diving and hold themselves to the same exacting standards they teach. Every Limitless divemaster is a technical diver and holds DPV certifications to add to your adventures."]
     ],
 
     beliefsTitle: "What we believe",
