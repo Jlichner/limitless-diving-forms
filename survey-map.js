@@ -402,7 +402,7 @@ ${marks}
     const stakeIcon = fresh => L.divIcon({ className: "sm-stake" + (fresh ? " new" : ""), iconSize: [7, 7] });
     const arrowIcon = h => L.divIcon({ className: "sm-arrow", iconSize: [10, 10], html: `<svg viewBox="0 0 12 12" style="transform:rotate(${h}deg)"><polygon points="6,1 11,11 1,11"/></svg>` });
     layers.points = L.layerGroup([
-      ...geo.tieoffs.map(p => clickable(L.circleMarker(ll(p.x, p.y), { renderer: cv(p), pane: paneOf(p), radius: 3, stroke: false, fillColor: isNew(p) ? NEW : "#1d4ed8", fillOpacity: 1 }),
+      ...geo.tieoffs.map(p => clickable(L.circleMarker(ll(p.x, p.y), { renderer: cv(p), pane: paneOf(p), radius: 3, stroke: false, fillColor: isNew(p) ? NEW : "#e64980", fillOpacity: 1 }),
         Object.assign({ kind: "tieoff", layer: runLayer[p.run] || null }, p), () => pointPopup(Object.assign({ kind: "tieoff" }, p)))),
       ...geo.stakes.filter(p => p.kind === "stake").map(p => clickable(L.marker(ll(p.x, p.y), { pane: paneOf(p), icon: stakeIcon(isNew(p)), keyboard: false }),
         Object.assign({ kind: "stake", layer: runLayer[p.run] || null }, p), () => pointPopup(Object.assign({ kind: "stake" }, p)))),
