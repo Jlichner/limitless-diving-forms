@@ -1,0 +1,106 @@
+/* Limitless Diving — home (landing) page, drawn by home.js into index.html. */
+.layout > .shell.home-shell { max-width: 1180px; display: block; }
+.home { display: flex; flex-direction: column; gap: clamp(28px, 4vw, 44px); padding-bottom: 20px; }
+.home h3 { font-family: var(--font-display); font-weight: 700; color: var(--ink); }
+
+/* Hero: full-width photo, deep-water gradient, big headline. */
+.home-hero { position: relative; overflow: hidden; border-radius: 18px; min-height: clamp(440px, 62vh, 600px); display: flex; align-items: flex-end;
+  background: var(--deep); color: #e6f4f5; isolation: isolate; }
+.home-hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.home-hero::after { content: ""; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(100deg, rgba(4, 19, 27, .92) 0%, rgba(4, 19, 27, .72) 42%, rgba(4, 19, 27, .15) 75%, rgba(4, 19, 27, .05) 100%),
+    linear-gradient(0deg, rgba(4, 19, 27, .7) 0%, transparent 45%); }
+.home-hero-text { padding: clamp(22px, 5vw, 56px); max-width: 680px; }
+.home-eyebrow { display: inline-block; font-family: var(--font-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: #5fc4cf;
+  border: 1px solid rgba(95, 196, 207, .5); border-radius: 999px; padding: 4px 12px; }
+.home-hero h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(38px, 6.2vw, 66px); line-height: 1.02; margin: 14px 0 12px; color: #fff; letter-spacing: .01em; }
+.home-motto { margin: 0 0 14px; font-family: var(--font-display); font-style: italic; font-size: clamp(18px, 2.2vw, 22px); color: #5fc4cf; letter-spacing: .04em; }
+.home-motto small { display: block; font-family: var(--font-body); font-style: normal; font-size: 13px; letter-spacing: 0; color: #b9dde1; margin-top: 2px; }
+.home-lead { font-size: clamp(16px, 1.6vw, 19px); line-height: 1.55; color: #d6ecef; margin: 0 0 22px; }
+.home-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.home-actions .btn { text-decoration: none; font-weight: 700; padding: 11px 20px; font-size: 16px; border-radius: 999px; }
+.home-actions .btn.primary { background: #5fc4cf; border-color: #5fc4cf; color: #062027; }
+.home-actions .btn.primary:hover { background: #8fdbe2; border-color: #8fdbe2; }
+.home-actions .btn.ghost { background: transparent; color: #fff; border: 1.5px solid rgba(230, 244, 245, .7); }
+.home-actions .btn.ghost:hover { background: rgba(230, 244, 245, .12); border-color: #fff; }
+
+.home-bubbles { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.home-bubbles i { position: absolute; bottom: -20px; border-radius: 50%; border: 1.5px solid rgba(230, 244, 245, .6); background: radial-gradient(circle at 32% 30%, rgba(255, 255, 255, .7) 0 18%, rgba(230, 244, 245, .1) 22%);
+  animation: home-rise 9s linear infinite; }
+@keyframes home-rise { 0% { transform: translate(0, 0); opacity: 0; } 10% { opacity: 1; } 50% { transform: translate(8px, -320px); } 100% { transform: translate(-6px, -680px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .home-bubbles { display: none; } }
+
+/* Section headings. */
+.home-h2 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 4vw, 40px); color: var(--ink); margin: 0 0 6px; line-height: 1.1; }
+.home-h2::before { content: ""; display: block; width: 46px; height: 4px; border-radius: 2px; background: var(--accent); margin-bottom: 10px; }
+.home-sub { color: var(--muted); font-size: 17px; margin: 0 0 18px; max-width: 62ch; }
+
+/* Who we are: two photo cards. */
+.home-who .home-h2 { margin-bottom: 16px; }
+.home-who-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 18px; }
+.home-who-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+.home-who-card img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; }
+.home-who-card > div { padding: 18px 20px 20px; }
+.home-who-card h3 { font-size: 24px; margin: 0 0 6px; }
+.home-who-card p { margin: 0; line-height: 1.55; }
+
+/* What we believe: dark band with topo rings and a compass rose. */
+.home-beliefs { position: relative; overflow: hidden; border-radius: 18px; padding: clamp(24px, 4vw, 44px); color: #e6f4f5;
+  background:
+    repeating-radial-gradient(ellipse at 88% 12%, transparent 0 22px, rgba(108, 192, 234, .14) 22px 23px),
+    repeating-radial-gradient(ellipse at 6% 96%, transparent 0 18px, rgba(108, 192, 234, .1) 18px 19px),
+    linear-gradient(160deg, #0b4a78 0%, #08345a 55%, #04131b 100%); }
+.home-beliefs .home-h2 { color: #fff; }
+.home-beliefs .home-h2::before { background: #5fc4cf; }
+.home-beliefs .home-sub { color: #b9dde1; }
+.home-belief-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; }
+.home-belief { background: rgba(4, 19, 27, .45); border: 1px solid rgba(108, 192, 234, .28); border-radius: 14px; padding: 18px; backdrop-filter: blur(2px); }
+.home-belief h3 { color: #fff; font-size: 21px; line-height: 1.15; margin: 12px 0 6px; }
+.home-belief p { margin: 0; color: #cfe6ea; line-height: 1.5; }
+.home-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #5fc4cf; color: #062027; }
+.home-icon svg { width: 26px; height: 26px; }
+.home-more { margin: 18px 0 0; color: #b9dde1; }
+.home-more a { color: #8fdbe2; font-weight: 700; }
+
+/* Progression: a descent line with depth markers. */
+.home-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; counter-reset: st; position: relative; }
+.home-steps::before { content: ""; position: absolute; left: 0; right: 0; top: 23px; height: 3px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--shallows), var(--accent), var(--head-3)); }
+.home-steps li { counter-increment: st; position: relative; padding: 62px 14px 0 0; }
+.home-steps li::before { content: counter(st); position: absolute; top: 0; left: 0; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 20px; background: var(--surface); color: var(--accent); border: 3px solid var(--accent); }
+.home-steps li:last-child::before { background: var(--accent); color: var(--accent-ink); }
+.home-steps b { display: block; font-family: var(--font-display); font-size: 21px; color: var(--ink); margin-bottom: 4px; }
+.home-steps span { color: var(--muted); line-height: 1.45; }
+@media (max-width: 760px) {
+  .home-steps { grid-template-columns: minmax(0, 1fr); }
+  .home-steps::before { left: 22px; right: auto; top: 0; bottom: 0; width: 3px; height: auto; background: linear-gradient(180deg, var(--shallows), var(--accent), var(--head-3)); }
+  .home-steps li { padding: 8px 0 18px 64px; min-height: 46px; }
+}
+
+/* What we do: link cards. */
+.home-do .home-h2 { margin-bottom: 16px; }
+.home-do-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 14px; }
+.home-do-card { display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--line);
+  border-top: 4px solid var(--accent); border-radius: 12px; padding: 18px; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+.home-do-card:hover, .home-do-card:focus-visible { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(11, 42, 58, .14); border-color: var(--accent); }
+.home-do-card h3 { font-size: 22px; margin: 0; }
+.home-do-card p { margin: 0; color: var(--muted); line-height: 1.5; flex: 1; }
+.home-do-card .go { color: var(--accent); font-weight: 700; margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { .home-do-card { transition: none; } .home-do-card:hover { transform: none; } }
+
+.home-strip img { aspect-ratio: 4 / 3; }
+
+/* Closing call to action. */
+.home-cta { text-align: center; border-radius: 18px; padding: clamp(28px, 5vw, 52px) 20px; color: #e6f4f5;
+  background: repeating-radial-gradient(circle at 50% 120%, transparent 0 26px, rgba(108, 192, 234, .13) 26px 27px), linear-gradient(180deg, #0f6a9e, #08345a); }
+.home-cta h2 { font-family: var(--font-display); font-size: clamp(30px, 4.5vw, 44px); margin: 0 0 8px; color: #fff; }
+.home-cta > p { margin: 0 auto 20px; max-width: 54ch; color: #d6ecef; font-size: 17px; }
+.home-cta .home-actions { justify-content: center; }
+.home-motto.small { margin: 22px 0 0; font-size: 16px; opacity: .9; }
+.home-cta .home-motto.small { display: block; text-align: center; max-width: none; margin: 22px auto 0; }
+@media (max-width: 560px) {
+  .home-eyebrow { font-size: 10.5px; letter-spacing: .1em; }
+  .home-actions .btn { flex: 1 1 auto; text-align: center; }
+  .home-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+}
