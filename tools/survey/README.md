@@ -15,3 +15,9 @@ When this was set up (November 2026) the web map matched the original program ex
 ## Adding a site that hasn't been surveyed yet
 
 Copy `lake-hydra-data.js` and `lake-hydra-map.html`, change the id, title and data file, and load the new data file in `site-maps.html`. The data's `origin` names the starting point every line is measured from (drawn at 0, 0); divers then add lines from it in the map's editor, and an Admin publishes them.
+
+## Layers, ratings, photos and GPS (survey-layers.js, survey-ratings.js)
+
+- `test-ratings.js`: tests for rating lines (green circle stays on the main survey; blue, black and double black each move to a restricted layer). Run `node tools/survey/test-ratings.js`.
+- A map is placed on the earth by `data.georef` (see `SurveyGeometry.georef`): one landmark's latitude/longitude plus the magnetic declination, or two landmarks. It is published like any other change, so it's in the map's history.
+- Restricted lines live only in `site_map_layers` (readable by granted members). They must also be taken out of the site's public data file (e.g. `bonnie-castle-data.js`), which anyone can read.

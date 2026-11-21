@@ -146,7 +146,42 @@
     return shapes;
   }
 
-  const api = { compute, extras, radians };
+  // Placing a map on the earth (data.georef). The survey is in feet with headings from a compass (magnetic).
+  // georef = { landmark, lat, lon, declination }: that landmark is at lat/lon, and magnetic north is
+  // <declination> degrees east of true north (west is negative). With a second known point (landmark2, lat2,
+  // lon2) the turn and scale are worked out from the two points instead, which also takes up any small error.
+  // at is the landmark positions from compute(). Returns null until the landmark and coordinates are set.
+  function georef(gr, at) {
+    if (!gr || gr.lat === "" || gr.lon === "" || !isFinite(Number(gr.lat)) || !isFinite(Number(gr.lon))) return null;
+    const p = at && at[gr.landmark];
+    if (!p) return null;
+    const R = 6378137, FT = 0.3048, rad = PI / 180, lat0 = Number(gr.lat), lon0 = Number(gr.lon), cos0 = Math.cos(lat0 * rad);
+    const enu = (lat, lon) => [(lon - lon0) * rad * R * cos0, (lat - lat0) * rad * R];
+    // ENU metres = k × (feet from the landmark), with k a complex number (turn and scale).
+    let kr = null, ki = null, twoPoint = false;
+    const p2 = gr.landmark2 && at[gr.landmark2];
+    if (p2 && gr.lat2 !== "" && gr.lon2 !== "" && isFinite(Number(gr.lat2)) && isFinite(Number(gr.lon2))) {
+      const vx = p2[0] - p[0], vy = p2[1] - p[1], [wx, wy] = enu(Number(gr.lat2), Number(gr.lon2)), d = vx * vx + vy * vy;
+      if (d > 100) { kr = (wx * vx + wy * vy) / d; ki = (wy * vx - wx * vy) / d; twoPoint = true; }
+    }
+    if (kr === null) { const t = -(Number(gr.declination) || 0) * rad; kr = FT * Math.cos(t); ki = FT * Math.sin(t); }
+    const k2 = kr * kr + ki * ki;
+    return {
+      twoPoint,
+      scale: Math.sqrt(k2) / FT,                          // 1 = drawn as measured
+      turn: -Math.atan2(ki, kr) / rad,                    // degrees the survey is turned clockwise
+      toLatLng(x, y) {
+        const vx = x - p[0], vy = y - p[1], e = kr * vx - ki * vy, n = ki * vx + kr * vy;
+        return [lat0 + n / R / rad, lon0 + e / (R * cos0) / rad];
+      },
+      toXY(lat, lon) {
+        const [e, n] = enu(lat, lon);
+        return [p[0] + (e * kr + n * ki) / k2, p[1] + (n * kr - e * ki) / k2];
+      },
+    };
+  }
+
+  const api = { compute, extras, radians, georef };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveyGeometry = api;
 })(typeof window !== "undefined" ? window : globalThis);
