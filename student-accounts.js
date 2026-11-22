@@ -351,6 +351,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       <h2 class="sec">Certifications</h2>
       ${certs.length ? `<ul class="dir-certs">${certs.map(c => `<li>${esc(certText(c))}</li>`).join("")}</ul>` : `<p class="hint">None listed yet.</p>`}
       ${techBlock(acc)}
+      ${toolsBlock(acc)}
       ${logbookBlock(acc)}
       ${siteAdminBlock(acc)}
       <h2 class="sec">Course records</h2>
@@ -371,6 +372,21 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         ${C().can("instructor") ? `<div class="row-actions"><button class="btn${on ? "" : " primary"}" data-sa="tech" data-acc="${esc(acc.id)}" data-on="${on ? "0" : "1"}" aria-pressed="${on}"${v.busy ? " disabled" : ""}>${on ? "Turn off access" : "Turn on access"}</button></div>` : ""}`;
     }
     return `<h2 class="sec">Elements of tech diving</h2>${body}`;
+  }
+  // Tools (nitrox.html, diving-physics.html): on for every account unless an Instructor or Admin switches one off.
+  const TOOLS = [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]];
+  function toolsBlock(acc) {
+    const { esc } = L();
+    const staff = ["divemaster", "instructor", "admin"].includes(acc.role || "student");
+    let body;
+    if (typeof acc.nitrox_access !== "boolean") body = `<p class="hint">Run the latest <code>supabase/schema.sql</code> to switch these on or off for students.</p>`;
+    else if (staff) body = `<p class="hint">${esc(roleName(acc.role))}s always have the Nitrox calculator and Diving physics.</p>`;
+    else body = TOOLS.map(([t, name]) => {
+      const on = acc[t + "_access"];
+      return `<div class="tool-switch"><p class="hint tech-state"><span class="sa-badge${on ? "" : " wait"}">${on ? "On" : "Off"}</span> <b>${esc(name)}</b>: ${on ? "they can open it." : "hidden from them."}</p>
+        ${C().can("instructor") ? `<div class="row-actions"><button class="btn small${on ? "" : " primary"}" data-sa="tool" data-tool="${t}" data-acc="${esc(acc.id)}" data-on="${on ? "0" : "1"}" aria-pressed="${on}" aria-label="${on ? "Turn off" : "Turn on"} ${esc(name)}"${v.busy ? " disabled" : ""}>${on ? "Turn off" : "Turn on"}</button></div>` : ""}</div>`;
+    }).join("");
+    return `<h2 class="sec">Tools</h2>${body}`;
   }
   // Dive log book (logbook.html): on automatically for anyone registered for a class and for staff.
   // Instructors and Admins can also switch it on by hand for one person.
@@ -582,6 +598,18 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         (v.members || []).concat(v.accounts || []).forEach(a => { if (a.id === acc.id) a.tech_access = allow; });
         setNote(""); rerender();
         L().toast(allow ? "Elements of tech diving is on for " + (acc.full_name || "them") : "Elements of tech diving is off for " + (acc.full_name || "them"));
+        break;
+      }
+      case "tool": {
+        if (!acc) break;
+        const tool = b.dataset.tool, allow = b.dataset.on === "1", name = (TOOLS.find(x => x[0] === tool) || [, "Tool"])[1];
+        v.busy = true; rerender();
+        const { error } = await C().client.rpc("set_tool_access", { member: acc.id, tool, allow });
+        v.busy = false;
+        if (error) { rerender(); L().toast("Not changed: " + C().explain(error)); break; }
+        (v.members || []).concat(v.accounts || [], [acc]).forEach(a => { if (a.id === acc.id) a[tool + "_access"] = allow; });
+        setNote(""); rerender();
+        L().toast(name + (allow ? " is on for " : " is off for ") + (acc.full_name || "them"));
         break;
       }
       case "logbook": {

@@ -400,11 +400,14 @@
     const nav = document.getElementById("nav-modes"); if (!nav) return;
     // The left navigation column. Student portal (a link to account.html) sits on top; the rest is grouped.
     // Staff sign in with the Admin Log in button in the header (mode "staff", drawn by student-accounts.js).
+    // Tools: an Instructor or Admin can switch Nitrox or Physics off for one person (LDCloud.toolAccess).
+    const LC = window.LDCloud || {}, tools = [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]]
+      .filter(([m]) => !(LC.toolAccess && LC.toolAccess[m] === false)).concat(LC.techAccess ? [["tech", "Elements of tech diving"]] : []);
     const groups = [
       [null, [["home", "Home"], ["account", "Student portal"]]],
       ["About", [["values", "Core values"]]],
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"], ["coaching", "Coaching sessions"], ["hydra", "Lake Hydra tours"]]],
-      ["Tools", [["nitrox", "Nitrox calculator"], ["physics", "Diving physics"]].concat(window.LDCloud && window.LDCloud.techAccess ? [["tech", "Elements of tech diving"]] : [])],
+      tools.length && ["Tools", tools],
       ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"], ["sitemaps", "Site maps"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"]]],
       allowed("divemaster") && ["Records", [["students", "Student accounts"]].concat(window.LDCatalogPage ? [["catalog", "Courses"]] : [])],
