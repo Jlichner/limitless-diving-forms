@@ -44,9 +44,9 @@
 
     doTitle: "What we do",
     do: [
-      ["available-classes.html", "Classes", "NAUI and TDI training, from Open Water through technical diving.", "See available classes"],
-      ["classes.html", "Class calendar", "Upcoming classes, events, explorations and tours.", "Open the calendar"],
+      ["available-classes.html", "Training", "NAUI and TDI training, from Open Water through technical diving.", "See available classes"],
       ["offering.html?id=coaching", "Coaching sessions", "One on one or small group time with an instructor to hone buoyancy, trim and propulsion, or any skill you choose.", "Schedule a session"],
+      ["classes.html", "Exploration", "Team dives to wrecks, caves and lesser-known sites for trained divers, engaging the unknown with care and doing the least possible harm.", "See upcoming explorations"],
       ["offering.html?id=hydra", "Lake Hydra tours", "Day-long tours of Lake Hydra with a divemaster. Bring your scooter and make it a high-speed adventure.", "Plan a tour"]
     ],
 
