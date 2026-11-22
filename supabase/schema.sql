@@ -1348,6 +1348,28 @@ end $$;
 revoke all on function public.publish_site_map(text, jsonb, integer, text, uuid) from public, anon;
 grant execute on function public.publish_site_map(text, jsonb, integer, text, uuid) to authenticated;
 
+-- Telegram alert to Jamie when the survey team sends a suggestion (notify-signup Edge Function, { mapEdit: id }),
+-- added 2026-11-22. Answers once, only for the caller's own pending suggestion from the last 15 minutes.
+alter table public.site_map_edits add column if not exists notified_at timestamptz;
+create or replace function public.claim_site_map_edit_notice(p_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare r public.site_map_edits%rowtype;
+begin
+  update public.site_map_edits e set notified_at = now()
+    where e.id = p_id and e.author = (select auth.uid()) and e.notified_at is null and e.status = 'pending'
+      and e.created_at > now() - interval '15 minutes'
+    returning e.* into r;
+  if not found then return null; end if;
+  return jsonb_build_object('kind', 'mapedit', 'site_id', r.site_id, 'notes', r.summary, 'changes', jsonb_array_length(r.changes),
+    'title', coalesce((select m.data ->> 'title' from public.site_maps m where m.id = r.site_id), r.site_id),
+    'name', coalesce(nullif(r.author_name, ''), (select nullif(p.full_name, '') from public.student_profiles p where p.id = r.author),
+                     (select u.email::text from auth.users u where u.id = r.author), 'A survey team member'));
+end $$;
+revoke all on function public.claim_site_map_edit_notice(uuid) from public, anon;
+grant execute on function public.claim_site_map_edit_notice(uuid) to authenticated;
+
 -- An Admin declines a suggestion, with an optional note the member sees.
 create or replace function public.decline_site_map_edit(edit_id uuid, note text default '')
 returns void
