@@ -51,7 +51,7 @@
     ],
 
     ctaTitle: "Ready to go further?",
-    cta: "Tell us where you want your diving to take you, and we'll build the training to get you there."
+    cta: "Tell us where you want your diving to take you, and we'll build the training program to get you there."
   };
   // ===================== END OF EDITABLE TEXT =====================
 
