@@ -83,6 +83,24 @@
   const published = [];
   let picker = null, layers = {}, markerFor = {}, ring = null, firstDraw = true, canvases = {}, images = {}, sat = null, geoKey = "";
   const SAT_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  // Free public maps that can be laid over the satellite pictures once the map is placed on the earth. Both are
+  // ArcGIS map services, asked for one 256-pixel picture per map tile. Off until someone turns them on.
+  const WEB = [
+    { id: "noaa-chart", name: "NOAA nautical chart", url: "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer",
+      hint: "Depths, contours, buoys and shoals from NOAA's electronic charts. Not for navigation.", attribution: "Chart: NOAA Office of Coast Survey", opacity: 0.8, z: 3 },
+    { id: "nys-photos", name: "NY State aerial photos", url: "https://orthos.its.ny.gov/arcgis/rest/services/wms/Latest/MapServer",
+      hint: "The latest New York State aerial photos: sharper than the satellite, and in clear years they show the shallows.", attribution: "Aerial photos: NYS ITS Geospatial Services", opacity: 1, z: 2 },
+  ];
+  S.WEB_LAYERS = WEB.map(w => ({ id: w.id, name: w.name, hint: w.hint }));
+  WEB.forEach(w => { if (!S.view[w.id]) S.view[w.id] = { visible: false, opacity: w.opacity }; });
+  let web = {};
+  const ArcTiles = L.TileLayer.extend({
+    getTileUrl(c) {
+      const ts = this.getTileSize(), crs = L.CRS.EPSG3857;
+      const a = crs.project(this._map.unproject(c.scaleBy(ts), c.z)), b = crs.project(this._map.unproject(c.add([1, 1]).scaleBy(ts), c.z));
+      return `${this._url}/export?bbox=${a.x},${b.y},${b.x},${a.y}&bboxSR=3857&imageSR=3857&size=${ts.x},${ts.y}&format=png32&transparent=true&dpi=96&f=image`;
+    },
+  });
 
   const lineFeet = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
   function ftIn(e) {
@@ -239,7 +257,7 @@
     S.map.on("click", () => S.map.scrollWheelZoom.enable());
     canvases = {}; images = {}; layers = {}; markerFor = {}; ring = null;
     S.map.createPane("sm-p-base").style.zIndex = 410;
-    sat = null;
+    sat = null; web = {};
     if (GEO) {
       sat = L.tileLayer(SAT_URL, { maxNativeZoom: 19, maxZoom: 23, attribution: "Satellite: Esri, Maxar, Earthstar Geographics" }).addTo(S.map);
       L.control.scale({ position: "bottomleft", maxWidth: 130 }).addTo(S.map);
@@ -295,6 +313,12 @@
     const base = S.map.getPane("sm-p-base");
     if (base) { base.style.opacity = v("survey").opacity; base.style.display = v("survey").visible ? "" : "none"; }
     if (sat) { sat.setOpacity(v("satellite").visible ? v("satellite").opacity : 0); }
+    for (const w of WEB) {
+      const on = GEO && v(w.id).visible;
+      if (on && !web[w.id]) web[w.id] = new ArcTiles(w.url, { maxNativeZoom: 20, maxZoom: 23, zIndex: w.z, attribution: w.attribution }).addTo(S.map);
+      if (!on && web[w.id]) { S.map.removeLayer(web[w.id]); delete web[w.id]; }
+      if (web[w.id]) web[w.id].setOpacity(v(w.id).opacity);
+    }
     for (const l of S.layers) {
       const pane = S.map.getPane("sm-p-" + l.id);
       if (pane) { pane.style.opacity = v(l.id).opacity; pane.style.display = v(l.id).visible ? "" : "none"; }
