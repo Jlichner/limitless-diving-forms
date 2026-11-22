@@ -36,6 +36,20 @@ ok("merge keeps website-only things", m.data.title === "T" && m.data.credit === 
 ok("merge takes the sheet's lines", JSON.stringify(m.data.runs.MainLine) === JSON.stringify(r.data.runs.MainLine) && m.data.plan === r.data.plan);
 ok("merge warns when the GPS station is gone", SS.mergeInto({ georef: { landmark: "GONE" } }, r.data).notes.length === 1);
 ok("change summary", /^\d+ ft of line \(was 0\); new: MAIN LINE/.test(SS.describeChange({}, r.data)), SS.describeChange({}, r.data));
+// A patch placed by GPS (no line joining it to the rest yet).
+const gpsRows = rows.concat([[], ["MIDDLE EARTH", "GPS N44.34465 W75.91859"], ["Far Log", "Rock", 70, 90, 270, 48], ["Rock", "Far Pennant", 70, 90, 270, 42]]);
+const gr = SS.toSurvey(gpsRows, [], { id: "t" });
+ok("GPS patch reads", !gr.errors.length && gr.data.landmarks.FAR_LOG === "Far Log", gr.errors);
+const site = Object.assign({ georef: { landmark: "LOG", lat: 44.3421, lon: -75.9165, declination: -13 } }, {});
+const gm = SS.mergeInto(site, gr.data);
+ok("GPS patch placed", !gm.errors.length, gm.errors);
+const ga = G.compute(gm.data), gg = G.georef(gm.data.georef, ga.at), [la, lo] = gg.toLatLng(...ga.at.FAR_LOG);
+ok("GPS patch lands on its GPS", Math.abs(la - 44.34465) < 1e-7 && Math.abs(lo + 75.91859) < 1e-7, [la, lo]);
+ok("GPS patch needs the map placed", SS.mergeInto({}, gr.data).errors.length === 1);
+const gb = SS.fromSurvey(gm.data), gr2 = SS.toSurvey(gb.rows, gb.landmarkRows, { id: "t" });
+ok("GPS patch round trip", gb.rows.some(r => r[0] === "MIDDLE EARTH" && /^GPS 44\.34465, -75\.91859$/.test(r[1])) && JSON.stringify(SS.mergeInto(site, gr2.data).data.runs) === JSON.stringify(gm.data.runs));
+const joined = SS.toSurvey(rows.concat([[], ["LINK"], ["Pennant", "Far Log", "", "", 45, 300, "", "Jump"], [], ["MIDDLE EARTH", "GPS N44.34465 W75.91859"], ["Far Log", "Rock", 70, 90, 270, 48]]), []);
+ok("phantom Jump joins it, GPS then unused", !joined.errors.length && joined.warnings.some(w => /isn't used/.test(w)) && !Object.keys(joined.data.runs).some(k => /^Gps/.test(k)), joined);
 // The real Bonnie Castle survey, when it's on this computer (it's private, so not in the repository).
 let full = null; try { full = require("./local/bonnie-castle-data.js"); } catch (e) { }
 if (full && full.runs && Object.keys(full.runs).length) {

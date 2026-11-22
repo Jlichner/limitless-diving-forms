@@ -141,6 +141,7 @@ function publishToWebsite() {
       " Publishing replaces the website's lines with this sheet's, so changes made on the website since then would be lost." +
       " To keep them, choose No, make a copy of this tab, use Get from website, and copy your new rows in.\n\nPublish anyway?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
     const m = SurveySheet.mergeInto(cur.data, r.data);
+    if (m.errors.length) { ui.alert("Not published", m.errors.join("\n"), ui.ButtonSet.OK); return; }
     const said = ui.prompt("Publish to website", "What changed? (shown in the map's history)\n\n" + (m.notes.length ? m.notes.join("\n") + "\n\n" : ""), ui.ButtonSet.OK_CANCEL);
     if (said.getSelectedButton() !== ui.Button.OK) return;
     const summary = (said.getResponseText().trim() ? said.getResponseText().trim() + " — " : "") + "from the Google Sheet: " + SurveySheet.describeChange(cur.data || {}, m.data);

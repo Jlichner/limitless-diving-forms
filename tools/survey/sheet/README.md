@@ -23,5 +23,5 @@ The layout of the Survey tab is described at the top of `survey-sheet.js`, and i
 
 ## For developers
 
-`LimitlessDiving.gs` is built from `survey-sheet.js` (the same converter the website uses) and `menu.gs`:
+`LimitlessDiving.gs` is built from `survey-geometry.js` and `survey-sheet.js` (the same code the website uses) and `menu.gs`:
 run `node tools/survey/sheet/build.js` after changing either. `node tools/survey/test-sheet.js` checks the converter.

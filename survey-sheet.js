@@ -15,6 +15,9 @@
      plain tie-off can be named where a later line starts from it ("Rock / **").
    - A row with To but no heading or distance is something at the same spot as the row before (a landmark at a
      tie-off, say), or, as a block's first row, something at the station it starts from.
+   - A patch of lines not joined to the rest yet (no line to it): on its first line's title row put "GPS" and the
+     start station's coordinates in column B (e.g. "GPS N44.34465 W75.91859"). It's placed from the GPS, through the
+     map's own GPS placement, until a line (or a Jump, for a phantom connection) joins it up.
    - Each block after the first starts From a named station already on the map. A block that ends at a named station
      already on the map is stretched and turned a little to meet it (as divers' compass and tape never quite close).
    - Heading and distance are as the divers measured them (magnetic). Backcourse, when given, is checked against the
@@ -39,6 +42,8 @@
   const plainOf = name => PLAIN[str(name).toLowerCase()] || null;
   const codeOf = name => str(name).toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "POINT";
   const isHeader = row => /^from/i.test(str(row[0])) && /^to\b/i.test(str(row[1]));
+  const geometry = () => root.SurveyGeometry || (typeof require === "function" ? require("./survey-geometry.js") : null);
+  const GPS_TITLE = /^gps\b[\s:]*(.*)$/i;
   const round = (n, d) => Math.round(n * Math.pow(10, d)) / Math.pow(10, d);
 
   function parseDrawing(text, rowNo, errors) {
@@ -91,8 +96,16 @@
       if (r.slice(0, 6).every(v => str(v) === "") && (str(r[6]) === "" || num(r[6]) === 0) && r.slice(7).every(v => str(v) === "")) { cur = null; return; }
       if (!blocks.some(b => b.legs.length) && !originRow && !str(r[0]) && str(r[1]) && str(r[4]) === "" && str(r[5]) === "") { originRow = { r, rowNo }; return; }
       if (!cur) { cur = { title: "", loopWith: "", legs: [], firstRow: rowNo }; blocks.push(cur); }
-      const isTitle = str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^loop with /i.test(str(r[1])));
-      if (isTitle && !cur.legs.length && !cur.title) { cur.title = str(r[0]); cur.loopWith = str(r[1]).replace(/^loop with /i, "").trim(); return; }
+      const isTitle = str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^loop with /i.test(str(r[1])) || GPS_TITLE.test(str(r[1])));
+      if (isTitle && !cur.legs.length && !cur.title) {
+        cur.title = str(r[0]);
+        const g = str(r[1]).match(GPS_TITLE);
+        if (g) {
+          const ll = geometry() && geometry().parseLatLon(g[1]);
+          if (ll) cur.gps = { lat: ll[0], lon: ll[1] }; else errors.push(`Row ${rowNo}: "${str(r[1])}" isn't a GPS position I can read (try GPS N44.34465 W75.91859).`);
+        } else cur.loopWith = str(r[1]).replace(/^loop with /i, "").trim();
+        return;
+      }
       cur.legs.push({ row: r, rowNo });
     });
     if (originRow) {
@@ -113,6 +126,15 @@
       if (!startName) { errors.push(`Row ${legs[0].rowNo}: say which station "${name}" starts From.`); return; }
       let start = known[startName.toLowerCase()];
       if (!start && !data.origin && bi === 0) { start = nameStation(startName, legs[0].rowNo); data.origin = start; }
+      if (b.gps && start) warnings.push(`Row ${b.firstRow}: "${startName}" is already joined to the map, so the GPS on "${name}" isn't used. Take it off the title row.`);
+      if (b.gps && !start && data.origin) {
+        // Placed from the GPS: a hidden jump from the starting point, worked out when publishing (placeGps).
+        start = nameStation(startName, legs[0].rowNo);
+        const gid = "Gps" + id;
+        data.runs[gid] = [{ type: "Jump", gps_lat: b.gps.lat, gps_lon: b.gps.lon }, { type: "SaveLandmark", landmark: start }];
+        data.runNames[gid] = `${startName} (placed by GPS)`;
+        data.plan.push({ mode: "draw", start: data.origin, run: gid });
+      }
       if (!start) { errors.push(`Row ${legs[0].rowNo}: "${name}" starts From "${startName}", which isn't a named station earlier in the sheet.`); return; }
       const entries = [], knownAtStart = new Set(Object.values(known));
       legs.forEach(({ row: r, rowNo }, li) => {
@@ -195,11 +217,18 @@
     const origin = data.origin || "BAR";
     const o = blank(); o[1] = name(origin); if (data.originPoint && data.originPoint.depth != null) o[2] = data.originPoint.depth; rows.push(o);
     const steps = [];
-    for (const p of data.plan || []) { steps.push({ run: p.run, start: p.start, end: p.mode === "fit" ? p.end : null }); if (p.run2) steps.push({ run: p.run2, start: p.start, loopWith: p.run }); }
+    const gpsAt = {};
+    for (const p of data.plan || []) {
+      const e = ((data.runs || {})[p.run]) || [];
+      if (e.length === 2 && e[0].gps_lat != null && e[1].landmark) { gpsAt[e[1].landmark] = e[0]; continue; }
+      steps.push({ run: p.run, start: p.start, end: p.mode === "fit" ? p.end : null }); if (p.run2) steps.push({ run: p.run2, start: p.start, loopWith: p.run });
+    }
     for (const s of steps) {
       const entries = (data.runs || {})[s.run] || [];
       rows.push(blank());
-      const t = blank(); t[0] = (data.runNames || {})[s.run] || s.run; if (s.loopWith) t[1] = "loop with " + ((data.runNames || {})[s.loopWith] || s.loopWith); rows.push(t);
+      const t = blank(); t[0] = (data.runNames || {})[s.run] || s.run; if (s.loopWith) t[1] = "loop with " + ((data.runNames || {})[s.loopWith] || s.loopWith);
+      const g = gpsAt[s.start]; if (g && !s.loopWith) { t[1] = `GPS ${g.gps_lat}, ${g.gps_lon}`; delete gpsAt[s.start]; }
+      rows.push(t);
       let from = name(s.start), pending = null;
       const flush = () => {
         if (!pending) return;
@@ -263,16 +292,35 @@
     out.unusedRuns.forEach(id => { out.runs[id] = current.runs[id]; if (current.runNames && current.runNames[id]) out.runNames[id] = current.runNames[id]; });
     if (!out.aliases) out.aliases = {};
     ["id", "title", "place", "subtitle", "credit", "version", "surveyors"].forEach(k => { if (out[k] === undefined && s[k] !== undefined) out[k] = s[k]; });
+    const gpsProblems = placeGps(out);
     const gr = out.georef;
     if (gr && gr.landmark && !out.landmarks[gr.landmark]) notes.push(`The map is placed on the satellite from "${gr.landmark}", which isn't in the sheet any more. Place it again on the website (Map setup).`);
     if (gr && gr.landmark2 && !out.landmarks[gr.landmark2]) notes.push(`The map's second GPS point "${gr.landmark2}" isn't in the sheet any more.`);
-    return { data: out, notes };
+    return { data: out, notes, errors: gpsProblems };
+  }
+
+  // Works out the hidden jumps of patches placed by GPS, from the map's own GPS placement (georef). Changes data;
+  // returns problems as text.
+  function placeGps(data) {
+    const G = geometry(), problems = [];
+    const ids = Object.keys(data.runs || {}).filter(k => data.runs[k][0] && data.runs[k][0].gps_lat != null);
+    if (!ids.length) return problems;
+    if (!data.georef || !G) { problems.push("Lines placed by GPS need the map placed on the satellite first (on the website: Map setup → Place on the earth)."); return problems; }
+    // Positions without the GPS patches (they're drawn after the rest, so this doesn't change).
+    const at = G.compute(data).at, gr = G.georef(data.georef, at), o = at[data.origin || "BAR"];
+    if (!gr || !o) { problems.push("The map's GPS placement isn't complete, so lines placed by GPS can't be drawn."); return problems; }
+    ids.forEach(id => {
+      const j = data.runs[id][0], [x, y] = gr.toXY(j.gps_lat, j.gps_lon), dx = x - o[0], dy = y - o[1];
+      const L = Math.hypot(dx, dy), ang = ((90 - Math.atan2(dy, dx) * 180 / Math.PI) % 360 + 360) % 360;
+      j.length_ft = Math.floor(L); j.length_in = round((L - Math.floor(L)) * 12, 2); j.angle = round(ang, 4);
+    });
+    return problems;
   }
 
   // What changed, in a line, for the map's history.
   function describeChange(before, after) {
     const ft = d => { let t = 0; Object.keys((d && d.runs) || {}).forEach(k => (((d.unusedRuns || []).includes(k)) ? [] : d.runs[k]).forEach(e => { if (/Line$/.test(e.type)) t += (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12; })); return Math.round(t); };
-    const names = d => new Set(((d && d.plan) || []).flatMap(p => [p.run, p.run2]).filter(Boolean));
+    const names = d => new Set(((d && d.plan) || []).flatMap(p => [p.run, p.run2]).filter(r => r && !(((d.runs || {})[r] || [])[0] || {}).gps_lat));
     const b = names(before), a = names(after), added = [...a].filter(x => !b.has(x)), gone = [...b].filter(x => !a.has(x));
     const parts = [`${ft(after)} ft of line (was ${ft(before)})`];
     if (added.length) parts.push("new: " + added.map(x => after.runNames[x] || x).join(", "));
@@ -280,7 +328,7 @@
     return parts.join("; ");
   }
 
-  const api = { toSurvey, fromSurvey, mergeInto, describeChange, HEADER, codeOf };
+  const api = { toSurvey, fromSurvey, mergeInto, placeGps, describeChange, HEADER, codeOf };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveySheet = api;
 })(typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : this);
