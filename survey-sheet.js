@@ -4,7 +4,8 @@
 
    The Survey tab, one row per leg of line, in blocks: a blank row starts a new line.
      A From (A)   B To (B)   C Depth @ B   D Backcourse (heading B->A)   E Heading (A->B)   F Distance (ft)   G Distance (m)
-     H Kind: blank for a surveyed line, or Unsurveyed, Jump (no line), Boat traffic, Arrow
+     H Kind: Surveyed (solid line; blank means the same), Unsurveyed (dashed line) or Jump (not drawn). Older maps can
+       also have Boat traffic and Arrow rows, which are still read but aren't offered in the dropdown.
      I Note    J Drawing (rarely used: icon, label text and side, always draw..., as "name = value; name = value")
      K Level: Green circle, Blue square, Black diamond or Double black diamond (who can see the line). On a title row
        it's the whole line's level; on a row, the level from that leg on. Blank: same as the row above (green to start).
@@ -32,7 +33,7 @@
 
   const PLAIN = { rock: "TieOff", "tie-off": "TieOff", tieoff: "TieOff", "tie off": "TieOff", stake: "Stake" };
   const KINDS = { "": "SurveyedLine", surveyed: "SurveyedLine", unsurveyed: "UnsurveyedLine", jump: "Jump", "boat traffic": "MarinaLine", arrow: "Arrow" };
-  const KIND_NAME = { SurveyedLine: "", UnsurveyedLine: "Unsurveyed", Jump: "Jump", MarinaLine: "Boat traffic", Arrow: "Arrow" };
+  const KIND_NAME = { SurveyedLine: "Surveyed", UnsurveyedLine: "Unsurveyed", Jump: "Jump", MarinaLine: "Boat traffic", Arrow: "Arrow" };
   const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing", "Level"];
   const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond" };
   // Level words people type: "Black diamond", "black", "double", "double diamond", "◆◆"...
@@ -172,7 +173,7 @@
           }
         }
         const type = KINDS[kindName];
-        if (!type) { errors.push(`Row ${rowNo}: Kind "${str(r[7])}" isn't one of Unsurveyed, Jump, Boat traffic, Arrow (or blank for a surveyed line).`); return; }
+        if (!type) { errors.push(`Row ${rowNo}: Kind "${str(r[7])}" isn't Surveyed, Unsurveyed or Jump.`); return; }
         let hdg = num(r[4]); const bc = num(r[3]);
         let ft = num(r[5]); const m = num(r[6]);
         if (ft == null && has(m) && m !== 0) ft = round(m / 0.3048, 3);
