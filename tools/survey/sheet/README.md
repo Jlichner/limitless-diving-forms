@@ -3,10 +3,12 @@
 The sheet is the main place to enter survey data. The website's map editor is for one or two quick fixes.
 Each site map gets its own Google Sheet. The **Limitless Diving** menu in the sheet does three things:
 
-- **Get from website** fills the Survey tab (columns A to J) and the Landmarks tab from the published map.
+- **Get from website** fills the Survey tab (columns A to K) and the Landmarks tab from the published map and its
+  rated layers.
 - **Check the rows** lists any problems and each line's length.
 - **Publish to website** checks the rows, then publishes them as a new version of the map, with a note in the map's history.
   It warns you first if the map was changed on the website since this sheet last got it.
+  The Level column (K) sends blue square, black diamond and double black diamond lines to the map's rated layers.
   Things the sheet doesn't hold stay as they are on the website: title, credits, GPS placement and lines set aside as not drawn.
 
 The layout of the Survey tab is described at the top of `survey-sheet.js`, and in the sample sheet's "How to fill it in" tab.
@@ -23,5 +25,5 @@ The layout of the Survey tab is described at the top of `survey-sheet.js`, and i
 
 ## For developers
 
-`LimitlessDiving.gs` is built from `survey-geometry.js` and `survey-sheet.js` (the same code the website uses) and `menu.gs`:
+`LimitlessDiving.gs` is built from `survey-geometry.js`, `survey-edits.js`, `survey-ratings.js` and `survey-sheet.js` (the same code the website uses) and `menu.gs`:
 run `node tools/survey/sheet/build.js` after changing either. `node tools/survey/test-sheet.js` checks the converter.

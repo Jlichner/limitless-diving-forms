@@ -50,6 +50,27 @@ const gb = SS.fromSurvey(gm.data), gr2 = SS.toSurvey(gb.rows, gb.landmarkRows, {
 ok("GPS patch round trip", gb.rows.some(r => r[0] === "MIDDLE EARTH" && /^GPS 44\.34465, -75\.91859$/.test(r[1])) && JSON.stringify(SS.mergeInto(site, gr2.data).data.runs) === JSON.stringify(gm.data.runs));
 const joined = SS.toSurvey(rows.concat([[], ["LINK"], ["Pennant", "Far Log", "", "", 45, 300, "", "Jump"], [], ["MIDDLE EARTH", "GPS N44.34465 W75.91859"], ["Far Log", "Rock", 70, 90, 270, 48]]), []);
 ok("phantom Jump joins it, GPS then unused", !joined.errors.length && joined.warnings.some(w => /isn't used/.test(w)) && !Object.keys(joined.data.runs).some(k => /^Gps/.test(k)), joined);
+// Levels (column K): whole lines on the title row, or from a row on.
+const R = require("../../survey-ratings.js");
+const lvRows = [["", "Log", 70], [], ["MAIN"], ["Log", "Rock", 70, "", 270, 40], ["Rock", "Pennant", 70, "", 270, 40],
+  [], ["DEEP", "", "", "", "", "", "", "", "", "", "Black diamond"], ["Pennant", "Rock", 90, "", 180, 30], ["Rock", "Rock", 95, "", 180, 30],
+  [], ["MIXED"], ["Pennant", "Rock", 70, "", 0, 20], ["Rock", "Rock", 70, "", 0, 20, "", "", "", "", "blue"], ["Rock", "Rock", 70, "", 0, 20]];
+const lv = SS.toSurvey(lvRows, [], {});
+ok("level column reads", !lv.errors.length && lv.levels.length === 2 && lv.levels[0].level === "black" && lv.levels[1].level === "blue", lv);
+const sp = SS.splitLevels(lv.data, lv.levels, lv.stated);
+ok("levels split into layers", !sp.errors.length && sp.src.black.runs.Deep && !sp.src.green.runs.Deep && Object.keys(sp.src.blue.runs).length === 1 && sp.src.green.runs.Mixed, sp.errors);
+const g0 = G.compute(lv.data), g1 = G.compute(R.merge(R.ORDER.map(k => sp.src[k])));
+ok("lines stay where they were", g0.segments.length === g1.segments.length && !g1.warnings.length && Math.abs(g0.totalSurveyedFt - g1.totalSurveyedFt) < 1e-9, g1.warnings);
+const jl = SS.joinLevels(sp.src.green, { blue: sp.src.blue, black: sp.src.black });
+const back2 = SS.fromSurvey(jl.data, jl.runLevel);
+ok("Get writes the level on the title row", back2.rows.some(r => r[0] === "DEEP" && r[10] === "Black diamond"));
+const lv2 = SS.toSurvey(back2.rows, back2.landmarkRows, {}), sp2 = SS.splitLevels(lv2.data, lv2.levels, lv2.stated);
+ok("levels round trip", !sp2.errors.length && ["green", "blue", "black"].every(k => Object.keys(sp2.src[k].runs).length === Object.keys(sp.src[k].runs).length), sp2.errors);
+const under = lvRows.slice(0, 10).map(r => r.slice()); under[8] = ["Rock", "Deep end", 95, "", 180, 30];
+const uRows = under.concat([[], ["UNDER", "", "", "", "", "", "", "", "", "", "Green circle"], ["Deep end", "Rock", 99, "", 90, 10]]);
+const uv = SS.toSurvey(uRows, []), us = SS.splitLevels(uv.data, uv.levels, uv.stated);
+ok("a line said to be green under a black line goes black, with a warning", !uv.errors.length && us.src.black.runs.Under && us.warnings.length === 1, [uv.errors, us.warnings]);
+ok("bad level word", SS.toSurvey([["", "Log"], ["X"], ["Log", "Rock", 1, "", 0, 1, "", "", "", "", "purple"]], []).errors.length === 1);
 // The real Bonnie Castle survey, when it's on this computer (it's private, so not in the repository).
 let full = null; try { full = require("./local/bonnie-castle-data.js"); } catch (e) { }
 if (full && full.runs && Object.keys(full.runs).length) {

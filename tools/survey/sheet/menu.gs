@@ -1,6 +1,7 @@
 /* Limitless Diving menu for a site map's Google Sheet: Get from website, Check the rows, Publish to website.
    The sheet is where big changes are made; the website's editor is for one or two quick fixes.
-   How the rows are laid out: see survey-sheet.js (copied in above this part), or the sheet's "How to fill it in" tab.
+   How the rows are laid out: see survey-sheet.js (copied in above this part, with the website's survey-geometry.js,
+   survey-edits.js and survey-ratings.js), or the sheet's "How to fill it in" tab.
    The website side is sheet_get_site_map / sheet_publish_site_map in supabase/schema.sql, opened with a private
    sheet key (Limitless Diving → Set up). */
 const LD = {
@@ -71,7 +72,7 @@ function readRows_() {
   const sh = surveyTab_(false);
   if (!sh) throw new Error(`There's no "${SURVEY_TAB}" tab. Rename your survey tab to ${SURVEY_TAB}, or use Get from website.`);
   const n = sh.getLastRow();
-  const rows = n ? sh.getRange(1, 1, n, 10).getValues() : [];
+  const rows = n ? sh.getRange(1, 1, n, 11).getValues() : [];
   const lm = SpreadsheetApp.getActive().getSheetByName(LANDMARKS_TAB);
   const lmRows = lm && lm.getLastRow() ? lm.getRange(1, 1, lm.getLastRow(), 2).getValues() : [];
   return { rows, lmRows };
@@ -81,9 +82,13 @@ function checkRows() {
   const ui = SpreadsheetApp.getUi();
   try {
     const { rows, lmRows } = readRows_(), r = SurveySheet.toSurvey(rows, lmRows, {});
+    const sp = r.errors.length ? { errors: [], warnings: [], src: null } : SurveySheet.splitLevels(r.data, r.levels, r.stated);
+    r.errors = r.errors.concat(sp.errors); r.warnings = r.warnings.concat(sp.warnings);
+    const levelOfRun = id => sp.src ? ["double-black", "black", "blue"].find(k => sp.src[k].runs[id]) : null;
     const lines = r.data.plan.flatMap(p => [p.run, p.run2]).filter(Boolean).map(id => {
       const ft = r.data.runs[id].reduce((t, e) => t + (e.type === "SurveyedLine" ? (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12 : 0), 0);
-      return `${r.data.runNames[id]}: ${Math.round(ft * 10) / 10} ft`;
+      const lv = levelOfRun(id);
+      return `${r.data.runNames[id]}: ${Math.round(ft * 10) / 10} ft${lv ? " (" + SurveySheet.LEVEL_NAMES[lv].toLowerCase() + (sp.src.green.runs[id] ? " part way" : "") + ")" : ""}`;
     });
     ui.alert(r.errors.length ? "Fix these before publishing" : "The rows look right",
       list_(r.errors, "Problems") + list_(r.warnings, "Worth a look") + (lines.length ? "Surveyed line:\n" + lines.join("\n") : "No lines yet."), ui.ButtonSet.OK);
@@ -101,22 +106,25 @@ function getFromWebsite() {
     if (!cur.data) { ui.alert(`There's no map for ${s.site} on the website yet. Fill in the Survey tab and use Publish to website.`); return; }
     const sh = surveyTab_(true);
     if (sh.getLastRow() > 1 && ui.alert("Get from website",
-      `This replaces columns A to J of the ${SURVEY_TAB} tab with the website's map (version ${cur.version}${cur.updated_by ? ", published by " + cur.updated_by : ""}). ` +
+      `This replaces columns A to K of the ${SURVEY_TAB} tab with the website's map (version ${cur.version}${cur.updated_by ? ", published by " + cur.updated_by : ""}). ` +
       "Anything there you haven't published will be lost. Your columns from L on stay as they are. Go ahead?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
-    const out = SurveySheet.fromSurvey(cur.data);
+    const joined = SurveySheet.joinLevels(cur.data, cur.layers);
+    const out = SurveySheet.fromSurvey(joined.data, joined.runLevel);
     const old = sh.getLastRow();
-    if (old) sh.getRange(1, 1, old, 10).clearContent().setBackground(null).setFontWeight(null).setFontColor(null);
-    sh.getRange(1, 1, out.rows.length, 10).setValues(out.rows);
-    sh.getRange(1, 1, 1, 10).setBackground("#0B4F6C").setFontColor("#FFFFFF").setFontWeight("bold").setWrap(true);
+    if (old) sh.getRange(1, 1, old, 11).clearContent().setBackground(null).setFontWeight(null).setFontColor(null);
+    sh.getRange(1, 1, out.rows.length, 11).setValues(out.rows);
+    sh.getRange(1, 1, 1, 11).setBackground("#0B4F6C").setFontColor("#FFFFFF").setFontWeight("bold").setWrap(true);
     out.rows.forEach((r, i) => {
       if (i === 0) return;
       const title = r[0] && r.slice(2, 8).every(v => v === "") && (!r[1] || /^loop with /i.test(r[1]));
-      if (title) sh.getRange(i + 1, 1, 1, 10).setBackground("#DCEEF5").setFontWeight("bold").setFontColor("#0B4F6C");
+      if (title) sh.getRange(i + 1, 1, 1, 11).setBackground("#DCEEF5").setFontWeight("bold").setFontColor("#0B4F6C");
       else if (typeof r[5] === "number" && r[7] !== "Arrow") sh.getRange(i + 1, 7).setFormula(`=F${i + 1}*0.3048`).setNumberFormat("0.00");
     });
     sh.setFrozenRows(1);
     const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Unsurveyed", "Jump", "Boat traffic", "Arrow"], true).setAllowInvalid(false).build();
     sh.getRange(2, 8, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(kinds);
+    const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond"], true).setAllowInvalid(true).build();
+    sh.getRange(2, 11, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(lvl);
     let lm = SpreadsheetApp.getActive().getSheetByName(LANDMARKS_TAB) || SpreadsheetApp.getActive().insertSheet(LANDMARKS_TAB);
     lm.getRange(1, 1, Math.max(lm.getLastRow(), 1), 2).clearContent();
     lm.getRange(1, 1, out.landmarkRows.length, 2).setValues(out.landmarkRows);
@@ -135,6 +143,7 @@ function publishToWebsite() {
     if (r.warnings.length && ui.alert("Worth a look before publishing", list_(r.warnings, "Warnings") + "Publish anyway?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
     const cur = rpc_("sheet_get_site_map", { sheet_key: s.key, site: s.site });
     const mine = props_().getProperty("version");
+    const before = SurveySheet.joinLevels(cur.data || {}, cur.layers).data;
     if (cur.version && String(cur.version) !== mine && ui.alert("The map changed on the website",
       `The website has version ${cur.version}${cur.updated_by ? " (published by " + cur.updated_by + ")" : ""}` +
       (mine ? `, and this sheet was last in step with version ${mine}.` : ", and this sheet hasn't got it yet.") +
@@ -142,10 +151,14 @@ function publishToWebsite() {
       " To keep them, choose No, make a copy of this tab, use Get from website, and copy your new rows in.\n\nPublish anyway?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
     const m = SurveySheet.mergeInto(cur.data, r.data);
     if (m.errors.length) { ui.alert("Not published", m.errors.join("\n"), ui.ButtonSet.OK); return; }
+    const sp = SurveySheet.splitLevels(m.data, r.levels, r.stated);
+    if (sp.errors.length) { ui.alert("Not published: fix these first", list_(sp.errors, "Levels"), ui.ButtonSet.OK); return; }
+    if (sp.warnings.length && ui.alert("Levels", list_(sp.warnings, "Worth a look") + "Publish anyway?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
     const said = ui.prompt("Publish to website", "What changed? (shown in the map's history)\n\n" + (m.notes.length ? m.notes.join("\n") + "\n\n" : ""), ui.ButtonSet.OK_CANCEL);
     if (said.getSelectedButton() !== ui.Button.OK) return;
-    const summary = (said.getResponseText().trim() ? said.getResponseText().trim() + " — " : "") + "from the Google Sheet: " + SurveySheet.describeChange(cur.data || {}, m.data);
-    const v = rpc_("sheet_publish_site_map", { sheet_key: s.key, site: s.site, new_data: m.data, expected_version: cur.version || 0, summary });
+    const summary = (said.getResponseText().trim() ? said.getResponseText().trim() + " — " : "") + "from the Google Sheet: " + SurveySheet.describeChange(before, m.data);
+    const v = rpc_("sheet_publish_site_map", { sheet_key: s.key, site: s.site, new_data: sp.src.green, expected_version: cur.version || 0, summary,
+      layers: { blue: sp.src.blue, black: sp.src.black, "double-black": sp.src["double-black"] } });
     props_().setProperty("version", String(v));
     ui.alert(`Published version ${v}. See it at ${LD.site}${s.site}-map.html`);
   } catch (e) { ui.alert("Not published: " + e.message); }
