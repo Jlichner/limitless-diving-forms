@@ -1651,3 +1651,112 @@ revoke all on function public.notify_new_account() from public, anon, authentica
 drop trigger if exists on_auth_user_created_notify on auth.users;
 create trigger on_auth_user_created_notify after insert on auth.users
   for each row execute function public.notify_new_account();
+
+-- ---------- email to members and groups, and opting out (added 2026-11-22) ----------
+-- Business → Email groups sends one email to people picked by level, class or event, course, certification or
+-- site maps level (the send-email Edge Function, "promo" mode). Members can opt out of these emails in their
+-- Student portal, or with the unsubscribe link at the bottom of each one. Opting out never stops email about
+-- their own classes, agreements or account. Read and changed only through the functions below.
+create table if not exists public.email_prefs (
+  user_id    uuid primary key references auth.users (id) on delete cascade,
+  opted_out  boolean not null default false,
+  token      uuid not null unique default gen_random_uuid(),   -- the secret in their unsubscribe link
+  updated_at timestamptz not null default now()
+);
+alter table public.email_prefs enable row level security;
+
+-- The signed-in member's own choice (Student portal).
+create or replace function public.my_email_opt_out()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((select e.opted_out from public.email_prefs e where e.user_id = (select auth.uid())), false);
+$$;
+revoke all on function public.my_email_opt_out() from public, anon;
+grant execute on function public.my_email_opt_out() to authenticated;
+
+create or replace function public.set_email_opt_out(opt_out boolean)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'Please log in first' using errcode = '42501';
+  end if;
+  insert into public.email_prefs (user_id, opted_out, updated_at) values ((select auth.uid()), coalesce(opt_out, false), now())
+  on conflict (user_id) do update set opted_out = excluded.opted_out, updated_at = now();
+  return coalesce(opt_out, false);
+end $$;
+revoke all on function public.set_email_opt_out(boolean) from public, anon;
+grant execute on function public.set_email_opt_out(boolean) to authenticated;
+
+-- The unsubscribe link in an email (unsubscribe.html, or the email app's own Unsubscribe button). Works without
+-- logging in: the random token in the link is the proof.
+create or replace function public.email_unsubscribe(t uuid)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  update public.email_prefs set opted_out = true, updated_at = now() where token = t;
+  return found;
+end $$;
+revoke all on function public.email_unsubscribe(uuid) from public;
+grant execute on function public.email_unsubscribe(uuid) to anon, authenticated;
+
+-- Everyone who could get a group email, with what the groups are made from. Instructors and Admins only.
+-- Leaves out deactivated (banned) and deleted accounts.
+drop function if exists public.email_audience();
+create or replace function public.email_audience()
+returns table (
+  id uuid, email text, full_name text, role text, certifications jsonb, site_level text,
+  events jsonb, courses jsonb, opted_out boolean, email_confirmed boolean
+)
+language plpgsql stable security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only Instructors and Admins can email groups' using errcode = '42501';
+  end if;
+  return query
+    select u.id, u.email::text, coalesce(p.full_name, ''), coalesce(r.role, 'student'),
+           coalesce(p.certifications, '[]'::jsonb), coalesce(m.level, 'none'),
+           coalesce((select jsonb_agg(jsonb_build_object('id', s.class_id, 'status', s.status,
+                       'title', coalesce(nullif(k.title, ''), nullif(k.course_name, ''), nullif(s.title, ''), 'Calendar entry'),
+                       'dates', coalesce(k.dates, '[]'::jsonb)))
+                       from public.event_signups s left join public.classes k on k.id = s.class_id
+                      where s.student_id = u.id and s.status <> 'declined'), '[]'::jsonb),
+           coalesce((select jsonb_agg(distinct sp.course) from public.student_progress sp where sp.student_id = u.id), '[]'::jsonb),
+           coalesce(e.opted_out, false), u.email_confirmed_at is not null
+    from auth.users u
+    left join public.student_profiles p on p.id = u.id
+    left join public.staff_roles r on r.user_id = u.id
+    left join public.site_map_members m on m.user_id = u.id
+    left join public.email_prefs e on e.user_id = u.id
+    where coalesce(u.email, '') <> '' and u.deleted_at is null and (u.banned_until is null or u.banned_until < now())
+    order by coalesce(nullif(p.full_name, ''), u.email::text);
+end;
+$$;
+revoke all on function public.email_audience() from public, anon;
+grant execute on function public.email_audience() to authenticated;
+
+-- The people a group email actually goes to, out of the ones picked, with each one's unsubscribe token.
+-- Leaves out anyone who opted out, hasn't confirmed their email, or is deactivated. Called by send-email.
+drop function if exists public.promo_recipients(uuid[]);
+create or replace function public.promo_recipients(ids uuid[])
+returns table (id uuid, email text, full_name text, token uuid)
+language plpgsql security definer set search_path = ''
+as $$
+#variable_conflict use_column
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only Instructors and Admins can email groups' using errcode = '42501';
+  end if;
+  insert into public.email_prefs (user_id)
+    select u.id from auth.users u where u.id = any(ids)
+  on conflict (user_id) do nothing;
+  return query
+    select u.id, u.email::text, coalesce(p.full_name, ''), e.token
+    from auth.users u
+    join public.email_prefs e on e.user_id = u.id
+    left join public.student_profiles p on p.id = u.id
+    where u.id = any(ids) and not e.opted_out and u.email_confirmed_at is not null
+      and coalesce(u.email, '') <> '' and u.deleted_at is null and (u.banned_until is null or u.banned_until < now());
+end;
+$$;
+revoke all on function public.promo_recipients(uuid[]) from public, anon;
+grant execute on function public.promo_recipients(uuid[]) to authenticated;
