@@ -168,8 +168,11 @@
         say(`Published as version ${data}.`, "ok");
         st.history = null;
       } else {
-        const { error } = await C.client.from("site_map_edits").insert({ site_id: site, summary: st.summary.trim(), changes: st.draft, base_version: st.baseVersion });
+        const id = crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
+        const { error } = await C.client.from("site_map_edits").insert({ id, site_id: site, summary: st.summary.trim(), changes: st.draft, base_version: st.baseVersion });
         if (error) throw error;
+        // Tell Jamie on Telegram (supabase/functions/notify-signup). Best effort.
+        if (C.client.functions) Promise.resolve(C.client.functions.invoke("notify-signup", { body: { mapEdit: id } })).catch(() => {});
         say("Sent. An Admin will look at your changes and put them on the map.", "ok");
       }
       st.draft = []; st.groups = []; st.summary = ""; saveDraft();

@@ -1,6 +1,8 @@
 // Limitless Diving: tell the instructor when someone joins an event or signs up for a class on an event's
 // information page (event.html), or asks for a class on Request a class (request.html).
-// Supabase Edge Function "notify-signup". Body: { id } for a sign-up, or { request: id } for a request.
+// Also tells Jamie (Telegram only) when the survey team sends a change to a site map for approval.
+// Supabase Edge Function "notify-signup". Body: { id } for a sign-up, { request: id } for a request, or
+// { mapEdit: id } for a site map suggestion (survey-editor.js; claim_site_map_edit_notice in schema.sql).
 //
 // event.js calls it right after the sign-up is saved, as the member who signed up. It asks the database
 // (claim_signup_notice in supabase/schema.sql) for that sign-up; the database answers only once, only for
@@ -57,19 +59,36 @@ Deno.serve(async (req) => {
   const auth = req.headers.get("Authorization") || "";
   const apikey = req.headers.get("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || "";
   if (!/^Bearer\s+\S+/.test(auth)) return reply(401, { error: "Please sign in first." });
-  let body: { id?: unknown; request?: unknown };
+  let body: { id?: unknown; request?: unknown; mapEdit?: unknown };
   try { body = await req.json(); } catch { return reply(400, { error: "The request wasn't readable." }); }
-  const isRequest = !!body.request;
-  const id = String(body.request || body.id || "");
+  const isRequest = !!body.request, isMapEdit = !!body.mapEdit;
+  const id = String(body.mapEdit || body.request || body.id || "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return reply(400, { error: "Which sign-up?" });
 
   // Ask the database, as the member, for their new sign-up or request (once only).
-  const claim = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${isRequest ? "claim_request_notice" : "claim_signup_notice"}`, {
+  const claim = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${isMapEdit ? "claim_site_map_edit_notice" : isRequest ? "claim_request_notice" : "claim_signup_notice"}`, {
     method: "POST", headers: { apikey, Authorization: auth, "Content-Type": "application/json" }, body: JSON.stringify({ p_id: id }),
   });
   if (!claim.ok) { console.error("claim_signup_notice", claim.status, await claim.text()); return reply(502, { error: "Couldn't read the sign-up." }); }
   const s = await claim.json();
   if (!s) return reply(200, { sent: false, reason: "Already sent, or not your sign-up." });
+
+  // A site map suggestion: Telegram only.
+  if (s.kind === "mapedit") {
+    const TG_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "", TG_CHAT = Deno.env.get("TELEGRAM_CHAT_ID") || "";
+    if (!TG_TOKEN || !TG_CHAT) return reply(200, { sent: false, reason: "Telegram isn't set up." });
+    const n = Number(s.changes) || 0;
+    const msg = [`🗺️ ${s.name || "A survey team member"} sent ${n} change${n === 1 ? "" : "s"} to the ${s.title || "site"} map for your approval.`,
+      s.notes ? `Their note: "${String(s.notes).slice(0, 600)}"` : "",
+      "Open the map, tap Edit map, and review it under Suggestions to review.",
+      `${SITE}/${encodeURIComponent(String(s.site_id || ""))}-map.html`].filter(Boolean).join("\n");
+    const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT, text: msg, disable_web_page_preview: true }),
+    });
+    if (!r.ok) console.error("Telegram error", r.status, await r.text());
+    return reply(200, { sent: r.ok, telegram: r.ok });
+  }
 
   const name = String(s.name || s.email || "Someone");
   const title = String(s.title || "an event");
