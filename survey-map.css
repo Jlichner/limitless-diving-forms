@@ -138,3 +138,11 @@
 .sm-access { display: grid; gap: 6px; padding-top: 8px; }
 .se-list li.on { font-weight: 700; color: #e8590c; }
 .sm-map.picking .leaflet-image-layer.leaflet-interactive { cursor: crosshair; }
+/* Lining up a picture layer: handles on the map and the buttons in Map setup */
+.sm-al-h { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%;
+  background: #fff; border: 2px solid #e8590c; color: #e8590c; font-size: 17px; font-weight: 700; line-height: 1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .35); cursor: grab; }
+.sm-al-h:active { cursor: grabbing; }
+.sm-al-size { border-radius: 6px; }
+.sm-align-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
+.sm-align-row > span:first-child { min-width: 5.5em; font-weight: 600; }

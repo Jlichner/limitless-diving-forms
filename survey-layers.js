@@ -50,7 +50,7 @@
   function pushLayers() {
     const al = st.align;
     S.setLayers(st.layers.map(l => Object.assign({}, l, al && al.id === l.id
-      ? { bounds: al.bounds, interactive: true, onImage: img => { al.overlay = img; } } : {})));
+      ? { bounds: al.bounds, onImage: img => { al.overlay = img; } } : {})));
     render();
   }
   async function loadPhotos() {
@@ -273,81 +273,88 @@
   }
 
   // ----- lining up a picture -----
+  // The picture is shown see-through over the satellite pictures (or the survey lines, before the map is placed on
+  // the earth) with three handles: drag the middle to move it, the round handle at its top to turn it, and the
+  // corner to make it bigger or smaller. The math is in Leaflet's projected plane (true to shape on the satellite).
+  const Z = 18;
   function alignCard(l) {
-    const a = st.align, g = S.geoRef(), b = a.bounds || {};
-    const step = a.step;
-    return `<div class="se-card"><span class="eyebrow">Line up ${esc(l.name)}</span>
-      <p>Tap a spot on the picture you can also find on the survey (a landmark, a corner of a dock), then tap that same spot on the survey. Do it for two spots far apart.
-        The picture keeps its shape and stays north-up.</p>
-      <ol class="se-list"><li${step === 0 ? ' class="on"' : ""}>${a.pts[0] && a.pts[0].img ? "✓" : ""} Tap spot 1 on the picture</li>
-        <li${step === 1 ? ' class="on"' : ""}>${a.pts[0] && a.pts[0].map ? "✓" : ""} Tap spot 1 on the survey</li>
-        <li${step === 2 ? ' class="on"' : ""}>${a.pts[1] && a.pts[1].img ? "✓" : ""} Tap spot 2 on the picture</li>
-        <li${step === 3 ? ' class="on"' : ""}>${a.pts[1] && a.pts[1].map ? "✓" : ""} Tap spot 2 on the survey</li></ol>
-      <div class="se-acts"><button type="button" class="btn" data-su="al-restart">Start the spots again</button></div>
-      ${g ? `<p class="hint">Or, if the picture has coordinates printed at its edges, enter them:</p>
-        <div class="sm-form"><label>North edge <input data-al="north" inputmode="decimal" value="${esc(b.north ?? "")}"></label>
-          <label>South edge <input data-al="south" inputmode="decimal" value="${esc(b.south ?? "")}"></label>
-          <label>West edge <input data-al="west" inputmode="decimal" value="${esc(b.west ?? "")}"></label>
-          <label>East edge <input data-al="east" inputmode="decimal" value="${esc(b.east ?? "")}"></label></div>
-        <button type="button" class="btn" data-su="al-edges">Use these edges</button>` : ""}
-      <div class="se-acts"><button type="button" class="btn primary" data-su="al-save"${a.bounds ? "" : " disabled"}>Save where it sits</button></div></div>`;
+    const a = st.align, g = S.geoRef(), deg = Math.round(a.ang * 1800 / Math.PI) / 10, pct = Math.round((S.view[l.id] || {}).opacity * 100 || 60);
+    const nudge = (k, d, label) => `<button type="button" class="btn small" data-su="al-${k}" data-d="${d}">${label}</button>`;
+    return `<div class="se-card sm-align"><span class="eyebrow">Line up ${esc(l.name)}</span>
+      <p>${g ? "Line the picture up with the satellite pictures under it" : "Line the picture up with the survey lines under it (place the map on the earth first to line it up with the satellite instead)"}:
+        drag the <b>✥</b> in the middle to move it, the round <b>⟳</b> handle at its top to turn it, and the <b>⤡</b> corner to make it bigger or smaller.
+        Zoom in to fine-tune, or use the buttons.</p>
+      <div class="sm-align-row"><span>Turn <output>${deg > 0 ? "+" : ""}${deg}°</output></span>
+        ${nudge("turn", -5, "↺ 5°")}${nudge("turn", -1, "↺ 1°")}${nudge("turn", -0.2, "↺ 0.2°")}${nudge("turn", 0.2, "↻ 0.2°")}${nudge("turn", 1, "↻ 1°")}${nudge("turn", 5, "↻ 5°")}</div>
+      <div class="sm-align-row"><span>Size</span>${nudge("size", 0.9, "Smaller")}${nudge("size", 0.99, "A little smaller")}${nudge("size", 1.01, "A little bigger")}${nudge("size", 1.1, "Bigger")}</div>
+      <div class="sm-align-row"><span>Move</span>${nudge("move", "0,-1", "↑")}${nudge("move", "0,1", "↓")}${nudge("move", "-1,0", "←")}${nudge("move", "1,0", "→")}</div>
+      <label class="sm-slider sm-align-row"><span>See-through</span><input type="range" min="10" max="100" step="5" value="${pct}" data-lo="${esc(l.id)}"><output>${pct}%</output></label>
+      <div class="se-acts"><button type="button" class="btn primary" data-su="al-save">Save where it sits</button>
+        <button type="button" class="btn" data-su="al-reset">Start again in the middle of the view</button></div></div>`;
   }
-  // Plane coordinates for the math: feet (plain map) or east-stretched degrees (placed map), north up.
-  function planeOf(latlng) { const g = S.geoRef(); return g ? [latlng.lng * Math.cos(st.align.lat0 * Math.PI / 180), latlng.lat] : [latlng.lng, latlng.lat]; }
-  function boundsFrom(tl, s, W, H) {
-    const g = S.geoRef();
-    if (g) { const c = Math.cos(st.align.lat0 * Math.PI / 180); return { north: tl[1], south: tl[1] - s * H, west: tl[0] / c, east: (tl[0] + s * W) / c }; }
-    return { x0: tl[0], y0: tl[1] - s * H, x1: tl[0] + s * W, y1: tl[1] };
+  const P = ll => S.map.project(ll, Z), U = p => S.map.unproject(p, Z);
+  function alignCorners(a) {
+    const hh = a.hw * a.H / a.W, c = Math.cos(a.ang), s = Math.sin(a.ang);
+    const at = (dx, dy) => U(L.point(a.P.x + dx * c - dy * s, a.P.y + dx * s + dy * c));
+    return { tl: at(-a.hw, -hh), tr: at(a.hw, -hh), bl: at(-a.hw, hh), br: at(a.hw, hh), top: at(0, -hh), mid: U(a.P) };
+  }
+  function alignSaved(a) {
+    const k = alignCorners(a);
+    a.bounds = { corners: [k.tl, k.tr, k.bl].map(x => [x.lat, x.lng]), geo: !!S.geoRef() };
+    return k;
+  }
+  function alignFromView(a) {
+    const vb = S.map.getBounds(), w = P(vb.getNorthEast()).x - P(vb.getSouthWest()).x;
+    a.P = P(S.map.getCenter()); a.hw = Math.max(w * 0.33, 1); a.ang = 0;
+  }
+  function placeAlign() {
+    const a = st.align; if (!a) return;
+    const k = alignSaved(a);
+    if (a.overlay) a.overlay.setCorners([k.tl, k.tr, k.bl]);
+    const m = a.handles;
+    if (m) { if (a.dragging !== "move") m.move.setLatLng(k.mid); if (a.dragging !== "turn") m.turn.setLatLng(k.top); if (a.dragging !== "size") m.size.setLatLng(k.br); m.frame.setLatLngs([k.tl, k.tr, k.br, k.bl]); }
+    const out = setupBox.querySelector(".sm-align output");
+    if (out) { const d = Math.round(a.ang * 1800 / Math.PI) / 10; out.textContent = (d > 0 ? "+" : "") + d + "°"; }
+  }
+  function handle(kind, html) {
+    const mk = L.marker([0, 0], { draggable: true, pane: "sm-align-pane", keyboard: true, title: { move: "Drag to move the picture", turn: "Drag to turn the picture", size: "Drag to make the picture bigger or smaller" }[kind],
+      icon: L.divIcon({ className: "sm-al-h sm-al-" + kind, iconSize: [30, 30], html }) });
+    mk.on("dragstart", () => { st.align.dragging = kind; });
+    mk.on("drag", e => {
+      const a = st.align, p = P(e.target.getLatLng());
+      if (kind === "move") a.P = p;
+      if (kind === "turn") a.ang = Math.atan2(p.y - a.P.y, p.x - a.P.x) + Math.PI / 2;
+      if (kind === "size") a.hw = Math.max(1, Math.hypot(p.x - a.P.x, p.y - a.P.y) / Math.hypot(1, a.H / a.W));
+      placeAlign();
+    });
+    mk.on("dragend", () => { st.align.dragging = null; placeAlign(); });
+    return mk;
   }
   async function startAlign(l) {
     const img = new Image();
     await new Promise(r => { img.onload = r; img.onerror = r; img.src = l.imageUrl; });
-    const W = img.naturalWidth || 1000, H = img.naturalHeight || 1000;
-    const c = S.map.getCenter();
-    st.align = { id: l.id, W, H, step: 0, pts: [{}, {}], bounds: l.bounds, lat0: c.lat };
-    if (!st.align.bounds) {
-      // Start it over the middle of the view, about two-thirds of the view wide.
-      const vb = S.map.getBounds(), sw = planeOf(vb.getSouthWest()), ne = planeOf(vb.getNorthEast());
-      const w = (ne[0] - sw[0]) * 0.66, s = w / W, mid = planeOf(c);
-      st.align.bounds = boundsFrom([mid[0] - w / 2, mid[1] + s * H / 2], s, W, H);
-    }
-    S.setLayerView(l.id, { visible: true, opacity: 0.6 });
-    S.map.on("click", alignClick);
-    S.setPicker(f => alignClick({ latlng: L.latLng(S.ll(f.kind === "segment" ? f.x1 : f.x, f.kind === "segment" ? f.y1 : f.y)), feature: true }));
+    const a = { id: l.id, W: img.naturalWidth || 1000, H: img.naturalHeight || 1000, bounds: l.bounds };
+    const cs = S.imageCorners(l.bounds);
+    if (cs) {
+      const [tl, tr, bl] = cs.map(P);
+      a.P = L.point((tr.x + bl.x) / 2, (tr.y + bl.y) / 2); a.hw = Math.hypot(tr.x - tl.x, tr.y - tl.y) / 2; a.ang = Math.atan2(tr.y - tl.y, tr.x - tl.x);
+    } else alignFromView(a);
+    st.align = a;
+    if (!S.map.getPane("sm-align-pane")) S.map.createPane("sm-align-pane").style.zIndex = 650;
+    a.handles = { frame: L.polygon([[0, 0], [0, 0], [0, 0]], { pane: "sm-align-pane", color: "#e8590c", weight: 2, dashArray: "6 4", fill: false, interactive: false }),
+      move: handle("move", "✥"), turn: handle("turn", "⟳"), size: handle("size", "⤡") };
+    Object.values(a.handles).forEach(h => h.addTo(S.map));
+    S.setLayerView(l.id, { visible: true, opacity: Math.min((S.view[l.id] || {}).opacity || 0.6, 0.6) });
+    if (S.geoRef()) S.setLayerView("satellite", { visible: true });
+    alignSaved(a);
     pushLayers();
+    placeAlign();
   }
   function stopAlign() {
     if (!st.align) return;
-    S.map.off("click", alignClick);
-    S.setPicker(null);
+    Object.values(st.align.handles || {}).forEach(h => h.remove());
     st.align = null;
     pushLayers();
-  }
-  function alignClick(ev) {
-    const a = st.align;
-    if (!a) return;
-    const onImage = a.step === 0 || a.step === 2, k = a.step < 2 ? 0 : 1;
-    if (onImage) {
-      const ov = a.overlay; if (!ov) return;
-      const bb = ov.getBounds(), sw = planeOf(bb.getSouthWest()), ne = planeOf(bb.getNorthEast()), p = planeOf(ev.latlng);
-      const u = (p[0] - sw[0]) / (ne[0] - sw[0]), v = (ne[1] - p[1]) / (ne[1] - sw[1]);
-      if (u < 0 || u > 1 || v < 0 || v > 1) { say("Tap on the picture itself.", "bad"); return renderSetup(); }
-      a.pts[k].img = [u * a.W, v * a.H];
-    } else {
-      a.pts[k].map = planeOf(ev.latlng);
-    }
-    a.step++;
-    if (a.step === 4) {
-      const [p1, p2] = a.pts, da = Math.hypot(p2.img[0] - p1.img[0], p2.img[1] - p1.img[1]), dm = Math.hypot(p2.map[0] - p1.map[0], p2.map[1] - p1.map[1]);
-      if (da < 5) { say("The two spots on the picture are too close together. Start again with spots far apart.", "bad"); a.step = 0; a.pts = [{}, {}]; return renderSetup(); }
-      const s = dm / da, tl = [p1.map[0] - s * p1.img[0], p1.map[1] + s * p1.img[1]];
-      a.bounds = boundsFrom(tl, s, a.W, a.H);
-      a.step = 0; a.pts = [{}, {}];
-      say("Lined up. Check it with the slider, then save, or tap new spots to try again.", "ok");
-      pushLayers();
-      return;
-    }
-    say(null); renderSetup();
   }
 
   // ----- rating lines -----
@@ -490,6 +497,11 @@
   });
   setupBox.addEventListener("input", e => {
     const el = e.target;
+    if (el.dataset.lo) {   // the see-through slider while lining up a picture
+      S.setLayerView(el.dataset.lo, { opacity: Number(el.value) / 100 });
+      const out = el.parentElement.querySelector("output"); if (out) out.textContent = el.value + "%";
+      saveView();
+    }
   });
   // A latitude and longitude pasted together into one box (e.g. from Google Maps) are split into both boxes.
   setupBox.addEventListener("change", e => {
@@ -562,7 +574,7 @@
       await loadLayers();
       const l = st.layers.find(x => x.id === ins.data.id);
       if (l && l.imageUrl) await startAlign(l);
-      say("Added. Now line it up: follow the steps under the layer.", "ok");
+      say("Added. Now line it up: drag the handles on the map, then save.", "ok");
     });
     if (act === "ly-save" && layer) return run(async () => {
       const val = k => setupBox.querySelector(`[data-ly="${CSS.escape(id)}"][data-k="${k}"]`);
@@ -590,17 +602,18 @@
       });
     }
     if (act === "align" && layer) { stopRate(); if (st.align && st.align.id === id) stopAlign(); else { stopAlign(); await startAlign(layer); } say(null); return renderSetup(); }
-    if (act === "al-restart") { st.align.step = 0; st.align.pts = [{}, {}]; say(null); return renderSetup(); }
-    if (act === "al-edges") {
-      const v = k => Number(((setupBox.querySelector(`[data-al="${k}"]`) || {}).value || "").replace("−", "-"));
-      const bb = { north: v("north"), south: v("south"), west: v("west"), east: v("east") };
-      if (!(bb.north > bb.south && bb.east > bb.west && Math.abs(bb.north) <= 90 && Math.abs(bb.west) <= 180)) { say("Enter all four edges in decimal degrees: north above south, east of west.", "bad"); return renderSetup(); }
-      st.align.bounds = bb; say("Placed by its edges. Check it, then save.", "ok"); return pushLayers();
+    if (act === "al-turn" && st.align) { st.align.ang += Number(b.dataset.d) * Math.PI / 180; return placeAlign(); }
+    if (act === "al-size" && st.align) { st.align.hw *= Number(b.dataset.d); return placeAlign(); }
+    if (act === "al-move" && st.align) {
+      // A nudge of a few screen pixels, whatever the zoom.
+      const [dx, dy] = b.dataset.d.split(",").map(Number), f = Math.pow(2, Z - S.map.getZoom()) * 4;
+      st.align.P = st.align.P.add(L.point(dx * f, dy * f)); return placeAlign();
     }
+    if (act === "al-reset" && st.align) { alignFromView(st.align); return placeAlign(); }
     if (act === "al-save") return run(async () => {
       const { error } = await C.client.from("site_map_layers").update({ bounds: st.align.bounds }).eq("id", st.align.id);
       if (error) throw error;
-      stopAlign(); await loadLayers(); say("Saved where the picture sits.", "ok");
+      stopAlign(); await loadLayers(); say("Saved where the picture sits. Fade it with its slider under Layers.", "ok");
     });
     if (act === "ac-add") return run(async () => {
       const sel = setupBox.querySelector(`[data-ac="${CSS.escape(b.dataset.layer)}"]`);
