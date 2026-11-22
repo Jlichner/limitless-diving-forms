@@ -59,7 +59,7 @@
     const { data, error } = await C.client.from("site_maps").select("id, data");
     if (error || !data || !data.length) return;
     const pub = Object.fromEntries(data.map(r => [r.id, r.data]));
-    sites = sites.map(d => pub[d.id] ? Object.assign({}, pub[d.id], { id: d.id }) : d);
+    sites = sites.map(d => pub[d.id] ? Object.assign({}, pub[d.id], { id: d.id, credit: d.credit || pub[d.id].credit }) : d);
     render();
   })().catch(e => console.warn("Published maps not loaded:", e));
 })();
