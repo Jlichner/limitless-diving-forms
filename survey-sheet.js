@@ -253,7 +253,34 @@
     return { rows, landmarkRows: lmRows };
   }
 
-  const api = { toSurvey, fromSurvey, HEADER, codeOf };
+  // The map to publish: what the sheet says, on top of the website's current map. Things the sheet doesn't hold
+  // (title, credits, GPS placement, lines set aside as not drawn) are kept from the website.
+  function mergeInto(current, fromSheet) {
+    const cur = current ? JSON.parse(JSON.stringify(current)) : {}, s = fromSheet, notes = [];
+    const out = Object.assign(cur, { runs: Object.assign({}, s.runs), runNames: Object.assign({}, s.runNames), plan: s.plan, landmarks: Object.assign({}, s.landmarks), origin: s.origin });
+    if (s.originPoint) out.originPoint = s.originPoint; else delete out.originPoint;
+    out.unusedRuns = ((current && current.unusedRuns) || []).filter(id => current.runs && current.runs[id] && !(id in s.runs));
+    out.unusedRuns.forEach(id => { out.runs[id] = current.runs[id]; if (current.runNames && current.runNames[id]) out.runNames[id] = current.runNames[id]; });
+    if (!out.aliases) out.aliases = {};
+    ["id", "title", "place", "subtitle", "credit", "version", "surveyors"].forEach(k => { if (out[k] === undefined && s[k] !== undefined) out[k] = s[k]; });
+    const gr = out.georef;
+    if (gr && gr.landmark && !out.landmarks[gr.landmark]) notes.push(`The map is placed on the satellite from "${gr.landmark}", which isn't in the sheet any more. Place it again on the website (Map setup).`);
+    if (gr && gr.landmark2 && !out.landmarks[gr.landmark2]) notes.push(`The map's second GPS point "${gr.landmark2}" isn't in the sheet any more.`);
+    return { data: out, notes };
+  }
+
+  // What changed, in a line, for the map's history.
+  function describeChange(before, after) {
+    const ft = d => { let t = 0; Object.keys((d && d.runs) || {}).forEach(k => (((d.unusedRuns || []).includes(k)) ? [] : d.runs[k]).forEach(e => { if (/Line$/.test(e.type)) t += (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12; })); return Math.round(t); };
+    const names = d => new Set(((d && d.plan) || []).flatMap(p => [p.run, p.run2]).filter(Boolean));
+    const b = names(before), a = names(after), added = [...a].filter(x => !b.has(x)), gone = [...b].filter(x => !a.has(x));
+    const parts = [`${ft(after)} ft of line (was ${ft(before)})`];
+    if (added.length) parts.push("new: " + added.map(x => after.runNames[x] || x).join(", "));
+    if (gone.length) parts.push("removed: " + gone.map(x => (before.runNames || {})[x] || x).join(", "));
+    return parts.join("; ");
+  }
+
+  const api = { toSurvey, fromSurvey, mergeInto, describeChange, HEADER, codeOf };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveySheet = api;
 })(typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : this);

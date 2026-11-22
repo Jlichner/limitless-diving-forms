@@ -30,6 +30,12 @@ ok("round trip runs", JSON.stringify(r2.data.runs) === JSON.stringify(r.data.run
 ok("round trip plan", JSON.stringify(r2.data.plan) === JSON.stringify(r.data.plan));
 const a = G.compute(r.data), b = G.compute(r2.data);
 ok("round trip drawing", Object.keys(a.at).every(k => b.at[k] && Math.hypot(a.at[k][0] - b.at[k][0], a.at[k][1] - b.at[k][1]) < 1e-6));
+const cur = { title: "T", credit: "C", georef: { landmark: "LOG", lat: 1, lon: 2 }, runs: { Old: [{ type: "Jump", length_ft: 1, angle: 0 }], MainLine: [] }, runNames: { Old: "Old" }, unusedRuns: ["Old"], plan: [], landmarks: {} };
+const m = SS.mergeInto(cur, r.data);
+ok("merge keeps website-only things", m.data.title === "T" && m.data.credit === "C" && m.data.georef.lat === 1 && m.data.runs.Old && m.data.unusedRuns[0] === "Old" && !m.notes.length, m.notes);
+ok("merge takes the sheet's lines", JSON.stringify(m.data.runs.MainLine) === JSON.stringify(r.data.runs.MainLine) && m.data.plan === r.data.plan);
+ok("merge warns when the GPS station is gone", SS.mergeInto({ georef: { landmark: "GONE" } }, r.data).notes.length === 1);
+ok("change summary", /^\d+ ft of line \(was 0\); new: MAIN LINE/.test(SS.describeChange({}, r.data)), SS.describeChange({}, r.data));
 // The real Bonnie Castle survey, when it's on this computer (it's private, so not in the repository).
 let full = null; try { full = require("./local/bonnie-castle-data.js"); } catch (e) { }
 if (full && full.runs && Object.keys(full.runs).length) {
