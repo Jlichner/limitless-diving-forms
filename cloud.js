@@ -45,6 +45,7 @@
     explain(err) {
       const m = String((err && (err.message || err.error_description)) || err || "");
       if (/invalid login credentials/i.test(m)) return "That email and password don't match an account.";
+      if (/user is banned|banned/i.test(m)) return "This account has been deactivated. Contact Limitless Diving to have it switched back on.";
       if (/email not confirmed/i.test(m)) return "Please confirm your email first. Check your inbox for the link.";
       if (/already registered|already been registered/i.test(m)) return "There's already an account with that email. Try signing in, or reset your password.";
       if (/password should be|weak password/i.test(m)) return "Please choose a longer password (at least 8 characters).";
