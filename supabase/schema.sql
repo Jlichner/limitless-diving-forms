@@ -1577,6 +1577,83 @@ drop policy if exists "Site map photos: yours or an Admin removes" on storage.ob
 create policy "Site map photos: yours or an Admin removes" on storage.objects for delete to authenticated
   using (bucket_id = 'site-map-photos' and ((storage.foldername(name))[2] = (select auth.uid())::text or (select public.is_site_map_admin())));
 
+-- ---------- Google Sheet link for site map survey data (added 2026-11-22) ----------
+-- The survey sheet's "Limitless Diving" menu (tools/survey/sheet/) reads and publishes site maps with a
+-- private key, through the two functions below. Only a hash of each key is kept. Make a key by running
+--   select public.make_site_map_sheet_key('Jamie''s survey sheet');
+-- in the Supabase SQL editor (it can't be run from the website), and paste the answer into the sheet's
+-- Limitless Diving → Set up. To stop a key working: delete from public.site_map_sheet_keys where label = '...';
+create extension if not exists pgcrypto with schema extensions;
+create table if not exists public.site_map_sheet_keys (
+  id          bigint generated always as identity primary key,
+  label       text not null default '',
+  key_hash    text not null unique,
+  created_at  timestamptz not null default now(),
+  last_used   timestamptz
+);
+alter table public.site_map_sheet_keys enable row level security;   -- no policies: nobody reads it directly
+
+create or replace function public.make_site_map_sheet_key(label text default '')
+returns text language plpgsql security definer set search_path = '' as $$
+declare k text := 'ldsheet_' || encode(extensions.gen_random_bytes(24), 'hex');
+begin
+  insert into public.site_map_sheet_keys (label, key_hash) values (coalesce(label, ''), encode(extensions.digest(k, 'sha256'), 'hex'));
+  return k;
+end $$;
+revoke all on function public.make_site_map_sheet_key(text) from public, anon, authenticated;
+
+-- The key's label, or null when the key isn't one of ours.
+create or replace function public.site_map_sheet_key_label(sheet_key text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare l text;
+begin
+  update public.site_map_sheet_keys set last_used = now()
+   where key_hash = encode(extensions.digest(coalesce(sheet_key, ''), 'sha256'), 'hex') returning label into l;
+  return l;
+end $$;
+revoke all on function public.site_map_sheet_key_label(text) from public, anon, authenticated;
+
+create or replace function public.sheet_get_site_map(sheet_key text, site text)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare r record;
+begin
+  if public.site_map_sheet_key_label(sheet_key) is null then
+    raise exception 'That sheet key isn''t right. Check Limitless Diving → Set up.' using errcode = '42501';
+  end if;
+  select m.data, m.version, m.updated_at, coalesce(h.published_by_name, '') as who into r
+    from public.site_maps m left join public.site_map_history h on h.site_id = m.id and h.version = m.version
+   where m.id = site;
+  if not found then return jsonb_build_object('data', null, 'version', 0); end if;
+  return jsonb_build_object('data', r.data, 'version', r.version, 'updated_at', r.updated_at, 'updated_by', r.who);
+end $$;
+revoke all on function public.sheet_get_site_map(text, text) from public;
+grant execute on function public.sheet_get_site_map(text, text) to anon, authenticated;
+
+create or replace function public.sheet_publish_site_map(sheet_key text, site text, new_data jsonb, expected_version integer, summary text default '')
+returns integer language plpgsql security definer set search_path = '' as $$
+declare l text; cur integer; nv integer;
+begin
+  l := public.site_map_sheet_key_label(sheet_key);
+  if l is null then raise exception 'That sheet key isn''t right. Check Limitless Diving → Set up.' using errcode = '42501'; end if;
+  if site !~ '^[a-z0-9][a-z0-9-]{0,60}$' then raise exception 'That site name isn''t right' using errcode = '22023'; end if;
+  if new_data is null or jsonb_typeof(new_data) <> 'object' or jsonb_typeof(new_data -> 'runs') <> 'object'
+     or jsonb_typeof(new_data -> 'plan') <> 'array' then
+    raise exception 'That map data isn''t complete' using errcode = '22023';
+  end if;
+  select version into cur from public.site_maps where id = site for update;
+  if coalesce(cur, 0) <> coalesce(expected_version, -1) then
+    raise exception 'The map changed on the website while you were publishing. Publish again.' using errcode = '40001';
+  end if;
+  nv := coalesce(cur, 0) + 1;
+  insert into public.site_maps (id, data, version, updated_at, updated_by) values (site, new_data, nv, now(), null)
+    on conflict (id) do update set data = excluded.data, version = excluded.version, updated_at = excluded.updated_at, updated_by = null;
+  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name)
+    values (site, nv, new_data, left(coalesce(summary, ''), 2000), null, left('Google Sheet' || case when l <> '' then ' (' || l || ')' else '' end, 200));
+  return nv;
+end $$;
+revoke all on function public.sheet_publish_site_map(text, text, jsonb, integer, text) from public;
+grant execute on function public.sheet_publish_site_map(text, text, jsonb, integer, text) to anon, authenticated;
+
 -- ---------- Moving earlier site map grants over to access levels (added 2026-11-21) ----------
 -- The first version had a separate Dive site admin switch (site_map_admins) and per-rating grants
 -- (site_map_layer_access rows on rated layers). They become levels, then the old records go.

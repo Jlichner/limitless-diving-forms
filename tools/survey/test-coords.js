@@ -12,6 +12,7 @@ t("rejects nonsense", () => { for (const [x, a] of [["", "lat"], ["abc", "lat"],
 t("pairs pasted together", () => {
   assert.deepStrictEqual(G.parseLatLon("44.3421, -75.9165"), [44.3421, -75.9165]);
   assert.deepStrictEqual(G.parseLatLon("44.3421 -75.9165"), [44.3421, -75.9165]);
+  assert.deepStrictEqual(G.parseLatLon("N44.34465 W75.91859"), [44.34465, -75.91859]);   // as Jamie's survey sheet writes it
   const p = G.parseLatLon(`44°20'31.6"N 75°54'59.4"W`); assert(p && near(p[0], 44.342111) && near(p[1], -75.916500));
   const q = G.parseLatLon("44° 20.526' N, 75° 54.990' W"); assert(q && near(q[0], 44.3421) && near(q[1], -75.9165));
   assert.strictEqual(G.parseLatLon("44.3421"), null);

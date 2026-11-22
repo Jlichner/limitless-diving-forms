@@ -206,6 +206,8 @@
     const tries = [];
     const hem = t.match(/^(.*?[NS])\s*[,;]?\s*(.*[EW].*)$/i);
     if (hem) tries.push([hem[1], hem[2]]);
+    const pre = t.match(/^([NS].*?)\s*[,;]?\s*([EW].*)$/i);   // letter first: N44.34465 W75.91859
+    if (pre) tries.push([pre[1], pre[2]]);
     const parts = t.split(/\s*[,;]\s*/);
     if (parts.length === 2) tries.push(parts);
     const sp = t.match(/^(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)$/);
