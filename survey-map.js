@@ -165,8 +165,10 @@
       .sort((a, b) => S.name(a.landmark).localeCompare(S.name(b.landmark)));
     main.querySelector("#sm-list").innerHTML = places.map(l => `<li><button type="button" data-lm="${esc(l.landmark)}"><b>${esc(S.name(l.landmark))}</b>
       <span>${l.depth != null ? esc(l.depth + " ft deep") : "Depth not recorded"}</span></button></li>`).join("");
+    // The site's data file can give the whole credit line (creditText); it wins over the survey's own credits.
+    const meta = (window.SITE_MAPS || {})[site] || {};
     const by = (d.surveyors || []).length ? `Surveyed by ${d.surveyors.join(", ")}. ` : "";
-    main.querySelector("#sm-credit").textContent = `${by}Map program by Stephanie Yang. ${[d.credit, d.version].filter(Boolean).join(", ")}.
+    main.querySelector("#sm-credit").textContent = meta.creditText || `${by}${[d.credit, d.version].filter(Boolean).join(", ")}.
       Lengths and headings are as the divers measured them. Where two routes meet again, both are stretched and turned a little so they join up.`;
   }
 
@@ -396,7 +398,7 @@
       `<Placemark><name>${x(S.name(l.landmark))}</name>${l.depth != null ? `<description>${x(l.depth)} ft deep</description>` : ""}<styleUrl>#landmark</styleUrl><Point><coordinates>${pt(l.x, l.y)}</coordinates></Point></Placemark>`).join("\n");
     const kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(d.title)} survey</name>
-<description>${x(d.credit || "")}. Lengths and headings as the divers measured them; placed from ${x(S.name(d.georef.landmark))}.</description>
+<description>${x(((window.SITE_MAPS || {})[site] || {}).credit || d.credit || "")}. Lengths and headings as the divers measured them; placed from ${x(S.name(d.georef.landmark))}.</description>
 <Style id="line"><LineStyle><color>ff33ffff</color><width>2</width></LineStyle></Style>
 <Style id="unsurveyed"><LineStyle><color>ff33ffff</color><width>1</width></LineStyle></Style>
 <Style id="marina"><LineStyle><color>ff3d26d7</color><width>3</width></LineStyle></Style>
