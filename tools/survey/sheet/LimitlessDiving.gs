@@ -227,6 +227,315 @@
   else root.SurveyGeometry = api;
 })(typeof window !== "undefined" ? window : globalThis);
 
+/* Limitless Diving — changes to a site map's survey data (the Site maps editor).
+   A suggestion is a list of changes, applied in order to the published survey data:
+
+     name_point    { run, index, landmark, name }        give the point after entry <index> of <run> a name,
+                                                         so a new line can start or end there
+     add_run       { run, name, start, entries, end?, landmarks? }
+                                                         a new run of line from landmark <start>; with <end> it
+                                                         is stretched and turned to finish at that landmark
+     remove_run    { run }                               delete a whole run
+     cut_run       { run, from }                         delete entries <from>.. to the end of the run
+     mark_removed  { run, from, to? }                    the line from <from> (to <to>, or the end) was pulled:
+                                                         drawn as grey "removed line", landmarks stay
+     drop_segment  { run, index }                        take out one line but keep everything after it in
+                                                         place (the line becomes an undrawn jump)
+
+   Indexes refer to the data as it is when that change is applied (after the changes before it).
+   Works in the browser (window.SurveyEdits) and in Node (module.exports), for testing. */
+(function (root) {
+  "use strict";
+
+  const LINE = /^(SurveyedLine|UnsurveyedLine|MarinaLine|RemovedLine)$/;
+  const SAVES = e => (e.type === "SaveLandmark" || e.type === "SavedStake") && e.landmark ? e.landmark : null;
+  const KEY = /^[A-Z][A-Z0-9_]{0,59}$/;
+
+  // A copy that can be changed without touching the original. Entries are shared until a change replaces
+  // them, so the editor can tell which entries are new, changed or gone.
+  function copy(d) {
+    const runs = {};
+    for (const [k, v] of Object.entries(d.runs || {})) runs[k] = v.slice();
+    return Object.assign({}, d, { runs, plan: (d.plan || []).map(s => Object.assign({}, s)),
+      landmarks: Object.assign({}, d.landmarks), runNames: Object.assign({}, d.runNames) });
+  }
+
+  function dropRunFromPlan(d, run) {
+    d.plan = d.plan.flatMap(s => {
+      if (s.mode === "loop" && (s.run === run || s.run2 === run)) {
+        const other = s.run === run ? s.run2 : s.run;
+        return [{ mode: "draw", start: s.start, run: other }];
+      }
+      return s.run === run ? [] : [s];
+    });
+  }
+
+  function check(cond, msg) { if (!cond) throw new Error(msg); }
+  function runOf(d, run) { check(Array.isArray(d.runs[run]), `There's no line called ${run}.`); return d.runs[run]; }
+  function cleanEntry(e) {
+    check(e && typeof e === "object" && typeof e.type === "string", "A new entry is missing its type.");
+    const ok = ["SurveyedLine", "UnsurveyedLine", "Jump", "Stake", "TieOff", "SaveLandmark", "Arrow"];
+    check(ok.includes(e.type), `Entries of type ${e.type} can't be added here.`);
+    const out = { type: e.type };
+    if (LINE.test(e.type) || e.type === "Jump") {
+      const ft = Number(e.length_ft) || 0, inch = Number(e.length_in) || 0, ang = Number(e.angle);
+      check(ft >= 0 && ft <= 2000 && inch >= 0 && inch < 12, "Lengths must be 0–2000 ft and 0–11 in.");
+      check(ft + inch > 0, "A line needs a length.");
+      check(isFinite(ang) && ang >= 0 && ang <= 360, "Headings must be 0–360°.");
+      out.length_ft = ft; if (inch) out.length_in = inch; out.angle = ang;
+    }
+    if (e.type === "SaveLandmark") {
+      check(KEY.test(e.landmark || ""), "A new landmark needs an id.");
+      out.landmark = e.landmark;
+      if (e.depth != null && e.depth !== "") { const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep; out.depth_angle = 90; }
+      if (e.icon_path) out.icon_path = String(e.icon_path).slice(0, 200);
+    }
+    if (e.type === "Arrow") { out.angle = Number(e.angle) || 0; out.distance = Number(e.distance) || 10; }
+    if (e.note) out.note = String(e.note).slice(0, 300);
+    return out;
+  }
+
+  function applyOne(d, c, landmarkOnMap) {
+    switch (c.op) {
+      case "name_point": {
+        const r = runOf(d, c.run);
+        check(Number.isInteger(c.index) && c.index >= 0 && c.index < r.length, "That point isn't on this line any more.");
+        check(KEY.test(c.landmark || "") && !landmarkOnMap(c.landmark), "That point needs a new id.");
+        r.splice(c.index + 1, 0, { type: "SaveLandmark", landmark: c.landmark });
+        d.landmarks[c.landmark] = String(c.name || "Point").slice(0, 120);
+        return;
+      }
+      case "add_run": {
+        check(KEY.test(c.run || "") && !d.runs[c.run], "The new line needs a new id.");
+        check(landmarkOnMap(c.start), "Pick where the new line starts.");
+        check(!c.end || landmarkOnMap(c.end), "The point the line ends at isn't on the map.");
+        check(Array.isArray(c.entries) && c.entries.length > 0 && c.entries.length <= 300, "Add at least one line.");
+        const entries = c.entries.map(cleanEntry);
+        check(entries.some(e => LINE.test(e.type)), "Add at least one line.");
+        for (const [k, v] of Object.entries(c.landmarks || {})) { check(KEY.test(k) && !landmarkOnMap(k), "A new landmark needs a new id."); d.landmarks[k] = String(v || "Landmark").slice(0, 120); }
+        d.runs[c.run] = entries;
+        d.runNames[c.run] = String(c.name || "New line").slice(0, 120);
+        d.plan.push(c.end ? { mode: "fit", start: c.start, run: c.run, end: c.end } : { mode: "draw", start: c.start, run: c.run });
+        return;
+      }
+      case "remove_run":
+        runOf(d, c.run);
+        delete d.runs[c.run];
+        dropRunFromPlan(d, c.run);
+        return;
+      case "cut_run": {
+        const r = runOf(d, c.run);
+        check(Number.isInteger(c.from) && c.from >= 0 && c.from < r.length, "That point isn't on this line any more.");
+        if (c.from === 0 || !r.slice(0, c.from).some(e => LINE.test(e.type) || e.type === "Jump")) { delete d.runs[c.run]; dropRunFromPlan(d, c.run); }
+        else d.runs[c.run] = r.slice(0, c.from);
+        return;
+      }
+      case "mark_removed": {
+        const r = runOf(d, c.run), to = c.to == null ? r.length : c.to;
+        check(Number.isInteger(c.from) && c.from >= 0 && to <= r.length && c.from < to, "That part isn't on this line any more.");
+        for (let i = c.from; i < to; i++) {
+          const e = r[i];
+          if (/^(SurveyedLine|UnsurveyedLine|MarinaLine)$/.test(e.type)) r[i] = Object.assign({}, e, { type: "RemovedLine" });
+          else if (e.type === "Stake") r[i] = Object.assign({}, e, { type: "RemovedStake" });
+        }
+        return;
+      }
+      case "drop_segment": {
+        const r = runOf(d, c.run);
+        check(Number.isInteger(c.index) && r[c.index] && LINE.test(r[c.index].type), "That line isn't there any more.");
+        const e = r[c.index];
+        r[c.index] = { type: "Jump", length_ft: e.length_ft || 0, length_in: e.length_in || 0, angle: e.angle };
+        return;
+      }
+      default:
+        throw new Error(`Unknown change ${c && c.op}`);
+    }
+  }
+
+  // Apply changes to data. Returns { data, error, failedAt }: on an error, data has the changes before it.
+  function apply(data, changes) {
+    let d = copy(data);
+    const onMap = k => k === (d.origin || "BAR") || Object.values(d.runs).some(r => r.some(e => SAVES(e) === k));
+    for (let i = 0; i < (changes || []).length; i++) {
+      const before = copy(d);
+      try { applyOne(d, changes[i], onMap); }
+      catch (err) { return { data: before, error: err.message, failedAt: i }; }
+    }
+    return { data: d, error: null, failedAt: -1 };
+  }
+
+  // Lines (plan steps) that start from, or are fitted to, a landmark saved in run entries [from..].
+  // Follows them on: a line that depends on one of those is listed too. Returns run ids, not including <run>.
+  function dependents(data, run, from) {
+    const lost = new Set(), out = [], seen = new Set([run]);
+    const savedIn = (r, f) => (data.runs[r] || []).slice(f).map(SAVES).filter(Boolean);
+    const savedElsewhere = (k, skipRuns) => Object.entries(data.runs).some(([r, es]) => !skipRuns.has(r) && es.some(e => SAVES(e) === k));
+    savedIn(run, from || 0).forEach(k => lost.add(k));
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const s of data.plan) {
+        for (const r of [s.run, s.run2].filter(Boolean)) {
+          if (seen.has(r)) continue;
+          const needs = [s.start, s.end].filter(Boolean);
+          if (needs.some(k => lost.has(k) && !savedElsewhere(k, seen))) {
+            seen.add(r); out.push(r); savedIn(r, 0).forEach(k => lost.add(k)); grew = true;
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  const feet = e => { const ft = Number(e.length_ft) || 0, inch = Number(e.length_in) || 0; return inch ? `${ft} ft ${inch} in` : `${ft} ft`; };
+
+  // One line of plain English for a change, using names from data (the data before the change).
+  function describe(c, data) {
+    const runName = r => (data.runNames && data.runNames[r]) || r;
+    const lm = k => (data.landmarks && data.landmarks[k]) || k;
+    const nth = (r, i) => (data.runs[r] || []).slice(0, i + 1).filter(e => LINE.test(e.type)).length;
+    switch (c.op) {
+      case "name_point": return `Name a point on ${runName(c.run)}: ${c.name}`;
+      case "add_run": {
+        const lines = (c.entries || []).filter(e => LINE.test(e.type));
+        const total = lines.reduce((t, e) => t + (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12, 0);
+        const startName = (c.landmarks && c.landmarks[c.start]) || lm(c.start), endName = c.end && ((c.landmarks && c.landmarks[c.end]) || lm(c.end));
+        return `Add ${c.name}: ${lines.length} ${lines.length === 1 ? "line" : "lines"}, ${Math.round(total)} ft, from ${startName}${endName ? " to " + endName : ""}`;
+      }
+      case "remove_run": return `Delete ${runName(c.run)}`;
+      case "cut_run": return `Delete ${runName(c.run)} from line ${nth(c.run, c.from - 1) + 1} to the end`;
+      case "mark_removed": return `Mark ${runName(c.run)} as removed line from line ${nth(c.run, c.from - 1) + 1}${c.to == null ? " to the end" : ""}`;
+      case "drop_segment": { const e = (data.runs[c.run] || [])[c.index] || {}; return `Take out line ${nth(c.run, c.index)} of ${runName(c.run)} (${feet(e)} at ${e.angle}°)`; }
+      default: return "Unknown change";
+    }
+  }
+
+  // Describe each change of a list against the data it applies to.
+  function describeAll(data, changes) {
+    let d = data;
+    return (changes || []).map(c => { const text = describe(c, d); const r = apply(d, [c]); if (!r.error) d = r.data; return text; });
+  }
+
+  // A new id for a run or landmark that isn't used yet.
+  function newId(data, prefix) {
+    const used = k => (data.runs && data.runs[k]) || (data.landmarks && data.landmarks[k]);
+    for (let i = 0; ; i++) {
+      const k = `${prefix}_${Date.now().toString(36).toUpperCase()}${i ? "_" + i : ""}`;
+      if (!used(k)) return k;
+    }
+  }
+
+  const api = { apply, dependents, describe, describeAll, newId, copy, LINE };
+  if (typeof module === "object" && module.exports) module.exports = api;
+  else root.SurveyEdits = api;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* Limitless Diving — ski-style ratings for site map lines (survey-layers.js uses it; tools/survey/test-ratings.js tests it).
+   Green circle lines are on the main survey; blue square, black diamond and double black diamond lines each sit in
+   a layer of their own. Rating lines moves them (and the runs that start from them, when those are rated lower)
+   into the rating's layer, splitting a run where a pick starts partway along it.
+   Works in the browser (window.SurveyRatings) and in Node (module.exports). */
+(function (root) {
+  "use strict";
+  const E = root.SurveyEdits || (typeof require === "function" && require("./survey-edits.js"));
+  const G = root.SurveyGeometry || (typeof require === "function" && require("./survey-geometry.js"));
+  const ORDER = ["green", "blue", "black", "double-black"];
+  const RANK = { green: 0, blue: 1, black: 2, "double-black": 3 };
+
+  // Put plan steps in an order where each starts from a point already drawn.
+  function orderPlan(plan, runs, known) {
+    const k = new Set(known), out = [], left = plan.slice();
+    const saves = run => (runs[run] || []).map(e => e.landmark).filter(Boolean);
+    while (left.length) {
+      const i = left.findIndex(p => k.has(p.start) && (!p.end || k.has(p.end)));
+      const p = left.splice(i < 0 ? 0 : i, 1)[0];
+      out.push(p); [p.run, p.run2].filter(Boolean).forEach(r => saves(r).forEach(x => k.add(x)));
+    }
+    return out;
+  }
+  function merge(parts) {
+    const out = Object.assign({}, parts[0], { runs: {}, plan: [], landmarks: {}, runNames: {} });
+    for (const d of parts) { Object.assign(out.runs, d.runs); out.plan = out.plan.concat(d.plan); Object.assign(out.landmarks, d.landmarks); Object.assign(out.runNames, d.runNames); }
+    return out;
+  }
+  // Rate runs: src is { green, blue, black, "double-black" } survey data (green = the main survey), changed in
+  // place. picks are { run, index, whole } (index = the entry of the line tapped). Throws with a plain message
+  // when it can't be done. Returns { moving }: the ids of the runs now in the target rating.
+  function rate(src, picks0, target, opts) {
+    const order = ORDER, S = { runName: r => (opts.runName && opts.runName(r)) || r };
+    const where = run => order.find(id => src[id].runs[run]);
+    const others = opts.others || [];
+    const warnCount = () => G.compute(merge(order.map(id => src[id]).concat(others))).warnings.length;
+    const startWarn = warnCount();
+    const moving = new Set();
+    // Whole runs first, then the "from here on" picks, last line first so earlier picks keep their place.
+    const picks = picks0.slice().sort((a, b) => (b.whole - a.whole) || (b.index - a.index));
+    for (const sel of picks) {
+      const from = where(sel.run);
+      if (!from) throw new Error(`${S.runName(sel.run)} isn't on the map any more. Refresh the page.`);
+      const d = src[from], r = d.runs[sel.run];
+      const first = r.findIndex(e => E.LINE.test(e.type) || e.type === "Jump");
+      if (sel.whole || moving.has(sel.run) || sel.index <= first) { moving.add(sel.run); continue; }
+      const step = d.plan.find(p => p.run === sel.run || p.run2 === sel.run);
+      if (step && step.mode !== "draw") throw new Error(`${S.runName(sel.run)} is stretched a little to join up with another line, so it can only be rated as a whole run. Tick "Whole run".`);
+      let i = sel.index, key;
+      const prev = r[i - 1];
+      if (prev && (prev.type === "SaveLandmark" || prev.type === "SavedStake") && prev.landmark) key = prev.landmark;
+      else {
+        key = E.newId(merge(order.map(id => src[id])), "P");
+        r.splice(i, 0, { type: "SaveLandmark", landmark: key });
+        d.landmarks[key] = `Point on ${S.runName(sel.run)}`; i++;
+      }
+      const n = r.slice(0, i).filter(x => E.LINE.test(x.type)).length + 1;
+      const tail = r.slice(i), nr = E.newId(merge(order.map(id => src[id])), "RUN");
+      d.runs[sel.run] = r.slice(0, i);
+      d.runs[nr] = tail; d.runNames[nr] = `${S.runName(sel.run)}, from line ${n}`.slice(0, 120);
+      d.plan.splice(d.plan.indexOf(step) + 1, 0, { mode: "draw", start: key, run: nr });
+      moving.add(nr);
+    }
+    // Runs that start from a moved line come along when they're rated lower; loops move both halves.
+    let grew = true;
+    while (grew) {
+      grew = false;
+      const all = merge(order.map(id => src[id]));
+      for (const run of [...moving]) {
+        for (const dep of E.dependents(all, run, 0)) if (!moving.has(dep) && RANK[where(dep)] < RANK[target]) { moving.add(dep); grew = true; }
+        for (const p of all.plan) if (p.run2 && (moving.has(p.run) || moving.has(p.run2)) && !(moving.has(p.run) && moving.has(p.run2))) { moving.add(p.run); moving.add(p.run2); grew = true; }
+      }
+    }
+    // Move them, keeping the drawing order.
+    const steps = [];
+    for (const id of order) {
+      const d = src[id];
+      for (const p of d.plan) if (moving.has(p.run) || moving.has(p.run2)) steps.push(p);
+    }
+    const dest = src[target];
+    for (const id of order) {
+      if (id === target) continue;
+      const d = src[id];
+      for (const run of moving) {
+        if (!d.runs[run]) continue;
+        dest.runs[run] = d.runs[run]; delete d.runs[run];
+        if (d.runNames[run]) dest.runNames[run] = d.runNames[run];
+        for (const e of dest.runs[run]) if (e.landmark && d.landmarks[e.landmark]) dest.landmarks[e.landmark] = d.landmarks[e.landmark];
+      }
+      d.plan = d.plan.filter(p => !(moving.has(p.run) || moving.has(p.run2)));
+    }
+    const keep = dest.plan.filter(p => !steps.includes(p));
+    const known = Object.keys(G.compute(merge(order.slice(0, order.indexOf(target)).map(id => src[id]))).at);
+    dest.plan = orderPlan(keep.concat(steps), dest.runs, target === "green" ? [opts.origin || "BAR"] : known);
+    if (warnCount() > startWarn) {
+      const w = G.compute(merge(order.map(id => src[id]).concat(others))).warnings;
+      throw new Error(`That would leave lines with nothing to start from (${w[w.length - 1]}). Rate the line they start from first, or rate them together.`);
+    }
+    return { moving };
+  }
+
+  const api = { rate, merge, orderPlan, ORDER, RANK };
+  if (typeof module === "object" && module.exports) module.exports = api;
+  else root.SurveyRatings = api;
+})(typeof window !== "undefined" ? window : globalThis);
+
 /* Limitless Diving — survey data in a spreadsheet, the way the divers record it (station to station), and back.
    Used by the Google Sheet's "Limitless Diving" menu (tools/survey/sheet/) and the tests; works in the browser
    (window.SurveySheet), in Node (module.exports) and in Google Apps Script (a global SurveySheet).
@@ -235,6 +544,9 @@
      A From (A)   B To (B)   C Depth @ B   D Backcourse (heading B->A)   E Heading (A->B)   F Distance (ft)   G Distance (m)
      H Kind: blank for a surveyed line, or Unsurveyed, Jump (no line), Boat traffic, Arrow
      I Note    J Drawing (rarely used: icon, label text and side, always draw..., as "name = value; name = value")
+     K Level: Green circle, Blue square, Black diamond or Double black diamond (who can see the line). On a title row
+       it's the whole line's level; on a row, the level from that leg on. Blank: same as the row above (green to start).
+       Blue, black and double black lines go in the map's rated layers, seen only by divers with that level or higher.
    - A title row starts a block: the line's name in A and nothing in C to F (e.g. "MAIN LINE"). Optional: without one
      the line is called "Line 1", "Line 2"... In B a title row can say "loop with <other line's name>" when two lines
      leave the same station and meet again: both are stretched and turned a little so they join up.
@@ -250,7 +562,7 @@
    - Each block after the first starts From a named station already on the map. A block that ends at a named station
      already on the map is stretched and turned a little to meet it (as divers' compass and tape never quite close).
    - Heading and distance are as the divers measured them (magnetic). Backcourse, when given, is checked against the
-     heading (they should differ by 180°). Only columns A to J are read: the rest of the sheet is free for notes.
+     heading (they should differ by 180°). Only columns A to K are read: the rest of the sheet is free for notes.
    The Landmarks tab (optional, filled by "Get from website") keeps each named station's code on the website, so
    photos and layers stay attached when a station is renamed: Code, Name. */
 (function (root) {
@@ -259,7 +571,18 @@
   const PLAIN = { rock: "TieOff", "tie-off": "TieOff", tieoff: "TieOff", "tie off": "TieOff", stake: "Stake" };
   const KINDS = { "": "SurveyedLine", surveyed: "SurveyedLine", unsurveyed: "UnsurveyedLine", jump: "Jump", "boat traffic": "MarinaLine", arrow: "Arrow" };
   const KIND_NAME = { SurveyedLine: "", UnsurveyedLine: "Unsurveyed", Jump: "Jump", MarinaLine: "Boat traffic", Arrow: "Arrow" };
-  const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing"];
+  const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing", "Level"];
+  const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond" };
+  // Level words people type: "Black diamond", "black", "double", "double diamond", "◆◆"...
+  function levelOf(text) {
+    const t = str(text).toLowerCase().replace(/[^a-z◆●■]+/g, " ").trim();
+    if (!t) return null;
+    if (/double|◆◆|expert/.test(t)) return "double-black";
+    if (/black|diamond|◆|advanced/.test(t)) return "black";
+    if (/blue|square|■|intermediate/.test(t)) return "blue";
+    if (/green|circle|●|novice|open/.test(t)) return "green";
+    return undefined;
+  }
   // Drawing details: the name in the sheet, the field on the website, and whether it's a yes/no or a number.
   const DRAW = [["icon", "icon_path"], ["see-through icon", "transparent_icon", "yes"], ["depth label angle", "depth_angle", "num"],
     ["depth label distance", "depth_distance_zoom", "num"], ["always draw", "force_draw", "yes"], ["label", "alt_text"],
@@ -319,7 +642,7 @@
     // Split into blocks at blank rows.
     const blocks = []; let cur = null, originRow = null;
     rows.forEach((row, i) => {
-      const r = Array.from({ length: 10 }, (_, k) => row[k]), rowNo = i + 1;
+      const r = Array.from({ length: 11 }, (_, k) => row[k]), rowNo = i + 1;
       if (isHeader(r)) { cur = null; return; }
       // Blank (a leftover 0 in Distance (m) from a formula counts as blank).
       if (r.slice(0, 6).every(v => str(v) === "") && (str(r[6]) === "" || num(r[6]) === 0) && r.slice(7).every(v => str(v) === "")) { cur = null; return; }
@@ -328,6 +651,7 @@
       const isTitle = str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^loop with /i.test(str(r[1])) || GPS_TITLE.test(str(r[1])));
       if (isTitle && !cur.legs.length && !cur.title) {
         cur.title = str(r[0]);
+        if (str(r[10])) { cur.level = levelOf(r[10]); if (!cur.level) errors.push(`Row ${rowNo}: Level "${str(r[10])}" isn't Green circle, Blue square, Black diamond or Double black diamond.`); }
         const g = str(r[1]).match(GPS_TITLE);
         if (g) {
           const ll = geometry() && geometry().parseLatLon(g[1]);
@@ -342,7 +666,7 @@
       const d = num(originRow.r[2]); if (has(d)) data.originPoint = { depth: d };
     }
 
-    const usedIds = {};
+    const usedIds = {}, levels = [], stated = {};
     blocks.forEach((b, bi) => {
       const legs = b.legs;
       if (!legs.length) return;
@@ -366,7 +690,10 @@
       }
       if (!start) { errors.push(`Row ${legs[0].rowNo}: "${name}" starts From "${startName}", which isn't a named station earlier in the sheet.`); return; }
       const entries = [], knownAtStart = new Set(Object.values(known));
+      let level = b.level || "green", lastLevel = "green";
+      if (b.level) stated[id] = b.level;
       legs.forEach(({ row: r, rowNo }, li) => {
+        if (str(r[10])) { const lv = levelOf(r[10]); if (lv) { level = lv; if (!entries.some(e => /Line$|^Jump$/.test(e.type))) stated[id] = lv; } else errors.push(`Row ${rowNo}: Level "${str(r[10])}" isn't Green circle, Blue square, Black diamond or Double black diamond.`); }
         const from = str(r[0]), to = str(r[1]), kindName = str(r[7]).toLowerCase(), note = str(r[8]);
         const drawing = parseDrawing(r[9], rowNo, errors);
         // A named From on a later row names the point the previous row ended at.
@@ -407,6 +734,7 @@
           Object.assign(line, pick(drawing, LINE_DRAW));
           if (!to && note) lineNote = note;
           if (lineNote) line.note = lineNote;
+          if (level !== lastLevel && type !== "Arrow") { levels.push({ run: id, index: entries.length, level, row: rowNo }); lastLevel = level; }
           entries.push(line);
         }
         if (!to) return;
@@ -436,13 +764,49 @@
     // Stations listed in the Landmarks tab but not on any line (kept for the website's other layers).
     (landmarkRows || []).forEach(r => { const c = str(r[0]), n = str(r[1]); if (c && n && !/^code$/i.test(c) && !data.landmarks[c] && !known[n.toLowerCase()]) data.landmarks[c] = n; });
     if (!data.origin) errors.push("The sheet has no starting point: put it in To on the first row, with its depth.");
-    return { data, warnings, errors };
+    return { data, warnings, errors, levels, stated };
+  }
+
+  // Splits the sheet's map into the main survey (green) and one survey per rated layer, by the Level column.
+  // levels, stated: from toSurvey (stated = the level each line says it starts at). Returns { src: { green, blue, black, "double-black" }, errors, warnings }.
+  function splitLevels(data, levels, stated) {
+    const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
+    const empty = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
+    const src = { green: JSON.parse(JSON.stringify(data)), blue: empty(), black: empty(), "double-black": empty() };
+    const errors = [], warnings = [];
+    if (!levels || !levels.length) return { src, errors, warnings };
+    const runName = r => data.runNames[r] || ["blue", "black", "double-black"].map(k => src[k].runNames[r]).find(Boolean) || r;
+    // Last change along each line first, so earlier changes still find their place in the line.
+    const picks = levels.slice().sort((a, b) => a.run === b.run ? b.index - a.index : 0);
+    for (const p of picks) {
+      try { R.rate(src, [{ run: p.run, index: p.index, whole: false }], p.level, { runName, origin: data.origin || "BAR" }); }
+      catch (e) { errors.push(`Row ${p.row}: ${e.message.replace(/ Refresh the page\.| Tick "Whole run"\./, "").replace(/so it can only be rated as a whole run\./, "so its level can only be set on its title row (the whole line).")}`); }
+    }
+    // A patch placed by GPS: its hidden jump goes with its lines, so lower levels don't see its starting point.
+    for (const gid of Object.keys(src.green.runs).filter(r => /^Gps/.test(r) && (src.green.runs[r][0] || {}).gps_lat != null)) {
+      const at = src.green.runs[gid][1] && src.green.runs[gid][1].landmark;
+      const homes = Object.keys(src).filter(k => src[k].plan.some(p => p.start === at));
+      if (homes.length !== 1 || homes[0] === "green") continue;
+      const k = homes[0], step = src.green.plan.find(p => p.run === gid);
+      src[k].runs[gid] = src.green.runs[gid]; src[k].runNames[gid] = src.green.runNames[gid]; src[k].landmarks[at] = src.green.landmarks[at];
+      src[k].plan.unshift(step);
+      delete src.green.runs[gid]; delete src.green.runNames[gid]; src.green.plan = src.green.plan.filter(p => p !== step);
+      if (!Object.values(src.green.runs).some(r => r.some(e => e.landmark === at))) delete src.green.landmarks[at];
+    }
+    // A line that starts from a higher-rated line has to go up with it (divers couldn't see where it starts).
+    const want = stated || {};
+    for (const k of Object.keys(src)) for (const run of Object.keys(src[k].runs)) {
+      const w = want[run];
+      if (w && w !== k && R.RANK[k] > R.RANK[w] && !/^Gps/.test(run)) warnings.push(`"${runName(run)}" is ${LEVEL_NAMES[k].toLowerCase()} on the map, not ${LEVEL_NAMES[w].toLowerCase()}: it starts from a ${LEVEL_NAMES[k].toLowerCase()} line.`);
+    }
+    return { src, errors, warnings };
   }
 
   // The other way: the website's survey as Survey tab rows (with a header) and Landmarks tab rows [Code, Name].
-  function fromSurvey(data) {
+  // runLevel (optional): run id -> "blue" | "black" | "double-black" for lines in the rated layers.
+  function fromSurvey(data, runLevel) {
     const rows = [HEADER.slice()], lm = data.landmarks || {}, name = code => lm[code] || code;
-    const blank = () => ["", "", "", "", "", "", "", "", "", ""];
+    const blank = () => ["", "", "", "", "", "", "", "", "", "", ""];
     const origin = data.origin || "BAR";
     const o = blank(); o[1] = name(origin); if (data.originPoint && data.originPoint.depth != null) o[2] = data.originPoint.depth; rows.push(o);
     const steps = [];
@@ -457,6 +821,7 @@
       rows.push(blank());
       const t = blank(); t[0] = (data.runNames || {})[s.run] || s.run; if (s.loopWith) t[1] = "loop with " + ((data.runNames || {})[s.loopWith] || s.loopWith);
       const g = gpsAt[s.start]; if (g && !s.loopWith) { t[1] = `GPS ${g.gps_lat}, ${g.gps_lon}`; delete gpsAt[s.start]; }
+      const lv = runLevel && runLevel[s.run]; if (lv && lv !== "green") t[10] = LEVEL_NAMES[lv];
       rows.push(t);
       let from = name(s.start), pending = null;
       const flush = () => {
@@ -557,14 +922,30 @@
     return parts.join("; ");
   }
 
-  const api = { toSurvey, fromSurvey, mergeInto, placeGps, describeChange, HEADER, codeOf };
+  // The website's map with its rated layers, as one map for the sheet, plus which layer each line is in.
+  function joinLevels(green, layers) {
+    const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
+    const parts = [green || {}], runLevel = {};
+    ["blue", "black", "double-black"].forEach(k => {
+      const sv = layers && layers[k];
+      if (!sv || !sv.runs) return;
+      Object.keys(sv.runs).forEach(r => { runLevel[r] = k; });
+      parts.push(Object.assign({ runs: {}, plan: [], landmarks: {}, runNames: {} }, sv));
+    });
+    const all = R.merge(parts);
+    all.plan = R.orderPlan(all.plan, all.runs, [all.origin || "BAR"]);
+    return { data: all, runLevel };
+  }
+
+  const api = { toSurvey, fromSurvey, mergeInto, placeGps, splitLevels, joinLevels, describeChange, HEADER, codeOf, levelOf, LEVEL_NAMES };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveySheet = api;
 })(typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : this);
 
 /* Limitless Diving menu for a site map's Google Sheet: Get from website, Check the rows, Publish to website.
    The sheet is where big changes are made; the website's editor is for one or two quick fixes.
-   How the rows are laid out: see survey-sheet.js (copied in above this part), or the sheet's "How to fill it in" tab.
+   How the rows are laid out: see survey-sheet.js (copied in above this part, with the website's survey-geometry.js,
+   survey-edits.js and survey-ratings.js), or the sheet's "How to fill it in" tab.
    The website side is sheet_get_site_map / sheet_publish_site_map in supabase/schema.sql, opened with a private
    sheet key (Limitless Diving → Set up). */
 const LD = {
@@ -635,7 +1016,7 @@ function readRows_() {
   const sh = surveyTab_(false);
   if (!sh) throw new Error(`There's no "${SURVEY_TAB}" tab. Rename your survey tab to ${SURVEY_TAB}, or use Get from website.`);
   const n = sh.getLastRow();
-  const rows = n ? sh.getRange(1, 1, n, 10).getValues() : [];
+  const rows = n ? sh.getRange(1, 1, n, 11).getValues() : [];
   const lm = SpreadsheetApp.getActive().getSheetByName(LANDMARKS_TAB);
   const lmRows = lm && lm.getLastRow() ? lm.getRange(1, 1, lm.getLastRow(), 2).getValues() : [];
   return { rows, lmRows };
@@ -645,9 +1026,13 @@ function checkRows() {
   const ui = SpreadsheetApp.getUi();
   try {
     const { rows, lmRows } = readRows_(), r = SurveySheet.toSurvey(rows, lmRows, {});
+    const sp = r.errors.length ? { errors: [], warnings: [], src: null } : SurveySheet.splitLevels(r.data, r.levels, r.stated);
+    r.errors = r.errors.concat(sp.errors); r.warnings = r.warnings.concat(sp.warnings);
+    const levelOfRun = id => sp.src ? ["double-black", "black", "blue"].find(k => sp.src[k].runs[id]) : null;
     const lines = r.data.plan.flatMap(p => [p.run, p.run2]).filter(Boolean).map(id => {
       const ft = r.data.runs[id].reduce((t, e) => t + (e.type === "SurveyedLine" ? (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12 : 0), 0);
-      return `${r.data.runNames[id]}: ${Math.round(ft * 10) / 10} ft`;
+      const lv = levelOfRun(id);
+      return `${r.data.runNames[id]}: ${Math.round(ft * 10) / 10} ft${lv ? " (" + SurveySheet.LEVEL_NAMES[lv].toLowerCase() + (sp.src.green.runs[id] ? " part way" : "") + ")" : ""}`;
     });
     ui.alert(r.errors.length ? "Fix these before publishing" : "The rows look right",
       list_(r.errors, "Problems") + list_(r.warnings, "Worth a look") + (lines.length ? "Surveyed line:\n" + lines.join("\n") : "No lines yet."), ui.ButtonSet.OK);
@@ -665,22 +1050,25 @@ function getFromWebsite() {
     if (!cur.data) { ui.alert(`There's no map for ${s.site} on the website yet. Fill in the Survey tab and use Publish to website.`); return; }
     const sh = surveyTab_(true);
     if (sh.getLastRow() > 1 && ui.alert("Get from website",
-      `This replaces columns A to J of the ${SURVEY_TAB} tab with the website's map (version ${cur.version}${cur.updated_by ? ", published by " + cur.updated_by : ""}). ` +
+      `This replaces columns A to K of the ${SURVEY_TAB} tab with the website's map (version ${cur.version}${cur.updated_by ? ", published by " + cur.updated_by : ""}). ` +
       "Anything there you haven't published will be lost. Your columns from L on stay as they are. Go ahead?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
-    const out = SurveySheet.fromSurvey(cur.data);
+    const joined = SurveySheet.joinLevels(cur.data, cur.layers);
+    const out = SurveySheet.fromSurvey(joined.data, joined.runLevel);
     const old = sh.getLastRow();
-    if (old) sh.getRange(1, 1, old, 10).clearContent().setBackground(null).setFontWeight(null).setFontColor(null);
-    sh.getRange(1, 1, out.rows.length, 10).setValues(out.rows);
-    sh.getRange(1, 1, 1, 10).setBackground("#0B4F6C").setFontColor("#FFFFFF").setFontWeight("bold").setWrap(true);
+    if (old) sh.getRange(1, 1, old, 11).clearContent().setBackground(null).setFontWeight(null).setFontColor(null);
+    sh.getRange(1, 1, out.rows.length, 11).setValues(out.rows);
+    sh.getRange(1, 1, 1, 11).setBackground("#0B4F6C").setFontColor("#FFFFFF").setFontWeight("bold").setWrap(true);
     out.rows.forEach((r, i) => {
       if (i === 0) return;
       const title = r[0] && r.slice(2, 8).every(v => v === "") && (!r[1] || /^loop with /i.test(r[1]));
-      if (title) sh.getRange(i + 1, 1, 1, 10).setBackground("#DCEEF5").setFontWeight("bold").setFontColor("#0B4F6C");
+      if (title) sh.getRange(i + 1, 1, 1, 11).setBackground("#DCEEF5").setFontWeight("bold").setFontColor("#0B4F6C");
       else if (typeof r[5] === "number" && r[7] !== "Arrow") sh.getRange(i + 1, 7).setFormula(`=F${i + 1}*0.3048`).setNumberFormat("0.00");
     });
     sh.setFrozenRows(1);
     const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Unsurveyed", "Jump", "Boat traffic", "Arrow"], true).setAllowInvalid(false).build();
     sh.getRange(2, 8, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(kinds);
+    const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond"], true).setAllowInvalid(true).build();
+    sh.getRange(2, 11, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(lvl);
     let lm = SpreadsheetApp.getActive().getSheetByName(LANDMARKS_TAB) || SpreadsheetApp.getActive().insertSheet(LANDMARKS_TAB);
     lm.getRange(1, 1, Math.max(lm.getLastRow(), 1), 2).clearContent();
     lm.getRange(1, 1, out.landmarkRows.length, 2).setValues(out.landmarkRows);
@@ -699,6 +1087,7 @@ function publishToWebsite() {
     if (r.warnings.length && ui.alert("Worth a look before publishing", list_(r.warnings, "Warnings") + "Publish anyway?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
     const cur = rpc_("sheet_get_site_map", { sheet_key: s.key, site: s.site });
     const mine = props_().getProperty("version");
+    const before = SurveySheet.joinLevels(cur.data || {}, cur.layers).data;
     if (cur.version && String(cur.version) !== mine && ui.alert("The map changed on the website",
       `The website has version ${cur.version}${cur.updated_by ? " (published by " + cur.updated_by + ")" : ""}` +
       (mine ? `, and this sheet was last in step with version ${mine}.` : ", and this sheet hasn't got it yet.") +
@@ -706,10 +1095,14 @@ function publishToWebsite() {
       " To keep them, choose No, make a copy of this tab, use Get from website, and copy your new rows in.\n\nPublish anyway?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
     const m = SurveySheet.mergeInto(cur.data, r.data);
     if (m.errors.length) { ui.alert("Not published", m.errors.join("\n"), ui.ButtonSet.OK); return; }
+    const sp = SurveySheet.splitLevels(m.data, r.levels, r.stated);
+    if (sp.errors.length) { ui.alert("Not published: fix these first", list_(sp.errors, "Levels"), ui.ButtonSet.OK); return; }
+    if (sp.warnings.length && ui.alert("Levels", list_(sp.warnings, "Worth a look") + "Publish anyway?", ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
     const said = ui.prompt("Publish to website", "What changed? (shown in the map's history)\n\n" + (m.notes.length ? m.notes.join("\n") + "\n\n" : ""), ui.ButtonSet.OK_CANCEL);
     if (said.getSelectedButton() !== ui.Button.OK) return;
-    const summary = (said.getResponseText().trim() ? said.getResponseText().trim() + " — " : "") + "from the Google Sheet: " + SurveySheet.describeChange(cur.data || {}, m.data);
-    const v = rpc_("sheet_publish_site_map", { sheet_key: s.key, site: s.site, new_data: m.data, expected_version: cur.version || 0, summary });
+    const summary = (said.getResponseText().trim() ? said.getResponseText().trim() + " — " : "") + "from the Google Sheet: " + SurveySheet.describeChange(before, m.data);
+    const v = rpc_("sheet_publish_site_map", { sheet_key: s.key, site: s.site, new_data: sp.src.green, expected_version: cur.version || 0, summary,
+      layers: { blue: sp.src.blue, black: sp.src.black, "double-black": sp.src["double-black"] } });
     props_().setProperty("version", String(v));
     ui.alert(`Published version ${v}. See it at ${LD.site}${s.site}-map.html`);
   } catch (e) { ui.alert("Not published: " + e.message); }

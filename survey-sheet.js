@@ -6,6 +6,9 @@
      A From (A)   B To (B)   C Depth @ B   D Backcourse (heading B->A)   E Heading (A->B)   F Distance (ft)   G Distance (m)
      H Kind: blank for a surveyed line, or Unsurveyed, Jump (no line), Boat traffic, Arrow
      I Note    J Drawing (rarely used: icon, label text and side, always draw..., as "name = value; name = value")
+     K Level: Green circle, Blue square, Black diamond or Double black diamond (who can see the line). On a title row
+       it's the whole line's level; on a row, the level from that leg on. Blank: same as the row above (green to start).
+       Blue, black and double black lines go in the map's rated layers, seen only by divers with that level or higher.
    - A title row starts a block: the line's name in A and nothing in C to F (e.g. "MAIN LINE"). Optional: without one
      the line is called "Line 1", "Line 2"... In B a title row can say "loop with <other line's name>" when two lines
      leave the same station and meet again: both are stretched and turned a little so they join up.
@@ -21,7 +24,7 @@
    - Each block after the first starts From a named station already on the map. A block that ends at a named station
      already on the map is stretched and turned a little to meet it (as divers' compass and tape never quite close).
    - Heading and distance are as the divers measured them (magnetic). Backcourse, when given, is checked against the
-     heading (they should differ by 180°). Only columns A to J are read: the rest of the sheet is free for notes.
+     heading (they should differ by 180°). Only columns A to K are read: the rest of the sheet is free for notes.
    The Landmarks tab (optional, filled by "Get from website") keeps each named station's code on the website, so
    photos and layers stay attached when a station is renamed: Code, Name. */
 (function (root) {
@@ -30,7 +33,18 @@
   const PLAIN = { rock: "TieOff", "tie-off": "TieOff", tieoff: "TieOff", "tie off": "TieOff", stake: "Stake" };
   const KINDS = { "": "SurveyedLine", surveyed: "SurveyedLine", unsurveyed: "UnsurveyedLine", jump: "Jump", "boat traffic": "MarinaLine", arrow: "Arrow" };
   const KIND_NAME = { SurveyedLine: "", UnsurveyedLine: "Unsurveyed", Jump: "Jump", MarinaLine: "Boat traffic", Arrow: "Arrow" };
-  const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing"];
+  const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing", "Level"];
+  const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond" };
+  // Level words people type: "Black diamond", "black", "double", "double diamond", "◆◆"...
+  function levelOf(text) {
+    const t = str(text).toLowerCase().replace(/[^a-z◆●■]+/g, " ").trim();
+    if (!t) return null;
+    if (/double|◆◆|expert/.test(t)) return "double-black";
+    if (/black|diamond|◆|advanced/.test(t)) return "black";
+    if (/blue|square|■|intermediate/.test(t)) return "blue";
+    if (/green|circle|●|novice|open/.test(t)) return "green";
+    return undefined;
+  }
   // Drawing details: the name in the sheet, the field on the website, and whether it's a yes/no or a number.
   const DRAW = [["icon", "icon_path"], ["see-through icon", "transparent_icon", "yes"], ["depth label angle", "depth_angle", "num"],
     ["depth label distance", "depth_distance_zoom", "num"], ["always draw", "force_draw", "yes"], ["label", "alt_text"],
@@ -90,7 +104,7 @@
     // Split into blocks at blank rows.
     const blocks = []; let cur = null, originRow = null;
     rows.forEach((row, i) => {
-      const r = Array.from({ length: 10 }, (_, k) => row[k]), rowNo = i + 1;
+      const r = Array.from({ length: 11 }, (_, k) => row[k]), rowNo = i + 1;
       if (isHeader(r)) { cur = null; return; }
       // Blank (a leftover 0 in Distance (m) from a formula counts as blank).
       if (r.slice(0, 6).every(v => str(v) === "") && (str(r[6]) === "" || num(r[6]) === 0) && r.slice(7).every(v => str(v) === "")) { cur = null; return; }
@@ -99,6 +113,7 @@
       const isTitle = str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^loop with /i.test(str(r[1])) || GPS_TITLE.test(str(r[1])));
       if (isTitle && !cur.legs.length && !cur.title) {
         cur.title = str(r[0]);
+        if (str(r[10])) { cur.level = levelOf(r[10]); if (!cur.level) errors.push(`Row ${rowNo}: Level "${str(r[10])}" isn't Green circle, Blue square, Black diamond or Double black diamond.`); }
         const g = str(r[1]).match(GPS_TITLE);
         if (g) {
           const ll = geometry() && geometry().parseLatLon(g[1]);
@@ -113,7 +128,7 @@
       const d = num(originRow.r[2]); if (has(d)) data.originPoint = { depth: d };
     }
 
-    const usedIds = {};
+    const usedIds = {}, levels = [], stated = {};
     blocks.forEach((b, bi) => {
       const legs = b.legs;
       if (!legs.length) return;
@@ -137,7 +152,10 @@
       }
       if (!start) { errors.push(`Row ${legs[0].rowNo}: "${name}" starts From "${startName}", which isn't a named station earlier in the sheet.`); return; }
       const entries = [], knownAtStart = new Set(Object.values(known));
+      let level = b.level || "green", lastLevel = "green";
+      if (b.level) stated[id] = b.level;
       legs.forEach(({ row: r, rowNo }, li) => {
+        if (str(r[10])) { const lv = levelOf(r[10]); if (lv) { level = lv; if (!entries.some(e => /Line$|^Jump$/.test(e.type))) stated[id] = lv; } else errors.push(`Row ${rowNo}: Level "${str(r[10])}" isn't Green circle, Blue square, Black diamond or Double black diamond.`); }
         const from = str(r[0]), to = str(r[1]), kindName = str(r[7]).toLowerCase(), note = str(r[8]);
         const drawing = parseDrawing(r[9], rowNo, errors);
         // A named From on a later row names the point the previous row ended at.
@@ -178,6 +196,7 @@
           Object.assign(line, pick(drawing, LINE_DRAW));
           if (!to && note) lineNote = note;
           if (lineNote) line.note = lineNote;
+          if (level !== lastLevel && type !== "Arrow") { levels.push({ run: id, index: entries.length, level, row: rowNo }); lastLevel = level; }
           entries.push(line);
         }
         if (!to) return;
@@ -207,13 +226,49 @@
     // Stations listed in the Landmarks tab but not on any line (kept for the website's other layers).
     (landmarkRows || []).forEach(r => { const c = str(r[0]), n = str(r[1]); if (c && n && !/^code$/i.test(c) && !data.landmarks[c] && !known[n.toLowerCase()]) data.landmarks[c] = n; });
     if (!data.origin) errors.push("The sheet has no starting point: put it in To on the first row, with its depth.");
-    return { data, warnings, errors };
+    return { data, warnings, errors, levels, stated };
+  }
+
+  // Splits the sheet's map into the main survey (green) and one survey per rated layer, by the Level column.
+  // levels, stated: from toSurvey (stated = the level each line says it starts at). Returns { src: { green, blue, black, "double-black" }, errors, warnings }.
+  function splitLevels(data, levels, stated) {
+    const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
+    const empty = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
+    const src = { green: JSON.parse(JSON.stringify(data)), blue: empty(), black: empty(), "double-black": empty() };
+    const errors = [], warnings = [];
+    if (!levels || !levels.length) return { src, errors, warnings };
+    const runName = r => data.runNames[r] || ["blue", "black", "double-black"].map(k => src[k].runNames[r]).find(Boolean) || r;
+    // Last change along each line first, so earlier changes still find their place in the line.
+    const picks = levels.slice().sort((a, b) => a.run === b.run ? b.index - a.index : 0);
+    for (const p of picks) {
+      try { R.rate(src, [{ run: p.run, index: p.index, whole: false }], p.level, { runName, origin: data.origin || "BAR" }); }
+      catch (e) { errors.push(`Row ${p.row}: ${e.message.replace(/ Refresh the page\.| Tick "Whole run"\./, "").replace(/so it can only be rated as a whole run\./, "so its level can only be set on its title row (the whole line).")}`); }
+    }
+    // A patch placed by GPS: its hidden jump goes with its lines, so lower levels don't see its starting point.
+    for (const gid of Object.keys(src.green.runs).filter(r => /^Gps/.test(r) && (src.green.runs[r][0] || {}).gps_lat != null)) {
+      const at = src.green.runs[gid][1] && src.green.runs[gid][1].landmark;
+      const homes = Object.keys(src).filter(k => src[k].plan.some(p => p.start === at));
+      if (homes.length !== 1 || homes[0] === "green") continue;
+      const k = homes[0], step = src.green.plan.find(p => p.run === gid);
+      src[k].runs[gid] = src.green.runs[gid]; src[k].runNames[gid] = src.green.runNames[gid]; src[k].landmarks[at] = src.green.landmarks[at];
+      src[k].plan.unshift(step);
+      delete src.green.runs[gid]; delete src.green.runNames[gid]; src.green.plan = src.green.plan.filter(p => p !== step);
+      if (!Object.values(src.green.runs).some(r => r.some(e => e.landmark === at))) delete src.green.landmarks[at];
+    }
+    // A line that starts from a higher-rated line has to go up with it (divers couldn't see where it starts).
+    const want = stated || {};
+    for (const k of Object.keys(src)) for (const run of Object.keys(src[k].runs)) {
+      const w = want[run];
+      if (w && w !== k && R.RANK[k] > R.RANK[w] && !/^Gps/.test(run)) warnings.push(`"${runName(run)}" is ${LEVEL_NAMES[k].toLowerCase()} on the map, not ${LEVEL_NAMES[w].toLowerCase()}: it starts from a ${LEVEL_NAMES[k].toLowerCase()} line.`);
+    }
+    return { src, errors, warnings };
   }
 
   // The other way: the website's survey as Survey tab rows (with a header) and Landmarks tab rows [Code, Name].
-  function fromSurvey(data) {
+  // runLevel (optional): run id -> "blue" | "black" | "double-black" for lines in the rated layers.
+  function fromSurvey(data, runLevel) {
     const rows = [HEADER.slice()], lm = data.landmarks || {}, name = code => lm[code] || code;
-    const blank = () => ["", "", "", "", "", "", "", "", "", ""];
+    const blank = () => ["", "", "", "", "", "", "", "", "", "", ""];
     const origin = data.origin || "BAR";
     const o = blank(); o[1] = name(origin); if (data.originPoint && data.originPoint.depth != null) o[2] = data.originPoint.depth; rows.push(o);
     const steps = [];
@@ -228,6 +283,7 @@
       rows.push(blank());
       const t = blank(); t[0] = (data.runNames || {})[s.run] || s.run; if (s.loopWith) t[1] = "loop with " + ((data.runNames || {})[s.loopWith] || s.loopWith);
       const g = gpsAt[s.start]; if (g && !s.loopWith) { t[1] = `GPS ${g.gps_lat}, ${g.gps_lon}`; delete gpsAt[s.start]; }
+      const lv = runLevel && runLevel[s.run]; if (lv && lv !== "green") t[10] = LEVEL_NAMES[lv];
       rows.push(t);
       let from = name(s.start), pending = null;
       const flush = () => {
@@ -328,7 +384,22 @@
     return parts.join("; ");
   }
 
-  const api = { toSurvey, fromSurvey, mergeInto, placeGps, describeChange, HEADER, codeOf };
+  // The website's map with its rated layers, as one map for the sheet, plus which layer each line is in.
+  function joinLevels(green, layers) {
+    const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
+    const parts = [green || {}], runLevel = {};
+    ["blue", "black", "double-black"].forEach(k => {
+      const sv = layers && layers[k];
+      if (!sv || !sv.runs) return;
+      Object.keys(sv.runs).forEach(r => { runLevel[r] = k; });
+      parts.push(Object.assign({ runs: {}, plan: [], landmarks: {}, runNames: {} }, sv));
+    });
+    const all = R.merge(parts);
+    all.plan = R.orderPlan(all.plan, all.runs, [all.origin || "BAR"]);
+    return { data: all, runLevel };
+  }
+
+  const api = { toSurvey, fromSurvey, mergeInto, placeGps, splitLevels, joinLevels, describeChange, HEADER, codeOf, levelOf, LEVEL_NAMES };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveySheet = api;
 })(typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : this);

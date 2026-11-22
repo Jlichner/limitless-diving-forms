@@ -1623,15 +1623,25 @@ begin
   select m.data, m.version, m.updated_at, coalesce(h.published_by_name, '') as who into r
     from public.site_maps m left join public.site_map_history h on h.site_id = m.id and h.version = m.version
    where m.id = site;
-  if not found then return jsonb_build_object('data', null, 'version', 0); end if;
-  return jsonb_build_object('data', r.data, 'version', r.version, 'updated_at', r.updated_at, 'updated_by', r.who);
+  if not found then return jsonb_build_object('data', null, 'version', 0, 'layers', '{}'::jsonb); end if;
+  return jsonb_build_object('data', r.data, 'version', r.version, 'updated_at', r.updated_at, 'updated_by', r.who,
+    -- The rated layers' lines (blue, black, double black), for the sheet's Level column.
+    'layers', coalesce((select jsonb_object_agg(l.rating, l.survey) from public.site_map_layers l
+                         where l.site_id = site and l.rating is not null and l.survey is not null), '{}'::jsonb));
 end $$;
 revoke all on function public.sheet_get_site_map(text, text) from public;
 grant execute on function public.sheet_get_site_map(text, text) to anon, authenticated;
 
-create or replace function public.sheet_publish_site_map(sheet_key text, site text, new_data jsonb, expected_version integer, summary text default '')
+-- layers: { "blue": survey, "black": survey, "double-black": survey } from the sheet's Level column, or null to
+-- leave the rated layers as they are. A rating with no lines empties its layer.
+drop function if exists public.sheet_publish_site_map(text, text, jsonb, integer, text);
+create or replace function public.sheet_publish_site_map(sheet_key text, site text, new_data jsonb, expected_version integer,
+                                                         summary text default '', layers jsonb default null)
 returns integer language plpgsql security definer set search_path = '' as $$
-declare l text; cur integer; nv integer;
+declare l text; cur integer; nv integer; k text; sv jsonb;
+  names jsonb := '{"blue": ["Blue square · Intermediate", "Advanced divers and up", 101],
+                   "black": ["Black diamond · Advanced", "Tech divers and up", 102],
+                   "double-black": ["Double black diamond · Expert", "Tech divers on scooters and up", 103]}';
 begin
   l := public.site_map_sheet_key_label(sheet_key);
   if l is null then raise exception 'That sheet key isn''t right. Check Limitless Diving → Set up.' using errcode = '42501'; end if;
@@ -1649,10 +1659,24 @@ begin
     on conflict (id) do update set data = excluded.data, version = excluded.version, updated_at = excluded.updated_at, updated_by = null;
   insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name)
     values (site, nv, new_data, left(coalesce(summary, ''), 2000), null, left('Google Sheet' || case when l <> '' then ' (' || l || ')' else '' end, 200));
+  if layers is not null then
+    if jsonb_typeof(layers) <> 'object' then raise exception 'The rated layers aren''t complete' using errcode = '22023'; end if;
+    foreach k in array array['blue', 'black', 'double-black'] loop
+      sv := layers -> k;
+      if sv is null or jsonb_typeof(sv) <> 'object' or jsonb_typeof(sv -> 'runs') <> 'object' then
+        sv := '{"runs": {}, "plan": [], "landmarks": {}, "runNames": {}}'::jsonb;
+      end if;
+      update public.site_map_layers set survey = sv, updated_at = now() where site_id = site and rating = k;
+      if not found and sv -> 'runs' <> '{}'::jsonb then
+        insert into public.site_map_layers (site_id, name, kind, rating, restricted, note, sort, survey)
+        values (site, names -> k ->> 0, 'survey', k, true, names -> k ->> 1, (names -> k ->> 2)::int, sv);
+      end if;
+    end loop;
+  end if;
   return nv;
 end $$;
-revoke all on function public.sheet_publish_site_map(text, text, jsonb, integer, text) from public;
-grant execute on function public.sheet_publish_site_map(text, text, jsonb, integer, text) to anon, authenticated;
+revoke all on function public.sheet_publish_site_map(text, text, jsonb, integer, text, jsonb) from public;
+grant execute on function public.sheet_publish_site_map(text, text, jsonb, integer, text, jsonb) to anon, authenticated;
 
 -- ---------- Moving earlier site map grants over to access levels (added 2026-11-21) ----------
 -- The first version had a separate Dive site admin switch (site_map_admins) and per-rating grants
