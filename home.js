@@ -38,7 +38,8 @@
       ["Foundations", "Buoyancy, trim and propulsion from your very first class."],
       ["Certification", "Open Water and beyond, taught to the highest standards."],
       ["Experience", "Specialties, coaching sessions and dives that build real skill."],
-      ["Leadership & technical", "Rescue, divemaster and technical training for divers ready to go further."]
+      ["Technical & leadership", "Technical, rescue and divemaster training for divers ready to go further."],
+      ["Exploration", "Put it all to work exploring wrecks, caves and beyond, engaging the unknown with care and doing the least possible harm."]
     ],
 
     doTitle: "What we do",

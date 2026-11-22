@@ -63,7 +63,7 @@
 .home-more a { color: #8fdbe2; font-weight: 700; }
 
 /* Progression: a descent line with depth markers. */
-.home-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; counter-reset: st; position: relative; }
+.home-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; counter-reset: st; position: relative; }
 .home-steps::before { content: ""; position: absolute; left: 0; right: 0; top: 23px; height: 3px; border-radius: 2px;
   background: linear-gradient(90deg, var(--shallows), var(--accent), var(--head-3)); }
 .home-steps li { counter-increment: st; position: relative; padding: 62px 14px 0 0; }
@@ -72,7 +72,7 @@
 .home-steps li:last-child::before { background: var(--accent); color: var(--accent-ink); }
 .home-steps b { display: block; font-family: var(--font-display); font-size: 21px; color: var(--ink); margin-bottom: 4px; }
 .home-steps span { color: var(--muted); line-height: 1.45; }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .home-steps { grid-template-columns: minmax(0, 1fr); }
   .home-steps::before { left: 22px; right: auto; top: 0; bottom: 0; width: 3px; height: auto; background: linear-gradient(180deg, var(--shallows), var(--accent), var(--head-3)); }
   .home-steps li { padding: 8px 0 18px 64px; min-height: 46px; }
