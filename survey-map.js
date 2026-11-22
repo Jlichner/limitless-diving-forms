@@ -299,28 +299,59 @@
       if (images[l.id]) images[l.id].setOpacity(v(l.id).visible ? v(l.id).opacity : 0);
     }
   }
-  // Picture layers. bounds is { north, south, east, west } in degrees (needs the map placed on the earth)
-  // or { x0, y0, x1, y1 } in feet on the survey.
-  function imageBounds(b) {
+  // Picture layers. bounds is { corners: [top-left, top-right, bottom-left] as [lat, lng], geo } (the picture can be
+  // turned; geo says whether the corners are real degrees, i.e. the map was placed on the earth, or feet on the plain
+  // survey map), or from the first version, north-up: { north, south, east, west } or { x0, y0, x1, y1 } in feet.
+  function imageCorners(b) {
     if (!b) return null;
-    if (b.north != null) return GEO ? L.latLngBounds([b.south, b.west], [b.north, b.east]) : null;
-    if (b.x0 != null) return L.latLngBounds([ll(b.x0, b.y0), ll(b.x1, b.y1), ll(b.x0, b.y1), ll(b.x1, b.y0)]);
+    if (Array.isArray(b.corners) && b.corners.length === 3) return !!b.geo === !!GEO ? b.corners.map(c => L.latLng(c[0], c[1])) : null;
+    if (b.north != null) return GEO ? [L.latLng(b.north, b.west), L.latLng(b.north, b.east), L.latLng(b.south, b.west)] : null;
+    if (b.x0 != null) return [ll(b.x0, b.y1), ll(b.x1, b.y1), ll(b.x0, b.y0)].map(c => L.latLng(c[0], c[1]));
     return null;
   }
+  // An image drawn between three corners, so it can be turned and stretched (Leaflet's own overlay stays north-up).
+  const TurnedImage = L ? L.Layer.extend({
+    initialize(url, corners, opts) { this._url = url; this._corners = corners; L.setOptions(this, opts); },
+    onAdd(map) {
+      const img = this._img = L.DomUtil.create("img", "leaflet-image-layer leaflet-zoom-hide sm-turned-img");
+      img.alt = ""; img.style.transformOrigin = "0 0"; img.style.left = "0"; img.style.top = "0";
+      if (!this.options.interactive) img.style.pointerEvents = "none"; else L.DomUtil.addClass(img, "leaflet-interactive");
+      img.onload = () => this._reset();
+      img.src = this._url;
+      this.getPane().appendChild(img);
+      map.on("zoomend viewreset", this._reset, this);
+      this._reset();
+    },
+    onRemove(map) { L.DomUtil.remove(this._img); this._img = null; map.off("zoomend viewreset", this._reset, this); },
+    setCorners(c) { this._corners = c; this._reset(); return this; },
+    getCorners() { return this._corners; },
+    getBounds() { return L.latLngBounds(this._corners.concat([L.latLng(this._corners[1].lat + this._corners[2].lat - this._corners[0].lat, this._corners[1].lng + this._corners[2].lng - this._corners[0].lng)])); },
+    setOpacity(o) { this.options.opacity = o; if (this._img) this._img.style.opacity = o; return this; },
+    naturalSize() { return this._img && this._img.naturalWidth ? [this._img.naturalWidth, this._img.naturalHeight] : null; },
+    _reset() {
+      const img = this._img, m = this._map;
+      if (!img || !m || !img.naturalWidth) return;
+      const [a, b, c] = this._corners.map(p => m.latLngToLayerPoint(p)), w = img.naturalWidth, h = img.naturalHeight;
+      img.style.width = w + "px"; img.style.height = h + "px";
+      img.style.transform = `matrix(${(b.x - a.x) / w},${(b.y - a.y) / w},${(c.x - a.x) / h},${(c.y - a.y) / h},${a.x},${a.y})`;
+      img.style.opacity = this.options.opacity == null ? 1 : this.options.opacity;
+    },
+  }) : null;
   function drawImages() {
     if (!S.map) return;
     Object.values(images).forEach(o => o.remove()); images = {};
     for (const l of S.layers) {
       if (l.kind !== "image" || !l.imageUrl) continue;
-      const bb = imageBounds(l.bounds);
-      if (!bb) continue;
+      const cs = imageCorners(l.bounds);
+      if (!cs) continue;
       const pane = "sm-i-" + l.id;
       if (!S.map.getPane(pane)) S.map.createPane(pane).style.zIndex = 300 + S.layers.indexOf(l);
-      images[l.id] = L.imageOverlay(l.imageUrl, bb, { pane, interactive: !!l.interactive }).addTo(S.map);
+      images[l.id] = new TurnedImage(l.imageUrl, cs, { pane, interactive: !!l.interactive }).addTo(S.map);
       if (l.onImage) l.onImage(images[l.id]);
     }
     applyViews();
   }
+  S.imageCorners = imageCorners;
   S.imageOverlay = id => images[id];
   S.redrawImages = drawImages;
 
