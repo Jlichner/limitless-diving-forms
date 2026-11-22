@@ -107,6 +107,10 @@ alter table public.student_profiles add column if not exists photo_path text not
 alter table public.student_profiles add column if not exists tech_access boolean not null default false;
 -- Dive log book switched on by hand for someone not (yet) registered for a class (added 2026-11-17).
 alter table public.student_profiles add column if not exists logbook_access boolean not null default false;
+-- Tools pages (Nitrox calculator, Diving physics): on for everyone unless an Instructor or Admin switches them
+-- off for a person in Records → Student accounts (added 2026-11-22). On by default so nobody loses access.
+alter table public.student_profiles add column if not exists nitrox_access boolean not null default true;
+alter table public.student_profiles add column if not exists physics_access boolean not null default true;
 alter table public.student_profiles drop constraint if exists student_profiles_address_parts;
 alter table public.student_profiles drop constraint if exists student_profiles_photo_own_folder;
 alter table public.student_profiles add constraint student_profiles_photo_own_folder
@@ -114,7 +118,7 @@ alter table public.student_profiles add constraint student_profiles_photo_own_fo
 alter table public.student_profiles add constraint student_profiles_address_parts
   check (length(street) <= 200 and length(city) <= 100 and length(state) <= 40 and length(zip) <= 20);
 
--- Only Instructors and Admins can switch Elements of tech diving or the dive log book on or off. A student
+-- Only Instructors and Admins can switch Elements of tech diving, the dive log book or the Tools pages on or off. A student
 -- saving their own details can't change them; new profiles start with both off.
 create or replace function public.protect_tech_access()
 returns trigger
@@ -123,7 +127,9 @@ as $$
 begin
   if not public.has_role('instructor') then
     if tg_op = 'INSERT' then new.tech_access := false; new.logbook_access := false;
+      new.nitrox_access := true; new.physics_access := true;
     else new.tech_access := old.tech_access; new.logbook_access := old.logbook_access;
+      new.nitrox_access := old.nitrox_access; new.physics_access := old.physics_access;
     end if;
   end if;
   return new;
@@ -206,7 +212,8 @@ returns table (
   id uuid, email text, full_name text, address text, phone text,
   emergency_name text, emergency_relationship text, emergency_phone text,
   certifications jsonb, created_at timestamptz, updated_at timestamptz, email_confirmed boolean,
-  photo_path text, role text, tech_access boolean, logbook_access boolean, logbook_auto boolean
+  photo_path text, role text, tech_access boolean, logbook_access boolean, logbook_auto boolean,
+  nitrox_access boolean, physics_access boolean
 )
 language plpgsql stable security definer set search_path = ''
 as $$
@@ -222,7 +229,8 @@ begin
            coalesce(p.logbook_access, false),
            -- the log book is on automatically: registered for a class (see my_logbook_access below)
            exists (select 1 from public.student_progress sp where sp.student_id = u.id)
-             or exists (select 1 from public.event_signups es where es.student_id = u.id and es.kind = 'class' and es.status = 'enrolled')
+             or exists (select 1 from public.event_signups es where es.student_id = u.id and es.kind = 'class' and es.status = 'enrolled'),
+           coalesce(p.nitrox_access, true), coalesce(p.physics_access, true)
     from auth.users u
     left join public.student_profiles p on p.id = u.id
     left join public.staff_roles r on r.user_id = u.id
@@ -317,6 +325,50 @@ as $$
 $$;
 revoke all on function public.my_tech_access() from public, anon;
 grant execute on function public.my_tech_access() to authenticated;
+
+-- ---------- Tools access: Nitrox calculator and Diving physics (added 2026-11-22) ----------
+-- On for everyone by default. Instructors and Admins switch a tool off (or back on) for one person from
+-- Records → Student accounts. tool is 'nitrox' or 'physics'. Makes their profile row if they don't have one yet.
+create or replace function public.set_tool_access(member uuid, tool text, allow boolean)
+returns boolean
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if not public.has_role('instructor') then
+    raise exception 'Only Instructors and Admins can change tools access' using errcode = '42501';
+  end if;
+  if tool not in ('nitrox', 'physics') then
+    raise exception 'Unknown tool' using errcode = '22023';
+  end if;
+  if not exists (select 1 from auth.users where id = member) then
+    raise exception 'No account found' using errcode = 'P0002';
+  end if;
+  if tool = 'nitrox' then
+    insert into public.student_profiles (id, nitrox_access) values (member, coalesce(allow, false))
+    on conflict (id) do update set nitrox_access = excluded.nitrox_access;
+  else
+    insert into public.student_profiles (id, physics_access) values (member, coalesce(allow, false))
+    on conflict (id) do update set physics_access = excluded.physics_access;
+  end if;
+  return coalesce(allow, false);
+end;
+$$;
+revoke all on function public.set_tool_access(uuid, text, boolean) from public, anon;
+grant execute on function public.set_tool_access(uuid, text, boolean) to authenticated;
+
+-- Which Tools pages you may open: {"nitrox": true, "physics": true}. Dive Masters and up always may.
+create or replace function public.my_tool_access()
+returns jsonb
+language sql stable security definer set search_path = ''
+as $$
+  select case when public.has_role('divemaster') then jsonb_build_object('nitrox', true, 'physics', true)
+    else jsonb_build_object(
+      'nitrox',  coalesce((select nitrox_access  from public.student_profiles where id = (select auth.uid())), true),
+      'physics', coalesce((select physics_access from public.student_profiles where id = (select auth.uid())), true))
+  end;
+$$;
+revoke all on function public.my_tool_access() from public, anon;
+grant execute on function public.my_tool_access() to authenticated;
 
 -- ---------- training progress the instructor shares with each student ----------
 create table if not exists public.student_progress (

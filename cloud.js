@@ -19,6 +19,8 @@
     role: "student",             // "student" | "divemaster" | "instructor" | "admin"
     instructor: false,           // role is Instructor or Admin
     techAccess: false,           // may open Elements of tech diving (switched on in their profile, or Instructor/Admin)
+    // Tools pages they may open: on unless an Instructor or Admin switched one off for them (Dive Masters and up always).
+    toolAccess: { nitrox: true, physics: true },
     ROLES: ["student", "divemaster", "instructor", "admin"],
     ROLE_NAMES: { student: "Student", divemaster: "Dive Master", instructor: "Instructor", admin: "Admin" },
     // True when the signed-in person's level is at least minRole.
@@ -26,13 +28,15 @@
     url, key,
     onChange(fn) { listeners.push(fn); },
     async refreshRole() {
-      C.role = "student"; C.instructor = false; C.techAccess = false;
+      C.role = "student"; C.instructor = false; C.techAccess = false; C.toolAccess = { nitrox: true, physics: true };
       if (!C.client || !C.user) { techLink(); return C.role; }
-      const [r, t] = await Promise.all([C.client.rpc("my_role"), C.client.rpc("my_tech_access")]);
+      const [r, t, k] = await Promise.all([C.client.rpc("my_role"), C.client.rpc("my_tech_access"), C.client.rpc("my_tool_access")]);
       if (!r.error && C.ROLES.includes(r.data)) C.role = r.data;
       C.instructor = C.can("instructor");
       // Before schema.sql is re-run there's no my_tech_access(): only Instructors and Admins get in then.
       C.techAccess = t.error ? C.instructor : t.data === true;
+      // Before schema.sql is re-run there's no my_tool_access(): the Tools stay open to everyone then.
+      if (!k.error && k.data && typeof k.data === "object") C.toolAccess = { nitrox: k.data.nitrox !== false, physics: k.data.physics !== false };
       techLink();
       return C.role;
     },
@@ -66,6 +70,9 @@
       const after = nav.querySelector('a[href="diving-physics.html"]') || nav.querySelector('a[href="account.html"]');
       if (after) after.insertAdjacentElement("afterend", a); else nav.appendChild(a);
     });
+    // Tools switched off for this person: hide their links (the pages themselves say so too, see members-only.js).
+    document.querySelectorAll('.pubnav a[href="nitrox.html"]').forEach(x => { x.hidden = !C.toolAccess.nitrox; });
+    document.querySelectorAll('.pubnav a[href="diving-physics.html"]').forEach(x => { x.hidden = !C.toolAccess.physics; });
   }
 
   function emit(event) { listeners.forEach(fn => { try { fn(event); } catch (e) { console.error(e); } }); }
@@ -84,7 +91,7 @@
       // Don't call Supabase inside this callback (it can deadlock); finish the work afterwards.
       setTimeout(async () => {
         if (first || (C.user && C.user.id) !== prev || event === "SIGNED_IN") await C.refreshRole();
-        if (!C.user) { C.role = "student"; C.instructor = false; C.techAccess = false; techLink(); }
+        if (!C.user) { C.role = "student"; C.instructor = false; C.techAccess = false; C.toolAccess = { nitrox: true, physics: true }; techLink(); }
         if (first) { first = false; C.loaded = true; resolveReady(C); }
         emit(event);
       }, 0);
