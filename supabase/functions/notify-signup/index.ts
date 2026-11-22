@@ -1,6 +1,8 @@
 // Limitless Diving: tell the instructor when someone joins an event or signs up for a class on an event's
 // information page (event.html), or asks for a class on Request a class (request.html).
-// Also tells Jamie (Telegram only) when the survey team sends a change to a site map for approval.
+// Also tells Jamie (Telegram only) when the survey team sends a change to a site map for approval,
+// and when someone makes a new account on the site ({ newAccount: id }, sent by the database itself from
+// the notify_new_account trigger on auth.users in schema.sql; checked with claim_new_account_notice).
 // Supabase Edge Function "notify-signup". Body: { id } for a sign-up, { request: id } for a request, or
 // { mapEdit: id } for a site map suggestion (survey-editor.js; claim_site_map_edit_notice in schema.sql).
 //
@@ -58,9 +60,43 @@ Deno.serve(async (req) => {
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
   const auth = req.headers.get("Authorization") || "";
   const apikey = req.headers.get("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-  if (!/^Bearer\s+\S+/.test(auth)) return reply(401, { error: "Please sign in first." });
-  let body: { id?: unknown; request?: unknown; mapEdit?: unknown };
+  let body: { id?: unknown; request?: unknown; mapEdit?: unknown; newAccount?: unknown };
   try { body = await req.json(); } catch { return reply(400, { error: "The request wasn't readable." }); }
+
+  // A new account on the site: the database sends { newAccount: id } when someone registers. Telegram only.
+  // The database answers once per new account, only within 15 minutes of sign-up, so repeats send nothing.
+  if (body.newAccount) {
+    const uid = String(body.newAccount);
+    if (!/^[0-9a-f-]{36}$/i.test(uid)) return reply(400, { error: "Which account?" });
+    const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const c = await fetch(`${SUPABASE_URL}/rest/v1/rpc/claim_new_account_notice`, {
+      method: "POST", headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_id: uid }),
+    });
+    if (!c.ok) { console.error("claim_new_account_notice", c.status, await c.text()); return reply(502, { error: "Couldn't read the account." }); }
+    const a = await c.json();
+    if (!a) return reply(200, { sent: false, reason: "Already sent." });
+    const TG_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") || "", TG_CHAT = Deno.env.get("TELEGRAM_CHAT_ID") || "";
+    if (!TG_TOKEN || !TG_CHAT) return reply(200, { sent: false, reason: "Telegram isn't set up." });
+    const at = new Date(String(a.created_at || Date.now()));
+    const whenText = (isNaN(at.getTime()) ? new Date() : at).toLocaleString("en-US", {
+      timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    });
+    const msg = ["🆕 New account on limitless-diving.com",
+      `Name: ${String(a.name || "").trim() || "(no name given)"}`,
+      `Email: ${a.email || "(none)"}`,
+      `When: ${whenText}`,
+      a.confirmed ? "" : "They still need to click the link in their confirmation email.",
+      `See them under Records → Student accounts: ${SITE}/index.html#staff`].filter(Boolean).join("\n");
+    const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT, text: msg, disable_web_page_preview: true }),
+    });
+    if (!r.ok) console.error("Telegram error", r.status, await r.text());
+    return reply(200, { sent: r.ok, telegram: r.ok });
+  }
+
+  if (!/^Bearer\s+\S+/.test(auth)) return reply(401, { error: "Please sign in first." });
   const isRequest = !!body.request, isMapEdit = !!body.mapEdit;
   const id = String(body.mapEdit || body.request || body.id || "");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return reply(400, { error: "Which sign-up?" });

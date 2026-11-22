@@ -1597,3 +1597,57 @@ begin
     drop table public.site_map_admins;
   end if;
 end $$;
+
+-- ---------- Telegram alert when someone makes a new account (added 2026-11-22) ----------
+-- When a row is added to auth.users, the database calls the notify-signup Edge Function with
+-- { newAccount: id } (through pg_net, after the sign-up is saved). The function asks
+-- claim_new_account_notice, which only the server key may call, for the name, email and time,
+-- once per account and only within 15 minutes of sign-up. A failed alert never blocks a sign-up.
+create extension if not exists pg_net;
+create table if not exists public.new_account_notices (
+  user_id     uuid primary key references auth.users (id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  notified_at timestamptz
+);
+alter table public.new_account_notices enable row level security;
+revoke all on public.new_account_notices from public, anon, authenticated;
+
+create or replace function public.claim_new_account_notice(p_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare u auth.users%rowtype;
+begin
+  update public.new_account_notices n set notified_at = now()
+    where n.user_id = p_id and n.notified_at is null and n.created_at > now() - interval '15 minutes';
+  if not found then return null; end if;
+  select * into u from auth.users where id = p_id;
+  return jsonb_build_object('kind', 'account', 'email', u.email::text, 'created_at', u.created_at,
+    'confirmed', u.email_confirmed_at is not null,
+    'name', coalesce((select nullif(p.full_name, '') from public.student_profiles p where p.id = p_id),
+                     u.raw_user_meta_data ->> 'full_name', ''));
+end $$;
+revoke all on function public.claim_new_account_notice(uuid) from public, anon, authenticated;
+grant execute on function public.claim_new_account_notice(uuid) to service_role;
+
+create or replace function public.notify_new_account()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  begin
+    insert into public.new_account_notices (user_id) values (new.id) on conflict (user_id) do nothing;
+    perform net.http_post(
+      url := 'https://tohabfygfsvcntarmfck.supabase.co/functions/v1/notify-signup',
+      body := jsonb_build_object('newAccount', new.id),
+      headers := jsonb_build_object('Content-Type', 'application/json'));
+  exception when others then
+    raise warning 'New account alert not sent: %', sqlerrm;
+  end;
+  return new;
+end $$;
+revoke all on function public.notify_new_account() from public, anon, authenticated;
+
+drop trigger if exists on_auth_user_created_notify on auth.users;
+create trigger on_auth_user_created_notify after insert on auth.users
+  for each row execute function public.notify_new_account();
