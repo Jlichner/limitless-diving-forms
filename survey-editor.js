@@ -59,12 +59,27 @@
 
   // Where a new line from feature f starts: an existing landmark, or a point to name first.
   function anchor(f, d) {
-    if (f.kind === "landmark") return { key: f.landmark, label: S.name(f.landmark), pre: null };
+    const at = f.kind === "segment" ? [f.x1, f.y1] : [f.x, f.y];   // where it is on the map, in feet
+    if (f.kind === "landmark") return { key: f.landmark, label: S.name(f.landmark), pre: null, at };
     const r = d.runs[f.run], next = r[f.index + 1];
-    if (next && (next.type === "SaveLandmark" || next.type === "SavedStake") && next.landmark) return { key: next.landmark, label: S.name(next.landmark), pre: null };
+    if (next && (next.type === "SaveLandmark" || next.type === "SavedStake") && next.landmark) return { key: next.landmark, label: S.name(next.landmark), pre: null, at };
     const label = f.kind === "segment" ? `End of line on ${S.runName(f.run)}` : describeFeature(f);
     const key = E.newId(d, "P");
-    return { key, label, pre: { op: "name_point", run: f.run, index: f.index, landmark: key, name: label } };
+    return { key, label, pre: { op: "name_point", run: f.run, index: f.index, landmark: key, name: label }, at };
+  }
+  // A line straight from where the new run starts to the point it ends at, when no lines have been typed in:
+  // fills the first row with that length and heading. Returns true when it filled it.
+  function fillStraight() {
+    const a = st.add, p = a && a.start.at, q = a && a.end && a.end.at;
+    if (!p || !q || ![...p, ...q].every(Number.isFinite) || !a.rows.every(r => rowState(r).empty)) return false;
+    const dx = q[0] - p[0], dy = q[1] - p[1], len = Math.hypot(dx, dy);
+    if (len < 0.1) return false;
+    let ft = Math.floor(len), inch = Math.round((len - ft) * 12);
+    if (inch === 12) { ft += 1; inch = 0; }
+    const ang = Math.round(((90 - Math.atan2(dy, dx) * 180 / Math.PI) % 360 + 360) % 360 * 10) / 10;
+    Object.assign(a.rows[0], { ft: String(ft), inch: inch ? String(inch) : "", angle: String(ang === 360 ? 0 : ang) });
+    a.filled = true;
+    return true;
   }
 
   // ----- adding a run of line -----
@@ -117,9 +132,10 @@
     return out;
   }
   function saveAdd() {
-    const ch = addChanges(true);
+    let ch = addChanges(true);
+    if (ch && !ch.length && fillStraight()) ch = addChanges(true);   // only the end point picked: go straight there
     if (!ch) { say("Fix the rows marked below first.", "bad"); return render(); }
-    if (!ch.length) { say("Add at least one line: its length and heading.", "bad"); return render(); }
+    if (!ch.length) { say(st.add.end ? "Add at least one line: its length and heading." : "Add at least one line: its length and heading, or pick the point it ends at to draw it straight there.", "bad"); return render(); }
     const r = E.apply(base().data, st.draft.concat(ch));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ch);
@@ -409,7 +425,9 @@
       if (f.layer && !isAdmin()) { say("Pick a point on the main survey.", "bad"); return render(); }
       const d = current().data, a = anchor(f, d);
       if (a.key === st.add.start.key) { say("That's where the line starts. Pick the point it ends at.", "bad"); return render(); }
-      st.add.end = a; st.add.pickingEnd = false; say(null); return render();
+      st.add.end = a; st.add.pickingEnd = false; say(null);
+      if (fillStraight()) say("Filled in a straight line between the two points. Change the length and heading if you measured them.", "ok");
+      return render();
     }
     if (st.mode === "confirm") return;
     if (f.layer && !isAdmin()) { st.sel = null; say("That line is in a rated layer. An Admin or Dive site admin changes it.", "bad"); return render(); }
