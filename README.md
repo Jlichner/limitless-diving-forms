@@ -98,6 +98,22 @@ Each person gets their own copy, so nobody sees anyone else's address. Up to 50 
 
 **If it says "Not sent":** open `https://tohabfygfsvcntarmfck.supabase.co/functions/v1/send-email` in a browser tab. `{"error":"Use POST."}` means the function is running fine. "Requested function was not found" means the name isn't exactly `send-email`. "Missing authorization header" or "Invalid JWT" means Verify JWT is still on. "BOOT_ERROR" or "WORKER_ERROR" means the pasted code didn't load, so paste it again and deploy. The function's **Logs** tab in Supabase shows the details of each send.
 
+### Deactivate, reactivate or delete an account
+
+Admins see an **Account** section at the bottom of each person in **Records → Student accounts**:
+
+- **Deactivate account** switches the login off. They can't sign in, and a sign-in they already have stops working within the hour. Everything on their account is kept, and the list shows a **Deactivated** badge.
+- **Reactivate account** switches it back on. They sign in with the same email and password as before.
+- **Delete account…** asks once more, then removes the account for good with everything tied to it (profile, photo, course progress, learning agreements, sign-ups, class requests, dive log, dive sites and site map photos). It can't be undone. The course record in this browser stays, just unlinked.
+
+Admins can't do this to their own account. It runs through the `manage-account` Edge Function, because only Supabase's service role may switch logins off or delete them.
+
+**Turning it on (one time, about 5 minutes):**
+
+1. **Edge Functions → Deploy a new function → Via Editor**. Name it exactly `manage-account`. Delete the sample code, paste everything from [`supabase/functions/manage-account/index.ts`](supabase/functions/manage-account/index.ts), and click **Deploy function**. No secrets to add: Supabase gives it the service role key by itself.
+2. **Turn off "Verify JWT"** for `manage-account` (open the function → **Details** → **Function configuration** → switch off **Enforce JWT verification** → **Save**). The function checks the sign-in and the Admin level itself.
+3. **Update the database:** run the latest `supabase/schema.sql` (the list then shows who is deactivated).
+
 To change the sender or reply address later, add the secrets `FROM_EMAIL` (for example `Jamie at Limitless Diving <jamie@limitless-diving.com>`) and `REPLY_TO`. The sender must be on the domain verified in Resend.
 
 ### Learning agreements students sign online
