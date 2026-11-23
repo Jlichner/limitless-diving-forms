@@ -141,7 +141,7 @@
     for (const s of geo.segments) if (s.kind === "surveyed" || s.kind === "marina") ft += lineFeet(d.runs[s.run][s.index]);
     const named = geo.landmarks.filter(l => l.icon && l.icon !== MOORING).length;
     main.querySelector("#sm-stats").innerHTML = `
-      <div><b>${Math.round(ft).toLocaleString()}</b><span>feet of line surveyed (${(ft * 0.3048 / 1000).toFixed(1)} km)</span></div>
+      <div><b>${Math.round(ft).toLocaleString()}</b><span>feet of line surveyed (${(ft / 5280).toFixed(2)} miles)</span></div>
       <div><b>${named}</b><span>landmarks</span></div><div><b>${geo.stakes.filter(s => s.kind === "stake").length}</b><span>stakes</span></div>
       <div><b>${geo.tieoffs.length}</b><span>tie-offs</span></div>`;
     const legendIcons = [], seen = new Set();
