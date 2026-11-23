@@ -120,7 +120,7 @@
       <div id="sm-setup"></div>
       <section class="panel" aria-labelledby="sm-key-h"><h2 id="sm-key-h" class="sec">Map key</h2><ul class="sm-key" id="sm-key"></ul></section>
       <section class="panel dm-list-panel" aria-labelledby="sm-list-h"><h2 id="sm-list-h" class="sec">Landmarks</h2><ul class="dm-list" id="sm-list"></ul></section>
-      <p class="nx-note" id="sm-credit"></p>`;
+      <p class="nx-note" id="sm-credit" style="white-space:pre-line"></p>`;
     main.querySelectorAll("[data-layer]").forEach(cb => cb.addEventListener("change", () => toggle(cb.dataset.layer, cb.checked)));
     main.querySelector("#sm-fit").addEventListener("click", fit);
     main.querySelector("#sm-kml").addEventListener("click", downloadKml);
