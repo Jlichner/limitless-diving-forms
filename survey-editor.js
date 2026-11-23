@@ -32,7 +32,7 @@
   }
   // What edits apply to. Admins and Dive site admins edit the main survey and the rated layers together (runLayer
   // says which layer each run is in); the survey team's suggestions are for the main survey only.
-  const base = () => isAdmin() ? S.combine(S.data) : { data: S.data, runLayer: {} };
+  const base = () => isAdmin() ? S.combine(S.data) : { data: S.data, runLayer: null };
   const current = () => E.apply(base().data, st.draft);   // the map with the draft applied
 
   // ----- previewing on the map -----
@@ -41,7 +41,8 @@
     if (st.review) { S.show(st.review.data, { base: S.data }); S.select(null); if (st.review.focus) { st.review.focus = false; S.focusChanges(); } return; }
     const changes = st.draft.concat(st.mode === "add" && !st.add.pickingEnd ? addChanges(false) : []);
     const b = base(), r = E.apply(b.data, changes);
-    S.show(r.data, { base: b.data, runLayer: b.runLayer });
+    // Admins edit with the layers in the data; for the survey team the map adds the rated lines on top as usual.
+    S.show(r.data, b.runLayer ? { base: b.data, runLayer: b.runLayer } : { base: b.data });
     const err = panel.querySelector("#se-preview-err");
     if (err) { err.hidden = !r.error; err.textContent = r.error ? "The preview stops here: " + r.error : ""; }
     S.select(st.mode === "idle" ? st.sel : null);
