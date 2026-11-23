@@ -281,7 +281,7 @@
   // ----- layers -----
   function setLayers(list) {
     S.layers = (list || []).slice().sort((a, b) => (a.sort || 0) - (b.sort || 0));
-    for (const l of S.layers) if (!S.view[l.id]) S.view[l.id] = { visible: !l.hiddenAtStart, opacity: l.opacity == null ? 1 : Number(l.opacity) };
+    for (const l of S.layers) if (!S.view[l.id]) S.view[l.id] = { visible: l.kind !== "image" && !l.hiddenAtStart, opacity: l.opacity == null ? 1 : Number(l.opacity) };
     show(S.shown && S.editing ? S.shown : S.data, S.lastOpts || {});
     drawImages();
   }

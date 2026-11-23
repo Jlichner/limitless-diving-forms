@@ -17,7 +17,7 @@
   if (!S || !S.map || !L) return;
   const esc = S.esc, site = S.site;
   const box = document.getElementById("sm-layers"), setupBox = document.getElementById("sm-setup");
-  const VIEW = "ld-sitemap-view-" + site;
+  const VIEW = "ld-sitemap-view2-" + site;
   const cloud = () => !!(C && C.available);
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
   const RANK = { green: 0, blue: 1, black: 2, "double-black": 3 };
