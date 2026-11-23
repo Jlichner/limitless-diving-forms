@@ -17,7 +17,7 @@
   if (!S || !S.map || !L) return;
   const esc = S.esc, site = S.site;
   const box = document.getElementById("sm-layers"), setupBox = document.getElementById("sm-setup");
-  const VIEW = "ld-sitemap-view-" + site;
+  const VIEW = "ld-sitemap-view2-" + site;
   const cloud = () => !!(C && C.available);
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
   const RANK = { green: 0, blue: 1, black: 2, "double-black": 3 };
@@ -69,7 +69,6 @@
   function rows() {
     const out = [];
     if (S.geoRef()) out.push({ id: "satellite", name: "Satellite pictures", hint: "Esri World Imagery" });
-    if (S.geoRef()) (S.WEB_LAYERS || []).forEach(w => out.push(w));
     for (const l of st.layers.filter(l => l.kind === "image")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note,
       hint: !l.imageUrl ? "Picture not added yet" : !l.bounds ? "Not lined up yet" : l.bounds.north != null && !S.geoRef() ? "Shows once the map is placed on the earth" : "" });
     out.push({ id: "survey", name: "Survey lines", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
