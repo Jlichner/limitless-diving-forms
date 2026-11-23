@@ -11,7 +11,7 @@
     "place": "Alexandria Bay, New York (St. Lawrence River)",
     "subtitle": "A project of Bonnie Castle Resort, All About Scuba, Blue Foot Diving, and Northeast Underwater Explorers",
     "credit": "©2026 Jamie M Lichner",
-    "creditText": "Surveyed by Ben Rother, Brian Chu, Christian Lundkvist, Doug Dwyer, Jamie Lichner, JP Vanier, Lisa Goodlin, Mike Burr, Scott Fuller, Stephanie Yang, Michael Hunt, Bob Sherwood, Lauren Palmateer. Map web program by Jamie Lichner with inspiration from Stephanie Yang and Michael Hunt.\n©2026 Jamie M Lichner.",
+    "creditText": "Surveyed by Ben Rother, Brian Chu, Christian Lundkvist, Doug Dwyer, Jamie Lichner, JP Vanier, Lisa Goodlin, Mike Burr, Scott Fuller, Stephanie Yang, Michael Hunt, Bob Sherwood, Lauren Palmateer. Map web program by Jamie Lichner with inspiration from Stephanie Yang (who developed version 1) and Michael Hunt.\n©2026 Jamie M Lichner.",
     "version": "v1.1 September 2021",
     "surveyors": [
       "Ben Rother",
