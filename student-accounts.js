@@ -3,7 +3,7 @@
    Students sign up on account.html. Staff sign in here, and what they see depends on their level:
      Dive Master  every student account (contact, emergency contact, certifications), read only
      Instructor   also links accounts to the Students tab, shares course progress and publishes the calendar
-     Admin        also gives and removes staff roles
+     Admin        also gives and removes staff roles, and deactivates, reactivates or deletes accounts
    Supabase row-level security (supabase/schema.sql) enforces the same levels. Load after app.js and cloud.js. */
 (function () {
   "use strict";
@@ -329,7 +329,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     if (!list.length) return `<li class="meta" style="padding:8px 10px">${(v.members || []).length ? "No matches." : "No one has registered yet."}</li>`;
     return list.map(a => `<li><button data-sa="dpick" data-acc="${esc(a.id)}" class="dir-item${a.id === v.dsel ? " sel" : ""}"${a.id === v.dsel ? ' aria-current="true"' : ""}>
         ${avatar(a, "photo-xs")}<span class="dir-txt"><span class="nm">${esc(a.full_name || "No name yet")}</span>
-        <span class="meta">${esc(a.phone || a.email || "")}</span></span>${(a.role || "student") !== "student" ? `<span class="sa-badge lvl">${esc(roleName(a.role))}</span>` : ""}</button></li>`).join("");
+        <span class="meta">${esc(a.phone || a.email || "")}</span></span>${a.deactivated ? `<span class="sa-badge wait">Deactivated</span>` : ""}${(a.role || "student") !== "student" ? `<span class="sa-badge lvl">${esc(roleName(a.role))}</span>` : ""}</button></li>`).join("");
   }
   function countText() { return dirMatches().length + " of " + (v.members || []).length + " registered"; }
   function telLink(n) { const d = String(n || "").replace(/[^\d+]/g, ""); return d.length >= 7 ? `<a href="tel:${L().esc(d)}">${L().esc(n)}</a>` : L().esc(n || ""); }
@@ -340,7 +340,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     const enrolled = p ? L().state.enrollments.filter(e => e.studentId === p.id && L().COURSES[e.course]) : [];
     return `<div class="rec-head"><div class="who dir-head">${avatar(acc, "photo-md")}<div><span class="eyebrow">${(acc.role || "student") === "student" ? "Registered student" : esc(roleName(acc.role))}</span>
         <h1>${esc(acc.full_name || "No name yet")}</h1>
-        <span class="sub">${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span> `}${acc.updated_at ? "Updated " + esc(fmtDate(String(acc.updated_at).slice(0, 10))) : ""}</span></div></div></div>
+        <span class="sub">${acc.deactivated ? `<span class="sa-badge wait">Deactivated</span> ` : ""}${acc.email_confirmed ? "" : `<span class="sa-badge wait">Email not confirmed</span> `}${acc.updated_at ? "Updated " + esc(fmtDate(String(acc.updated_at).slice(0, 10))) : ""}</span></div></div></div>
       <div class="dir-actions">${acc.phone ? `<a class="btn primary" href="tel:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Call</a><a class="btn" href="sms:${esc(String(acc.phone).replace(/[^\d+]/g, ""))}">Text</a>` : ""}
         ${acc.email ? `<a class="btn" href="mailto:${esc(acc.email)}" data-email-to="${esc(acc.email)}" data-email-name="${esc(acc.full_name || "")}">Email</a>` : ""}
         <button class="btn" data-sa="dcopy" data-acc="${esc(acc.id)}">Copy contact</button></div>
@@ -357,7 +357,49 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       <h2 class="sec">Course records</h2>
       ${p ? `<p class="hint">${enrolled.length ? enrolled.map(e => esc(L().COURSES[e.course].name)).join(", ") : "No courses yet"} · <button class="linkbtn" data-sa="open" data-id="${esc(p.id)}">Open ${esc(p.name || "their")} record</button></p>`
         : `<p class="hint">Not linked to a course record in this browser yet.${C().can("instructor") ? "" : " An Instructor can link it."}</p>`}
-      ${C().can("instructor") && !p ? linkBlock(acc) : ""}`;
+      ${C().can("instructor") && !p ? linkBlock(acc) : ""}
+      ${accountBlock(acc)}`;
+  }
+  // Deactivate, reactivate or delete the account (Admins only, never their own), through the
+  // manage-account Edge Function (supabase/functions/manage-account), which holds the service role key.
+  function accountBlock(acc) {
+    const { esc } = L(), c = C();
+    if (!c.can("admin")) return "";
+    const h = `<h2 class="sec">Account</h2>`, name = esc(acc.full_name || acc.email || "this member");
+    if (c.user && acc.id === c.user.id) return `${h}<p class="hint">This is your own account. Another Admin can deactivate or delete it.</p>`;
+    const busy = v.acctBusy === acc.id ? " disabled" : "";
+    if (v.delAsk === acc.id) return `${h}<div class="acct-note bad" role="alert"><p style="margin:0 0 6px"><b>Delete ${name}'s account for good?</b></p>
+        <p style="margin:0 0 6px">This can't be undone. It removes their login, profile and photo, course progress, learning agreements (signed ones too),
+        sign-ups, class requests, dive log, dive sites and site map photos. Print anything you need to keep first.
+        To stop them signing in but keep everything, choose Deactivate instead.</p>
+        <div class="row-actions"><button class="btn danger" data-sa="acctdel" data-acc="${esc(acc.id)}"${busy}>${v.acctBusy === acc.id ? "Deleting…" : "Yes, delete for good"}</button>
+        <button class="btn" data-sa="acctdelno"${busy}>Cancel</button></div></div>`;
+    const off = acc.deactivated === true;
+    return `${h}<p class="hint tech-state"><span class="sa-badge${off ? " wait" : ""}">${off ? "Deactivated" : "Active"}</span>
+        ${off ? "They can't sign in. Everything on their account is kept until you reactivate or delete it." : "They can sign in and use the site."}</p>
+      <div class="row-actions">${off
+        ? `<button class="btn primary" data-sa="acctset" data-do="reactivate" data-acc="${esc(acc.id)}"${busy}>Reactivate account</button>`
+        : `<button class="btn" data-sa="acctset" data-do="deactivate" data-acc="${esc(acc.id)}"${busy}>Deactivate account</button>`}
+        <button class="btn danger" data-sa="acctdelask" data-acc="${esc(acc.id)}"${busy}>Delete account…</button></div>
+      ${off ? "" : `<p class="hint">Deactivating signs them out within the hour and stops them signing in again until you reactivate it.</p>`}
+      ${typeof acc.deactivated !== "boolean" ? `<p class="hint">Run the latest <code>supabase/schema.sql</code> so this list shows who is deactivated.</p>` : ""}`;
+  }
+  async function manageAccount(acc, action) {
+    v.acctBusy = acc.id; rerender();
+    let res, err;
+    try { res = await C().client.functions.invoke("manage-account", { body: { action, member: acc.id } }); err = res.error; }
+    catch (x) { err = x; }
+    v.acctBusy = null;
+    if (!err && !(res && res.data && res.data.done === action)) err = { message: "The manage-account function in Supabase isn't the Limitless Diving code. Paste it again from supabase/functions/manage-account/index.ts and deploy." };
+    if (err) {
+      let j = null;
+      try { if (err.context && typeof err.context.json === "function") j = await err.context.json(); } catch (x) { /* not JSON */ }
+      const why = j && j.error ? j.error
+        : /FetchError/.test(String(err.name || "")) ? "The site couldn't reach the manage-account function in Supabase. Check it's deployed with that exact name and Verify JWT is off."
+        : C().explain(err);
+      rerender(); L().toast("Not done. " + why); return false;
+    }
+    return true;
   }
   // Elements of tech diving (tech-diving.html): Instructors and Admins switch it on per person.
   function techBlock(acc) {
@@ -561,7 +603,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
       case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast("Still a student account. Ask an Admin for a staff role."); } break;
       case "refresh": setNote(""); loadAccounts(); break;
       case "sitemaps": v.dview = v.dview === "sitemaps" && !b.closest("#record") ? null : "sitemaps"; rerender(); break;
-      case "dpick": v.dsel = b.dataset.acc; v.dview = null; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
+      case "dpick": v.dsel = b.dataset.acc; v.dview = null; v.delAsk = null; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
       case "demail": {
         const to = dirMatches().filter(a => a.email).map(a => ({ name: a.full_name || "", email: a.email }));
         const lvl = { student: "Students", divemaster: "Dive Masters", instructor: "Instructors", admin: "Admins" }[v.dlevel];
@@ -625,6 +667,31 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         (v.members || []).concat(v.accounts || [], [acc]).forEach(a => { if (a.id === acc.id) a.logbook_access = allow; });
         setNote(""); rerender();
         L().toast(allow ? "Dive log book is on for " + (acc.full_name || "them") : "Dive log book switched off for " + (acc.full_name || "them") + (acc.logbook_auto ? " (still on: registered for a class)" : ""));
+        break;
+      }
+      case "acctset": {
+        if (!acc) break;
+        const action = b.dataset.do;
+        if (!(await manageAccount(acc, action))) break;
+        (v.members || []).concat(v.accounts || [], [acc]).forEach(a => { if (a.id === acc.id) a.deactivated = action === "deactivate"; });
+        rerender();
+        L().toast((acc.full_name || acc.email || "The account") + (action === "deactivate" ? " is deactivated. They can't sign in until you reactivate it." : " is active again. They can sign in as before."));
+        break;
+      }
+      case "acctdelask": if (acc) { v.delAsk = acc.id; rerender(); } break;
+      case "acctdelno": v.delAsk = null; rerender(); break;
+      case "acctdel": {
+        if (!acc || v.delAsk !== acc.id) break;
+        if (!(await manageAccount(acc, "delete"))) break;
+        v.delAsk = null;
+        // Keep the course record in this browser, just no longer linked to an account.
+        people().filter(p => p.accountId === acc.id).forEach(p => { p.accountId = ""; });
+        L().save();
+        v.members = (v.members || []).filter(a => a.id !== acc.id);
+        v.accounts = (v.accounts || []).filter(a => a.id !== acc.id);
+        if (v.dsel === acc.id) v.dsel = null;
+        rerender();
+        L().toast((acc.full_name || acc.email || "The account") + " was deleted.");
         break;
       }
       case "share": {

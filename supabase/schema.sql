@@ -213,7 +213,8 @@ returns table (
   emergency_name text, emergency_relationship text, emergency_phone text,
   certifications jsonb, created_at timestamptz, updated_at timestamptz, email_confirmed boolean,
   photo_path text, role text, tech_access boolean, logbook_access boolean, logbook_auto boolean,
-  nitrox_access boolean, physics_access boolean
+  nitrox_access boolean, physics_access boolean,
+  deactivated boolean   -- switched off by an Admin (manage-account Edge Function); added 2026-11-22
 )
 language plpgsql stable security definer set search_path = ''
 as $$
@@ -230,7 +231,8 @@ begin
            -- the log book is on automatically: registered for a class (see my_logbook_access below)
            exists (select 1 from public.student_progress sp where sp.student_id = u.id)
              or exists (select 1 from public.event_signups es where es.student_id = u.id and es.kind = 'class' and es.status = 'enrolled'),
-           coalesce(p.nitrox_access, true), coalesce(p.physics_access, true)
+           coalesce(p.nitrox_access, true), coalesce(p.physics_access, true),
+           coalesce(u.banned_until > now(), false)
     from auth.users u
     left join public.student_profiles p on p.id = u.id
     left join public.staff_roles r on r.user_id = u.id
