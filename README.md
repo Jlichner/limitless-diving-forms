@@ -116,6 +116,16 @@ Admins can't do this to their own account. It runs through the `manage-account` 
 
 To change the sender or reply address later, add the secrets `FROM_EMAIL` (for example `Jamie at Limitless Diving <jamie@limitless-diving.com>`) and `REPLY_TO`. The sender must be on the domain verified in Resend.
 
+### Email groups and opting out
+
+**Business → Email groups** (Instructors and Admins) emails members about an exploration trip, a new class or news. Tick groups (everyone, a level, a calendar entry they signed up for, a course record, a certification they hold, a site maps level), then tick or untick single people. Records → Student accounts → **Email this list** opens it with that list picked. Each person gets their own copy; `{name}` in the message becomes their first name, and every email ends with that person's own unsubscribe link (plus the List-Unsubscribe header, so Gmail and others show an Unsubscribe button).
+
+Members choose in the **Student portal → Email from Limitless Diving → Opt out of email** (and can turn it back on there). The unsubscribe link opens `unsubscribe.html`. Anyone who opted out, or hasn't confirmed their email, is left out automatically. Opting out never stops personal emails such as learning agreements.
+
+Resend's free plan allows 100 emails a day, so bigger lists go out 50 at a time and, if the day's limit runs out, the rest are kept in that browser with a **Send the rest** button.
+
+Setup: run the latest `supabase/schema.sql` (adds `email_prefs`, `email_audience()`, `promo_recipients()`, `set_email_opt_out()`, `email_unsubscribe()`), then paste the new `supabase/functions/send-email/index.ts` into the `send-email` function and deploy it (Verify JWT stays off).
+
 ### Learning agreements students sign online
 
 In **Business → Scheduling**, once a learning agreement is made for a student, step **4 · Student signs it** has **Send to <name> to sign**. It puts the agreement in the student's **Student portal** and opens a ready-written email (from jamie@limitless-diving.com) with a link straight to it. The student logs in, reads it, types their name (and a parent or guardian's name if they're under 18), ticks the box and presses **Sign**. Then they can print it or save it as a PDF. Scheduling shows "Waiting for signature" and then "Signed", and its preview and printout show the signature.

@@ -608,7 +608,10 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         const to = dirMatches().filter(a => a.email).map(a => ({ name: a.full_name || "", email: a.email }));
         const lvl = { student: "Students", divemaster: "Dive Masters", instructor: "Instructors", admin: "Admins" }[v.dlevel];
         if (!to.length) { L().toast("No one in the list has an email address"); break; }
-        if (window.LDEmail) window.LDEmail.open({ to, about: lvl ? "all " + lvl.toLowerCase() : v.dq.trim() ? "the people found" : "everyone registered" });
+        const about = lvl ? "all " + lvl.toLowerCase() : v.dq.trim() ? "the people found" : "everyone registered";
+        // A whole list goes through Email groups, which leaves out anyone who opted out and adds unsubscribe links.
+        if (window.LDEmailGroups) window.LDEmailGroups.preset(dirMatches().map(a => a.id), about);
+        else if (window.LDEmail) window.LDEmail.open({ to, about });
         break;
       }
       case "dcopy": {

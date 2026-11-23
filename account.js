@@ -24,6 +24,7 @@
   // view.auth: "signin" | "signup" | "forgot" | "recover" (set a new password after the email link)
   const view = { auth: "signin", note: "", noteKind: "", busy: false, vals: {} };  // vals: what was typed in the sign-in form (not passwords)
   let profile = null, progress = [], classes = [], agreements = [], signups = [], loadError = "", lastUser = null;
+  let optOut = null;   // opted out of group emails (null: not known yet, or email groups not set up in Supabase)
   // The agreement being read (from the email link, account.html#agreement=<id>, or "Read and sign").
   function hashAgreement() { const m = /^#agreement=([^&]+)$/.exec(location.hash); return m ? decodeURIComponent(m[1]) : ""; }
   view.agree = hashAgreement();
@@ -193,6 +194,12 @@
         <section class="panel"><h2 class="sec">Upcoming events</h2>
           ${upcoming.length ? `<ul class="acct-classes">${upcoming.slice(0, 6).map(k => classCard(k, mineIds.has(k.id))).join("")}</ul>` : `<p class="hint">Nothing is scheduled right now.</p>`}
           <p class="hint">Click one for its details, to join or to sign up. <a href="classes.html">See the full class calendar</a></p></section>
+        ${optOut === null ? "" : `<section class="panel acct-mail" id="email-prefs"><h2 class="sec">Email from Limitless Diving</h2>
+          ${optOut ? `<p class="hint"><b>You've opted out</b> of emails about exploration trips, new classes and news.</p>
+            <div class="row-actions"><button class="btn" data-act="mail-in"${view.mailBusy ? " disabled" : ""}>${view.mailBusy ? "Saving…" : "Turn these emails back on"}</button></div>`
+          : `<p class="hint">Now and then we email about exploration trips, new classes and news.</p>
+            <div class="row-actions"><button class="btn" data-act="mail-out"${view.mailBusy ? " disabled" : ""}>${view.mailBusy ? "Saving…" : "Opt out of email"}</button></div>`}
+          <p class="hint">Either way, you'll still get emails about your own classes, learning agreements and account.</p></section>`}
       </div></div>`;
   }
 
@@ -303,13 +310,15 @@
   async function loadAll() {
     const C = window.LDCloud, sb = C.client, uid = C.user.id;
     loadError = "";
-    const [p, pr, cl, ag, su] = await Promise.all([
+    const [p, pr, cl, ag, su, mo] = await Promise.all([
       sb.from("student_profiles").select("*").eq("id", uid).maybeSingle(),
       sb.from("student_progress").select("*").eq("student_id", uid).order("updated_at", { ascending: false }),
       sb.from("classes").select("*"),
       sb.from("agreements").select("*").eq("student_id", uid).order("sent_at", { ascending: false }),
-      sb.from("event_signups").select("class_id,status").eq("student_id", uid)
+      sb.from("event_signups").select("class_id,status").eq("student_id", uid),
+      sb.rpc("my_email_opt_out").then(r => r, err => ({ error: err }))
     ]);
+    optOut = mo.error ? null : mo.data === true;
     signups = su.error ? [] : su.data || [];
     agreements = ag.error ? [] : ag.data || [];
     if (p.error) loadError = "Your details couldn't be loaded: " + C.explain(p.error);
@@ -327,6 +336,8 @@
     classes = cl.error ? [] : (cl.data || []).map(k => Object.assign({}, k, { dates: (Array.isArray(k.dates) ? k.dates : []).filter(x => G.parse(x)).sort() }))
       .sort((a, b) => (G.firstDate(a.dates) || "9999").localeCompare(G.firstDate(b.dates) || "9999"));
     render();
+    // From the unsubscribe page: show the email choice.
+    if (location.hash === "#email-prefs") { const el = document.getElementById("email-prefs"); if (el) el.scrollIntoView({ block: "center" }); }
   }
   function profileRow() {
     const clean = (s, n) => String(s || "").trim().slice(0, n);
@@ -359,8 +370,20 @@
       case "agr-back": openAgreement(""); break;
       case "agr-print": window.print(); break;
       case "rm-cert": profile.certifications.splice(Number(b.dataset.i), 1); render(); dirty(); break;
+      case "mail-out": case "mail-in": setMail(b.dataset.act === "mail-out"); break;
     }
   });
+  // Opt out of (or back in to) the group emails sent from Business → Email groups.
+  async function setMail(out) {
+    const C = window.LDCloud;
+    view.mailBusy = true; render();
+    let res;
+    try { res = await C.client.rpc("set_email_opt_out", { opt_out: out }); } catch (err) { res = { error: err }; }
+    view.mailBusy = false;
+    if (res.error) { render(); toast("Not saved: " + C.explain(res.error)); return; }
+    optOut = res.data === true; render();
+    toast(optOut ? "You've opted out of trip and class emails" : "Trip and class emails are back on");
+  }
   function openAgreement(id) {
     view.agree = id || ""; view.signName = null; view.signGuardian = ""; setNote("");
     try { history.replaceState(null, "", id ? "#agreement=" + encodeURIComponent(id) : location.pathname + location.search); } catch (e) { /* ignore */ }
@@ -462,7 +485,7 @@
     if (event === "PASSWORD_RECOVERY") { view.auth = "recover"; setNote(""); render(); return; }
     const uid = C.user && C.user.id;
     if (uid !== lastUser) {
-      lastUser = uid; profile = null; progress = []; classes = []; agreements = []; signups = [];
+      lastUser = uid; profile = null; progress = []; classes = []; agreements = []; signups = []; optOut = null;
       render();
       if (uid) { setNote(""); try { await loadAll(); } catch (err) { loadError = C.explain(err); profile = profile || blankProfile(uid); render(); } }
     }

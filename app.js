@@ -375,7 +375,7 @@
   // Instructors and Admins. Staff log in with Admin Log in (student-accounts.js, cloud.js). When online logins
   // aren't set up (no supabase-config.js values), everything stays open, as before.
   const RECORD_MODES = ["students", "catalog"];
-  const BUSINESS_MODES = ["classes", "scheduling", "invoices", "accounting", "program"];
+  const BUSINESS_MODES = ["classes", "scheduling", "emailgroups", "invoices", "accounting", "program"];
   function minRoleFor(mode) {
     if (BUSINESS_MODES.includes(mode)) return "instructor";
     if (RECORD_MODES.includes(mode) || isCourse(mode)) return "divemaster";
@@ -411,7 +411,7 @@
       ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"], ["sitemaps", "Site maps"]]],
       ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"], ["lakehydra", "Lake Hydra"]]],
       allowed("divemaster") && ["Records", [["students", "Student accounts"]].concat(window.LDCatalogPage ? [["catalog", "Courses"]] : [])],
-      allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["invoices", "Invoices"], ["accounting", "Accounting"], ["program", "Settings"]]]
+      allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["emailgroups", "Email groups"], ["invoices", "Invoices"], ["accounting", "Accounting"], ["program", "Settings"]]]
     ].filter(Boolean);
     // A catalog course without its own nav entry lights up "Courses".
     const on = (m) => view.mode === m || (m === "catalog" && isCourse(view.mode) && COURSES[view.mode].basic);
@@ -463,6 +463,12 @@
       // Classes set up once (course, fees, deposit, defaults), then added to the calendar (class-setup.js).
       main.className = "shell";
       main.innerHTML = window.LDClassSetup.render();
+      return;
+    }
+    if (view.mode === "emailgroups" && window.LDEmailGroups) {
+      // Email members or groups of members about a trip, a new class or news (email-groups.js).
+      main.className = "shell full";
+      main.innerHTML = window.LDEmailGroups.render();
       return;
     }
     if (view.mode === "invoices" && window.LDInvoices) {
