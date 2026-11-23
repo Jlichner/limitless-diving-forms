@@ -409,7 +409,7 @@
       ["Classes", [["calendar", "Calendar"], ["available", "Available classes"], ["coaching", "Coaching sessions"], ["hydra", "Lake Hydra tours"]]],
       tools.length && ["Tools", tools],
       ["Teams", [["dt6", "Dive Team 6"], ["divemap", "Dive map"], ["sitemaps", "Site maps"]]],
-      ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"]]],
+      ["Links", [["teamfinder", "Dive Team Finder"], ["packing", "Dive Packing Checklist"], ["gear", "Gear"], ["swag", "Swag"], ["lakehydra", "Lake Hydra"]]],
       allowed("divemaster") && ["Records", [["students", "Student accounts"]].concat(window.LDCatalogPage ? [["catalog", "Courses"]] : [])],
       allowed("instructor") && ["Business", [["classes", "Classes"], ["scheduling", "Scheduling"], ["emailgroups", "Email groups"], ["invoices", "Invoices"], ["accounting", "Accounting"], ["program", "Settings"]]]
     ].filter(Boolean);
@@ -418,7 +418,7 @@
     const LINKS = { account: "account.html", values: "core-values.html", available: "available-classes.html",
       coaching: "offering.html?id=coaching", hydra: "offering.html?id=hydra", nitrox: "nitrox.html", physics: "diving-physics.html", tech: "tech-diving.html", dt6: "dive-team-6.html", divemap: "dive-map.html", sitemaps: "site-maps.html",
       swag: "swag.html" };  // separate public pages. Swag: when the t-shirt shop is ready, move swag to EXTERNAL with the shop URL.
-    const EXTERNAL = { teamfinder: "https://www.diveteamfinder.com/", packing: "https://www.divepacking.com/", gear: "https://www.etsy.com/shop/TechdiveCreations" };  // other websites, new tab
+    const EXTERNAL = { teamfinder: "https://www.diveteamfinder.com/", packing: "https://www.divepacking.com/", gear: "https://www.etsy.com/shop/TechdiveCreations", lakehydra: "https://www.lakehydra.com/" };  // other websites, new tab
     const btn = ([m, l]) => EXTERNAL[m] ? `<a class="navbtn ext" href="${EXTERNAL[m]}" target="_blank" rel="noopener">${esc(l)} <span aria-hidden="true">↗</span><span class="sr-only"> (opens in a new tab)</span></a>` :
       LINKS[m] ? `<a class="navbtn ${m}" href="${LINKS[m]}">${esc(l)}</a>` : `<button class="navbtn${on(m) ? " active" : ""}" data-mode="${m}"${on(m) ? ' aria-current="page"' : ""}>${esc(l)}</button>`;
     nav.innerHTML = groups.map(([g, items]) => (g ? `<span class="nav-group">${esc(g)}</span>` : "") + items.map(btn).join("")).join("");
