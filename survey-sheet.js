@@ -350,6 +350,7 @@
     if (!out.aliases) out.aliases = {};
     ["id", "title", "place", "subtitle", "credit", "version", "surveyors"].forEach(k => { if (out[k] === undefined && s[k] !== undefined) out[k] = s[k]; });
     const gpsProblems = placeGps(out);
+    { const G = geometry(); if (out.georef && G && G.stampGeoref) G.stampGeoref(out); }
     const gr = out.georef;
     if (gr && gr.landmark && !out.landmarks[gr.landmark]) notes.push(`The map is placed on the satellite from "${gr.landmark}", which isn't in the sheet any more. Place it again on the website (Map setup).`);
     if (gr && gr.landmark2 && !out.landmarks[gr.landmark2]) notes.push(`The map's second GPS point "${gr.landmark2}" isn't in the sheet any more.`);

@@ -183,6 +183,7 @@
     const hadIn = k => { const l = S.layers.find(x => x.kind === "survey" && x.survey && x.survey.landmarks && k in x.survey.landmarks); return l ? l.id : ""; };
     for (const [k, v] of Object.entries(d.landmarks)) part(saver[k] ? owner(saver[k]) : hadIn(k)).landmarks[k] = v;
     const green = Object.assign({}, S.data, parts[""]), layers = [];
+    if (window.SurveyGeometry && window.SurveyGeometry.stampGeoref) window.SurveyGeometry.stampGeoref(green, Object.assign({}, d, { georef: green.georef }));
     for (const l of S.layers.filter(x => x.kind === "survey" && x.survey)) {
       const survey = Object.assign({}, l.survey, parts[l.id]);
       const was = JSON.stringify({ runs: l.survey.runs || {}, plan: l.survey.plan || [], landmarks: l.survey.landmarks || {}, runNames: l.survey.runNames || {} });
@@ -262,6 +263,7 @@
     st.busy = true; render();
     try {
       const summary = rv.kind === "edit" ? `${rv.edit.author_name || "A member"}: ${rv.edit.summary}` : (rv.version ? `Put back version ${rv.version}` : "Put back the original survey map");
+      if (rv.kind === "version" && !rv.data.georef && S.data.georef) rv.data = Object.assign({}, rv.data, { georef: S.data.georef });
       const { data, error } = await C.client.rpc("publish_site_map", { site, new_data: rv.data, expected_version: S.version, summary, edit_id: rv.kind === "edit" ? rv.edit.id : null });
       if (error) throw error;
       S.setPublished(rv.data, data, new Date().toISOString());

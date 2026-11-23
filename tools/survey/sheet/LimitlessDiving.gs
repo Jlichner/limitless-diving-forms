@@ -156,13 +156,16 @@
   // at is the landmark positions from compute(). Returns null until the landmark and coordinates are set.
   function georef(gr, at) {
     if (!gr || gr.lat === "" || gr.lon === "" || !isFinite(Number(gr.lat)) || !isFinite(Number(gr.lon))) return null;
-    const p = at && at[gr.landmark];
+    // at[...] is where the survey puts the landmark; gr.at / gr.at2 are where it was when the map was placed, kept
+    // for members who can't see the layer that landmark is in.
+    const known = v => Array.isArray(v) && v.length === 2 && v.every(Number.isFinite) ? v : null;
+    const p = (at && at[gr.landmark]) || known(gr.at);
     if (!p) return null;
     const R = 6378137, FT = 0.3048, rad = PI / 180, lat0 = Number(gr.lat), lon0 = Number(gr.lon), cos0 = Math.cos(lat0 * rad);
     const enu = (lat, lon) => [(lon - lon0) * rad * R * cos0, (lat - lat0) * rad * R];
     // ENU metres = k × (feet from the landmark), with k a complex number (turn and scale).
     let kr = null, ki = null, twoPoint = false;
-    const p2 = gr.landmark2 && at[gr.landmark2];
+    const p2 = gr.landmark2 && ((at && at[gr.landmark2]) || known(gr.at2));
     if (p2 && gr.lat2 !== "" && gr.lon2 !== "" && isFinite(Number(gr.lat2)) && isFinite(Number(gr.lon2))) {
       const vx = p2[0] - p[0], vy = p2[1] - p[1], [wx, wy] = enu(Number(gr.lat2), Number(gr.lon2)), d = vx * vx + vy * vy;
       if (d > 100) { kr = (wx * vx + wy * vy) / d; ki = (wy * vx - wx * vy) / d; twoPoint = true; }
@@ -222,7 +225,19 @@
     return null;
   }
 
-  const api = { compute, extras, radians, georef, parseCoord, parseLatLon };
+  // Note where the placing landmarks are (from data with every layer in it) on data.georef, so the map can still be
+  // placed for members who can't see the layer a landmark is in. Changes data; returns it.
+  function stampGeoref(data, full) {
+    const gr = data && data.georef;
+    if (!gr) return data;
+    const at = compute(full || data).at, r = v => [Math.round(v[0] * 1000) / 1000, Math.round(v[1] * 1000) / 1000];
+    const g2 = Object.assign({}, gr);
+    if (at[gr.landmark]) g2.at = r(at[gr.landmark]);
+    if (gr.landmark2 && at[gr.landmark2]) g2.at2 = r(at[gr.landmark2]); else delete g2.at2;
+    data.georef = g2;
+    return data;
+  }
+  const api = { compute, extras, radians, georef, stampGeoref, parseCoord, parseLatLon };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveyGeometry = api;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -888,6 +903,7 @@
     if (!out.aliases) out.aliases = {};
     ["id", "title", "place", "subtitle", "credit", "version", "surveyors"].forEach(k => { if (out[k] === undefined && s[k] !== undefined) out[k] = s[k]; });
     const gpsProblems = placeGps(out);
+    { const G = geometry(); if (out.georef && G && G.stampGeoref) G.stampGeoref(out); }
     const gr = out.georef;
     if (gr && gr.landmark && !out.landmarks[gr.landmark]) notes.push(`The map is placed on the satellite from "${gr.landmark}", which isn't in the sheet any more. Place it again on the website (Map setup).`);
     if (gr && gr.landmark2 && !out.landmarks[gr.landmark2]) notes.push(`The map's second GPS point "${gr.landmark2}" isn't in the sheet any more.`);

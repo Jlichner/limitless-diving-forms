@@ -428,6 +428,7 @@
       const mainChanged = JSON.stringify(src.green.runs) !== JSON.stringify(S.data.runs) || JSON.stringify(src.green.plan) !== JSON.stringify(S.data.plan);
       if (mainChanged) {
         const names = [...moving].map(r => S.runName(r) || src[target].runNames[r] || r);
+        G.stampGeoref(src.green, R.merge(order.map(id => src[id]).concat(others)));
         const { data: v, error } = await C.client.rpc("publish_site_map", { site, new_data: src.green, expected_version: S.version,
           summary: `Rated ${names.length} run${names.length === 1 ? "" : "s"} ${rating(target).name.toLowerCase()}: ${names.join(", ")}`.slice(0, 2000), edit_id: null });
         if (error) throw error;
@@ -548,7 +549,7 @@
         }
       }
       const data = Object.assign({}, S.data);
-      if (gr) data.georef = gr; else delete data.georef;
+      if (gr) { data.georef = gr; G.stampGeoref(data, Object.assign({}, S.combine(S.data).data, { georef: gr })); } else delete data.georef;
       const { data: ver, error } = await C.client.rpc("publish_site_map", { site, new_data: data, expected_version: S.version,
         summary: gr ? `Placed the map on the earth at ${S.name(gr.landmark)} (${gr.lat}, ${gr.lon}), declination ${gr.declination}°` : "Took the map off the earth", edit_id: null });
       if (error) throw error;
