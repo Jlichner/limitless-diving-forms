@@ -251,8 +251,41 @@
     main.querySelector("#sm-kml").hidden = !GEO;
     applyViews();
   }
+  // Each layer's lines are drawn on their own canvas, stacked by pane. A canvas covers the whole map, so the top one
+  // gets every tap: when nothing of its own is under the finger it hands the tap (and the hover) to the next visible
+  // canvas below, so lines and stakes on lower layers can still be picked.
+  const hitAt = (r, e) => {
+    const p = r._map.mouseEventToLayerPoint(e);
+    for (let o = r._drawFirst; o; o = o.next) if (o.layer.options.interactive && o.layer._containsPoint(p)) return true;
+    return false;
+  };
+  const LayeredCanvas = L.Canvas.extend({
+    _below() {
+      const z = el => Number(el && el.style.zIndex) || 0, mine = z(S.map && S.map.getPane(this.options.pane));
+      let best = null, bz = -Infinity;
+      for (const [name, r] of Object.entries(canvases)) {
+        if (r === this || !r._map || !r._container) continue;
+        const el = S.map.getPane(name), zz = z(el);
+        if (!el || el.style.display === "none" || zz >= mine || zz <= bz) continue;
+        best = r; bz = zz;
+      }
+      return best;
+    },
+    _onClick(e) {
+      const below = !hitAt(this, e) && this._below();
+      return below ? below._onClick(e) : L.Canvas.prototype._onClick.call(this, e);
+    },
+    _onMouseMove(e) {
+      L.Canvas.prototype._onMouseMove.call(this, e);
+      if (!this._map || this._hoveredLayer) return;
+      const below = this._below();
+      if (!below) return;
+      below._onMouseMove(e);
+      this._container.classList.toggle("leaflet-interactive", below._container.classList.contains("leaflet-interactive"));
+    },
+  });
   function canvasFor(pane) {
-    if (!canvases[pane]) canvases[pane] = L.canvas({ pane, padding: 0.5, tolerance: 7 });
+    if (!canvases[pane]) canvases[pane] = new LayeredCanvas({ pane, padding: 0.5, tolerance: 7 });
     return canvases[pane];
   }
   function paneFor(layerId) {
