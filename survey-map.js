@@ -300,10 +300,12 @@
 
   // Place the map on the earth, or take it off, when the published georef changes.
   function placeOnEarth(d) {
-    const gr = d && d.georef, key = JSON.stringify(gr || null);
+    // Placed from the survey with every layer this member can see, since the landmark may be on a rated line.
+    const full = d ? combine(d).data : d, gr = d && d.georef;
+    const g = gr ? G.georef(gr, G.compute(full).at) : null;
+    const key = JSON.stringify(gr || null) + "|" + JSON.stringify(g && [g.toXY(0, 0), g.turn]);
     if (key === geoKey && S.map) return false;
     geoKey = key;
-    const g = gr ? G.georef(gr, G.compute(d).at) : null;
     const changed = !!g !== !!GEO || !!g;
     GEO = g;
     if (S.map && changed) { S.map.remove(); S.map = null; }
@@ -315,6 +317,7 @@
   function setLayers(list) {
     S.layers = (list || []).slice().sort((a, b) => (a.sort || 0) - (b.sort || 0));
     for (const l of S.layers) if (!S.view[l.id]) S.view[l.id] = { visible: l.kind !== "image" && !l.hiddenAtStart, opacity: l.opacity == null ? 1 : Number(l.opacity) };
+    if (S.map && !S.editing) placeOnEarth(S.data);   // the placing landmark may be on a layer that just loaded
     show(S.shown && S.editing ? S.shown : S.data, S.lastOpts || {});
     drawImages();
   }
