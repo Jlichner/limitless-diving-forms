@@ -68,7 +68,7 @@
 
   const S = window.SurveyMap = {
     site, data: (window.SITE_MAPS || {})[site], version: 0, updatedAt: null, map: null, esc,
-    show, reset, setPicker, select, focusChanges, onPublished: fn => published.push(fn), setPublished,
+    show, reset, setPicker, combine: d => combine(d), select, focusChanges, onPublished: fn => published.push(fn), setPublished,
     layers: [], view: {}, setLayers, setLayerView, popupHooks: [], ll, geoRef: () => GEO, toXY: (lat, lng) => GEO ? GEO.toXY(lat, lng) : [lng, lat],
     runLayer: {}, RATINGS, ratingSvg, LEVELS, adminListeners: [], level: null, rank: 0,
     levelName: id => id === "admin" ? "Admin (everything)" : (LEVELS.find(l => l.id === id) || LEVELS[0]).label,
@@ -452,7 +452,9 @@ ${marks}
   function show(d0, opts) {
     opts = opts || {};
     S.lastOpts = opts;
-    const { data: d, runLayer } = combine(d0);
+    // The editor passes data that already has the layers' runs in it (opts.runLayer says which run is whose).
+    const { data: d, runLayer } = opts.runLayer
+      ? { data: d0, runLayer: Object.fromEntries(Object.entries(opts.runLayer).filter(([k]) => d0.runs[k])) } : combine(d0);
     const geo = G.compute(d), shapes = G.extras(geo.at), canvas = S.canvas;
     S.shown = d; S.geo = geo; S.runLayer = runLayer;
     const paneOf = f => paneFor(f.run && runLayer[f.run]);

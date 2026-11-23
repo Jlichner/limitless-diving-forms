@@ -643,6 +643,7 @@
     C.onChange(() => { if (!isAdmin()) st.setupOpen = false; refresh(); });
   }
   S.onPublished(() => render());
+  S.reloadLayers = loadLayers;
   S.adminListeners.push(() => { if (!isAdmin()) { st.setupOpen = false; stopRate(); stopAlign(); } render(); });
   S.onShown = () => { if (st.rate) highlight(); };
 });
