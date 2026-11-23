@@ -30,15 +30,18 @@
   function loadDraft() {
     try { const v = JSON.parse(localStorage.getItem(STORE) || "null"); if (v && Array.isArray(v.draft)) { st.draft = v.draft; st.groups = Array.isArray(v.groups) && v.groups.reduce((a, b) => a + b, 0) === v.draft.length ? v.groups : v.draft.map(() => 1); st.baseVersion = v.baseVersion || 0; st.summary = v.summary || ""; } } catch (e) { /* ignore */ }
   }
-  const current = () => E.apply(S.data, st.draft);   // the map with the draft applied
+  // What edits apply to. Admins and Dive site admins edit the main survey and the rated layers together (runLayer
+  // says which layer each run is in); the survey team's suggestions are for the main survey only.
+  const base = () => isAdmin() ? S.combine(S.data) : { data: S.data, runLayer: {} };
+  const current = () => E.apply(base().data, st.draft);   // the map with the draft applied
 
   // ----- previewing on the map -----
   function preview() {
     if (!st.open) return;
     if (st.review) { S.show(st.review.data, { base: S.data }); S.select(null); if (st.review.focus) { st.review.focus = false; S.focusChanges(); } return; }
     const changes = st.draft.concat(st.mode === "add" && !st.add.pickingEnd ? addChanges(false) : []);
-    const r = E.apply(S.data, changes);
-    S.show(r.data, { base: S.data });
+    const b = base(), r = E.apply(b.data, changes);
+    S.show(r.data, { base: b.data, runLayer: b.runLayer });
     const err = panel.querySelector("#se-preview-err");
     if (err) { err.hidden = !r.error; err.textContent = r.error ? "The preview stops here: " + r.error : ""; }
     S.select(st.mode === "idle" ? st.sel : null);
@@ -117,7 +120,7 @@
     const ch = addChanges(true);
     if (!ch) { say("Fix the rows marked below first.", "bad"); return render(); }
     if (!ch.length) { say("Add at least one line: its length and heading.", "bad"); return render(); }
-    const r = E.apply(S.data, st.draft.concat(ch));
+    const r = E.apply(base().data, st.draft.concat(ch));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ch);
     st.mode = "idle"; st.add = null;
@@ -140,7 +143,7 @@
     commit(ops);
   }
   function commit(ops) {
-    const r = E.apply(S.data, st.draft.concat(ops));
+    const r = E.apply(base().data, st.draft.concat(ops));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ops);
     st.mode = "idle"; st.confirm = null; st.sel = null;
@@ -154,6 +157,40 @@
   }
 
   // ----- sending, publishing and reviewing -----
+  // Split edited data (main survey and layers together) back into the main survey and each layer. A run keeps the
+  // layer it was in; a new run goes with the run it starts from (so a line added off a black diamond line is black
+  // diamond too). Landmarks go with the run that marks them, or stay where they were.
+  const SAVES = e => (e.type === "SaveLandmark" || e.type === "SavedStake") && e.landmark ? e.landmark : null;
+  function splitBack(b, d) {
+    const saver = {};
+    for (const [run, r] of Object.entries(d.runs)) for (const e of r) { const k = SAVES(e); if (k && !saver[k]) saver[k] = run; }
+    const memo = {};
+    const owner = (run, seen) => {
+      if (run in memo) return memo[run];
+      if (b.runLayer[run]) return (memo[run] = b.runLayer[run]);
+      if (b.data.runs[run]) return (memo[run] = "");   // was on the main survey already
+      seen = seen || new Set([run]);
+      const step = d.plan.find(p => p.run === run || p.run2 === run), from = step && saver[step.start];
+      if (!from || seen.has(from)) return (memo[run] = "");
+      seen.add(from);
+      return (memo[run] = owner(from, seen));
+    };
+    const ids = [""].concat(S.layers.filter(l => l.kind === "survey" && l.survey).map(l => l.id));
+    const parts = Object.fromEntries(ids.map(id => [id, { runs: {}, plan: [], landmarks: {}, runNames: {} }]));
+    const part = id => parts[id] || parts[""];
+    for (const [run, r] of Object.entries(d.runs)) { const p = part(owner(run)); p.runs[run] = r; if (d.runNames[run] != null) p.runNames[run] = d.runNames[run]; }
+    for (const step of d.plan) part(owner(step.run)).plan.push(step);
+    const hadIn = k => { const l = S.layers.find(x => x.kind === "survey" && x.survey && x.survey.landmarks && k in x.survey.landmarks); return l ? l.id : ""; };
+    for (const [k, v] of Object.entries(d.landmarks)) part(saver[k] ? owner(saver[k]) : hadIn(k)).landmarks[k] = v;
+    const green = Object.assign({}, S.data, parts[""]), layers = [];
+    for (const l of S.layers.filter(x => x.kind === "survey" && x.survey)) {
+      const survey = Object.assign({}, l.survey, parts[l.id]);
+      const was = JSON.stringify({ runs: l.survey.runs || {}, plan: l.survey.plan || [], landmarks: l.survey.landmarks || {}, runNames: l.survey.runNames || {} });
+      if (JSON.stringify({ runs: survey.runs, plan: survey.plan, landmarks: survey.landmarks, runNames: survey.runNames }) !== was) layers.push({ layer: l, survey });
+    }
+    return { green, layers };
+  }
+
   async function send() {
     if (!st.draft.length) return;
     const r = current();
@@ -162,11 +199,25 @@
     st.busy = true; render();
     try {
       if (isAdmin()) {
-        const { data, error } = await C.client.rpc("publish_site_map", { site, new_data: r.data, expected_version: S.version, summary: st.summary.trim(), edit_id: null });
-        if (error) throw error;
-        S.setPublished(r.data, data, new Date().toISOString());
-        say(`Published as version ${data}.`, "ok");
-        st.history = null;
+        const sp = splitBack(base(), r.data);
+        // Save the layers first, so lines are never lost, then publish the main survey; put the layers back if that fails.
+        const saved = [];
+        try {
+          for (const x of sp.layers) {
+            const u = await C.client.from("site_map_layers").update({ survey: x.survey }).eq("id", x.layer.id);
+            if (u.error) throw u.error;
+            saved.push(x.layer);
+          }
+          const { data, error } = await C.client.rpc("publish_site_map", { site, new_data: sp.green, expected_version: S.version, summary: st.summary.trim(), edit_id: null });
+          if (error) throw error;
+          S.setPublished(sp.green, data, new Date().toISOString());
+          say(`Published as version ${data}.`, "ok");
+          st.history = null;
+        } catch (err) {
+          for (const l of saved) await C.client.from("site_map_layers").update({ survey: l.survey }).eq("id", l.id);
+          throw err;
+        }
+        if (sp.layers.length && S.reloadLayers) await S.reloadLayers();
       } else {
         const id = crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
         const { error } = await C.client.from("site_map_edits").insert({ id, site_id: site, summary: st.summary.trim(), changes: st.draft, base_version: st.baseVersion });
@@ -322,7 +373,7 @@
         <a class="btn primary" href="account.html#then=map-${esc(site)}">Log in</a>`;
       return;
     }
-    const descs = E.describeAll(S.data, st.draft), cur = current();
+    const descs = E.describeAll(base().data, st.draft), cur = current();
     const body = st.review ? reviewCard() : st.mode === "add" ? addForm() : st.mode === "confirm" ? confirmCard() : selCard();
     panel.innerHTML = `<div class="se-head"><h2>Edit the map</h2><button type="button" class="btn" data-act="close">Done</button></div>
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
@@ -353,13 +404,13 @@
     if (st.review) return;
     if (st.mode === "add") {
       if (!st.add.pickingEnd) return;
-      if (f.layer) { say("Pick a point on the main survey.", "bad"); return render(); }
+      if (f.layer && !isAdmin()) { say("Pick a point on the main survey.", "bad"); return render(); }
       const d = current().data, a = anchor(f, d);
       if (a.key === st.add.start.key) { say("That's where the line starts. Pick the point it ends at.", "bad"); return render(); }
       st.add.end = a; st.add.pickingEnd = false; say(null); return render();
     }
     if (st.mode === "confirm") return;
-    if (f.layer) { st.sel = null; say("That line is in a rated layer. A Dive site admin changes it from Map setup.", "bad"); return render(); }
+    if (f.layer && !isAdmin()) { st.sel = null; say("That line is in a rated layer. An Admin or Dive site admin changes it.", "bad"); return render(); }
     st.sel = f; say(null); render();
   }
 
