@@ -106,7 +106,7 @@
           <label><input type="checkbox" data-layer="depths" checked> Depths</label>
           <label><input type="checkbox" data-layer="points" checked> Stakes, tie-offs and arrows</label>
           <label><input type="checkbox" data-layer="icons" checked> Landmark icons</label>
-          <label><input type="checkbox" data-layer="moorings"> Mooring blocks</label>
+          <label><input type="checkbox" data-layer="moorings" checked> Mooring blocks</label>
           <label><input type="checkbox" data-layer="ratings" checked> Difficulty symbols</label>
           <span class="sm-tools-end"><button type="button" class="btn" id="sm-kml" hidden>Google Earth file</button>
           <button type="button" class="btn" id="sm-fit">Show the whole site</button>
@@ -141,7 +141,7 @@
     for (const s of geo.segments) if (s.kind === "surveyed" || s.kind === "marina") ft += lineFeet(d.runs[s.run][s.index]);
     const named = geo.landmarks.filter(l => l.icon && l.icon !== MOORING).length;
     main.querySelector("#sm-stats").innerHTML = `
-      <div><b>${Math.round(ft).toLocaleString()}</b><span>feet of line surveyed (${(ft * 0.3048 / 1000).toFixed(1)} km)</span></div>
+      <div><b>${Math.round(ft).toLocaleString()}</b><span>feet of line surveyed (${(ft / 5280).toFixed(2)} miles)</span></div>
       <div><b>${named}</b><span>landmarks</span></div><div><b>${geo.stakes.filter(s => s.kind === "stake").length}</b><span>stakes</span></div>
       <div><b>${geo.tieoffs.length}</b><span>tie-offs</span></div>`;
     const legendIcons = [], seen = new Set();
@@ -532,7 +532,7 @@ ${marks}
       layers.ratings.addLayer(L.marker(ll((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2), { pane: paneOf(s), keyboard: false, interactive: false,
         icon: L.divIcon({ className: "sm-rating", iconSize: rid === "double-black" ? [26, 14] : [14, 14], html: ratingSvg(rid) }) }));
     }
-    const defaults = { shapes: true, lines: true, points: true, icons: true, depths: true, moorings: false, ratings: true };
+    const defaults = { shapes: true, lines: true, points: true, icons: true, depths: true, moorings: true, ratings: true };
     for (const k of Object.keys(layers)) {
       const cb = main.querySelector(`[data-layer="${k}"]`);
       if (cb ? cb.checked : (k in visible ? visible[k] : defaults[k])) layers[k].addTo(S.map);
