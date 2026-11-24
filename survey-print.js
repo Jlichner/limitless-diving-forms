@@ -322,11 +322,22 @@
     return frame.unP(x, y);
   }
 
-  async function dataUrl(url) {
+  // The background picture for the PDF, redrawn as a JPEG no bigger than the paper needs. Big PNGs (a
+  // full-size USGS scan) made the PDF maker run out of stack ("Maximum call stack size exceeded").
+  async function dataUrl(url, maxPx) {
     const res = await fetch(url, { mode: "cors" });
     if (!res.ok) throw new Error("The background picture couldn't be loaded.");
-    const blob = await res.blob();
-    return await new Promise((ok, bad) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = bad; fr.readAsDataURL(blob); });
+    const blob = await res.blob(), src = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("The background picture couldn't be read.")); i.src = src; });
+      const k = Math.min(1, maxPx / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(img.naturalWidth * k)); cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+      const g = cv.getContext("2d");
+      g.fillStyle = "#fbfaf6"; g.fillRect(0, 0, cv.width, cv.height);   // see-through parts print as the map's paper colour
+      g.drawImage(img, 0, 0, cv.width, cv.height);
+      return cv.toDataURL("image/jpeg", 0.85);
+    } finally { URL.revokeObjectURL(src); }
   }
 
   async function downloadPdf() {
@@ -336,7 +347,8 @@
     try {
       const set = Object.assign({}, st.set), pics = imageLayers();
       const bg = pics.find(l => l.id === set.background);
-      if (bg && !bg.printHref) bg.printHref = await dataUrl(bg.imageUrl);
+      const maxPx = Math.min(5000, Math.round(Math.max(PAPER[set.paper].w, PAPER[set.paper].h) / 72 * 200));   // about 200 dots per inch
+      if (bg && bg.printPx !== maxPx) { bg.printHref = await dataUrl(bg.imageUrl, maxPx); bg.printPx = maxPx; }
       st.forPrint = true;
       let sh; try { sh = sheet(set); } finally { st.forPrint = false; }
       const holder = document.createElement("div"); holder.style.cssText = "position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden";
