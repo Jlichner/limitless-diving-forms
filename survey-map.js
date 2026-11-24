@@ -64,6 +64,9 @@
     return `<svg viewBox="0 0 30 16" width="${Math.round(z * 30 / 16)}" height="${z}" aria-hidden="true">${d(8)}${d(22)}</svg>`;
   }
   const MOORING = "icons/mooringblock.png";
+  const ICON_SIZE = "ld-sitemap-icon-size";
+  let iconScale = 1;
+  try { iconScale = Number(localStorage.getItem(ICON_SIZE)) || 1; } catch (e) { /* private mode */ }
   const LEGEND_NAMES = { "icons/shipwreck.png": "Shipwreck" }; // icons used by more than one landmark
 
   const S = window.SurveyMap = {
@@ -108,6 +111,7 @@
           <label><input type="checkbox" data-layer="icons" checked> Landmark icons</label>
           <label><input type="checkbox" data-layer="moorings" checked> Mooring blocks</label>
           <label><input type="checkbox" data-layer="ratings" checked> Difficulty symbols</label>
+          <label>Icon size <select id="sm-icon-size"><option value="0.75">Small</option><option value="1">Medium</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
           <span class="sm-tools-end"><button type="button" class="btn" id="sm-kml" hidden>Google Earth file</button>
           <button type="button" class="btn" id="sm-fit">Show the whole site</button>
           <button type="button" class="btn primary" id="sm-edit-btn" hidden>Edit map</button></span></div>
@@ -123,6 +127,18 @@
       <p class="nx-note" id="sm-credit" style="white-space:pre-line"></p>`;
     main.querySelectorAll("[data-layer]").forEach(cb => cb.addEventListener("change", () => toggle(cb.dataset.layer, cb.checked)));
     main.querySelector("#sm-fit").addEventListener("click", fit);
+    // Landmark icon size: each person's own choice, kept in this browser.
+    const sizeSel = main.querySelector("#sm-icon-size");
+    sizeSel.value = String(iconScale);
+    if (sizeSel.value !== String(iconScale)) { iconScale = 1; sizeSel.value = "1"; }
+    const mapEl = main.querySelector("#sm-map");
+    mapEl.style.setProperty("--lm-k", iconScale);
+    sizeSel.addEventListener("change", () => {
+      iconScale = Number(sizeSel.value) || 1;
+      mapEl.style.setProperty("--lm-k", iconScale);
+      try { localStorage.setItem(ICON_SIZE, String(iconScale)); } catch (e) { /* private mode */ }
+      if (S.map) show(S.shown && S.editing ? S.shown : S.data, S.lastOpts || {});
+    });
     main.querySelector("#sm-kml").addEventListener("click", downloadKml);
     main.querySelector("#sm-list").addEventListener("click", e => { const b = e.target.closest("[data-lm]"); if (b) goTo(b.dataset.lm); });
   }
@@ -508,7 +524,7 @@ ${marks}
         layers.moorings.addLayer(clickable(m, f, () => landmarkPopup(f)));
       } else if (l.icon && ICONS[l.icon]) {
         m = L.marker(ll(l.x, l.y), { pane, title: S.name(l.landmark), alt: S.name(l.landmark), riseOnHover: true,
-          icon: L.divIcon({ className: "sm-lm" + (l.transparent ? "" : " bg") + (fresh ? " new" : ""), iconSize: [24, 24], html: iconHtml(l.icon) }) });
+          icon: L.divIcon({ className: "sm-lm" + (l.transparent ? "" : " bg") + (fresh ? " new" : ""), iconSize: [24 * iconScale, 24 * iconScale], html: iconHtml(l.icon) }) });
         layers.icons.addLayer(clickable(m, f, () => landmarkPopup(f)));
       } else {
         m = L.circleMarker(ll(l.x, l.y), { renderer: cv(l), pane, radius: 4.5, color: fresh ? NEW : "#0f7c8c", weight: 2, fillColor: "#ffffff", fillOpacity: 1 });
