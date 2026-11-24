@@ -85,9 +85,10 @@
     const paper = PAPER[set.paper], W = paper.w, H = paper.h, f = Math.min(W / 1224, H / 792);
     const u = v => +(v * f).toFixed(2);
     const M = u(30), gap = u(12);
-    const sideW = Math.round(W * 0.25);
-    const map = { x: M + u(8), y: M + u(8), w: W - 2 * M - u(16) - sideW - gap, h: H - 2 * M - u(16) };
-    const side = { x: map.x + map.w + gap, y: map.y, w: sideW, h: map.h };
+    // The map fills the top; the title block, legend and notes sit side by side in a strip along the bottom.
+    const stripH = u(150), inner = W - 2 * M - u(16);
+    const map = { x: M + u(8), y: M + u(8), w: inner, h: H - 2 * M - u(16) - stripH - gap };
+    const strip = { x: map.x, y: map.y + map.h + gap, w: inner, h: stripH };
     const { data, ratingOf } = surveyFor(set.levels);
     const geo = G.compute(data);
     // The turn: the tapped shore line runs left to right along the bottom.
@@ -188,7 +189,7 @@
       }
     }
     // The tapped shore line while setting it up (not printed once Download is pressed).
-    if (st.picking || st.showBottom) {
+    if (!st.forPrint && (st.picking || st.showBottom)) {
       const ptsB = st.picking ? st.picking : (set.bottom || []);
       ptsB.forEach(p => { const [a, b] = P(p[0], p[1]); o.push(el("circle", { cx: n(a), cy: n(b), r: n(u(5)), fill: "#e8590c", stroke: "#fff", "stroke-width": n(u(1.2)), "data-preview": "1" })); });
       if (ptsB.length === 2) { const [a, b] = P(...ptsB[0]), [c3, d3] = P(...ptsB[1]); o.push(el("line", { x1: n(a), y1: n(b), x2: n(c3), y2: n(d3), stroke: "#e8590c", "stroke-width": n(u(2)), "stroke-dasharray": `${u(6)} ${u(4)}`, "data-preview": "1" })); }
@@ -205,67 +206,69 @@
     // Scale bar in feet.
     const want = (map.w * 0.22) / k, steps = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000];
     const total = steps.filter(v => v <= want).pop() || steps[0], seg = total / 4, px = seg * k;
-    const sb = { x: map.x + map.w - u(30) - 4 * px, y: map.y + map.h - u(26) };
+    const sb = { x: map.x + map.w - u(44) - 4 * px, y: map.y + map.h - u(26) };
     o.push(el("rect", { x: n(sb.x - u(8)), y: n(sb.y - u(16)), width: n(4 * px + u(44)), height: n(u(28)), fill: "#ffffff", "fill-opacity": 0.85 }));
     for (let i = 0; i < 4; i++) o.push(el("rect", { x: n(sb.x + i * px), y: n(sb.y), width: n(px), height: n(u(5)), fill: i % 2 ? "#ffffff" : ink, stroke: ink, "stroke-width": n(u(0.7)) }));
     for (let i = 0; i <= 4; i++) o.push(text(sb.x + i * px, sb.y - u(3), String(+(i * seg).toFixed(1)), u(7.5), { "text-anchor": "middle" }));
     o.push(text(sb.x + 4 * px + u(5), sb.y + u(5), "feet", u(7.5)));
     if (bg) o.push(text(map.x + u(8), map.y + map.h - u(8), `Background: ${bg.name}`, u(7), { fill: "#555555" }));
 
-    // Side panel: title block, legend, notes and credits.
-    let y = side.y;
-    const box = (h) => { o.push(el("rect", { x: n(side.x), y: n(y), width: n(side.w), height: n(h), fill: "none", stroke: ink, "stroke-width": n(u(0.9)) })); };
+    // Bottom strip: notes and credits | legend | title block (bottom right, as on a chart).
+    const colW = (strip.w - 2 * gap) / 3, sy = strip.y, sh = strip.h;
+    const cols = [0, 1, 2].map(i => strip.x + i * (colW + gap));
+    const frame2 = x => o.push(el("rect", { x: n(x), y: n(sy), width: n(colW), height: n(sh), fill: "none", stroke: ink, "stroke-width": n(u(0.9)) }));
     const wrapLines = (s, size, width) => {
       const out = []; let ln = "";
       for (const w of String(s || "").split(/\s+/).filter(Boolean)) { const t = ln ? ln + " " + w : w; if (t.length * size * 0.5 > width && ln) { out.push(ln); ln = w; } else ln = t; }
       if (ln) out.push(ln); return out;
     };
-    const pad2 = u(10), tw = side.w - 2 * pad2;
-    const titleLines = wrapLines(set.title, u(22), tw), placeLines = wrapLines(set.place, u(11), tw);
-    const th = u(30) + titleLines.length * u(24) + placeLines.length * u(14) + u(48);
-    box(th);
-    o.push(text(side.x + pad2, y + u(18), "LIMITLESS DIVING · SITE SURVEY", u(8), { "letter-spacing": n(u(1.2)), fill: "#444444" }));
-    let ty = y + u(26);
-    titleLines.forEach(t => { ty += u(24); o.push(text(side.x + pad2, ty, t, u(22), { "font-family": SERIF, "font-weight": "bold" })); });
-    placeLines.forEach(t => { ty += u(14); o.push(text(side.x + pad2, ty, t, u(11), { "font-family": SERIF })); });
-    ty += u(10);
-    o.push(el("line", { x1: n(side.x + pad2), y1: n(ty), x2: n(side.x + side.w - pad2), y2: n(ty), stroke: ink, "stroke-width": n(u(0.5)) }));
-    const when = new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-    o.push(text(side.x + pad2, ty + u(15), `Version ${S.version || 0} · Printed ${when}`, u(8.5)));
-    o.push(text(side.x + pad2, ty + u(28), `Lines shown: ${LEVEL_TEXT[set.levels]}`, u(8.5)));
-    y += th + u(10);
-    // Legend: only what is on this sheet.
+    const pad2 = u(10), tw = colW - 2 * pad2;
+    // Notes and credits (left).
+    let cx0 = cols[0]; frame2(cx0);
+    let ny2 = sy + u(17);
+    o.push(text(cx0 + pad2, ny2, "NOT FOR NAVIGATION", u(9.5), { "font-weight": "bold" }));
+    const body = wrapLines(set.notes, u(7.5), tw), cred = wrapLines(set.credit, u(7.5), tw);
+    const room = sy + sh - u(20);
+    body.forEach(t => { ny2 += u(10); if (ny2 < room) o.push(text(cx0 + pad2, ny2, t, u(7.5))); });
+    if (cred.length) ny2 += u(5);
+    cred.forEach(t => { ny2 += u(10); if (ny2 < room) o.push(text(cx0 + pad2, ny2, t, u(7.5))); });
+    o.push(text(cx0 + pad2, sy + sh - u(8), /©/.test(set.credit || "") ? "limitless-diving.com" : "© " + new Date().getFullYear() + " Jamie M Lichner · limitless-diving.com", u(7.5)));
+    // Legend (middle): only what is on this sheet, in as many columns as it needs.
     const kinds = new Set(geo.segments.map(s => s.kind)), ratings = new Set(Object.values(ratingOf));
     const rows = [];
-    const lineRow = (lk, label) => rows.push([(x, yy) => el("line", { x1: n(x), y1: n(yy), x2: n(x + u(26)), y2: n(yy), stroke: lk.c || ink, "stroke-width": n(u(lk.w)), "stroke-dasharray": lk.dash ? lk.dash.map(u).join(" ") : null }), label]);
+    const lineRow = (lk, label) => rows.push([(x, yy) => el("line", { x1: n(x), y1: n(yy), x2: n(x + u(22)), y2: n(yy), stroke: lk.c || ink, "stroke-width": n(u(lk.w)), "stroke-dasharray": lk.dash ? lk.dash.map(u).join(" ") : null }), label]);
     if (kinds.has("surveyed")) lineRow(LK.surveyed, "Surveyed line");
     if (kinds.has("unsurveyed")) lineRow(LK.unsurveyed, "Unsurveyed line");
     if (kinds.has("removed")) lineRow(LK.removed, "Removed line");
-    if (kinds.has("marina")) lineRow(LK.marina, "Caution: boat traffic overhead");
-    if (set.points && geo.stakes.some(p => p.kind === "stake")) rows.push([(x, yy) => el("rect", { x: n(x + u(11)), y: n(yy - u(2)), width: n(u(4)), height: n(u(4)), fill: "#8b3a1f" }), "Stake"]);
-    if (set.points && geo.tieoffs.length) rows.push([(x, yy) => el("circle", { cx: n(x + u(13)), cy: n(yy), r: n(u(2)), fill: "#c2255c" }), "Tie-off"]);
-    if (set.moorings && geo.landmarks.some(l => l.icon === MOORING)) rows.push([(x, yy) => el("rect", { x: n(x + u(9)), y: n(yy - u(3)), width: n(u(8)), height: n(u(6)), fill: "#b9c3c7", stroke: "#5f6d73", "stroke-width": n(u(0.6)) }), "Mooring block"]);
-    rows.push([(x, yy) => sym("green", x + u(13), yy, u(9)), "Green circle · open water divers"]);
-    if (ratings.has("blue")) rows.push([(x, yy) => sym("blue", x + u(13), yy, u(9)), "Blue square · advanced divers"]);
-    if (ratings.has("black")) rows.push([(x, yy) => sym("black", x + u(13), yy, u(9)), "Black diamond · tech divers"]);
-    if (ratings.has("double-black")) rows.push([(x, yy) => sym("double-black", x + u(13), yy, u(8)), "Double black · tech on scooters"]);
-    if (set.depths) rows.push([(x, yy) => text(x + u(4), yy + u(3), "66'", u(8), { fill: "#0b4f6c" }), "Depth in feet"]);
-    if (bg) rows.push([(x, yy) => el("rect", { x: n(x + u(4)), y: n(yy - u(5)), width: n(u(18)), height: n(u(10)), fill: "#e8e0c8", stroke: ink, "stroke-width": n(u(0.4)) }), `Background: ${bg.name}`]);
-    const rowH = u(15), lh = u(34) + rows.length * rowH + u(16);
-    box(lh);
-    o.push(text(side.x + pad2, y + u(20), "Legend", u(13), { "font-family": SERIF, "font-weight": "bold" }));
-    rows.forEach(([draw, label], i) => { const yy = y + u(38) + i * rowH; o.push(draw(side.x + pad2, yy)); o.push(text(side.x + pad2 + u(34), yy + u(3), label, u(8.5))); });
-    o.push(text(side.x + pad2, y + lh - u(8), "Landmarks are named on the map.", u(7.5), { fill: "#555555" }));
-    y += lh + u(10);
-    const nh = side.y + side.h - y;
-    box(nh);
-    let ny2 = y + u(18);
-    o.push(text(side.x + pad2, ny2, "NOT FOR NAVIGATION", u(9.5), { "font-weight": "bold" }));
-    const body = wrapLines(set.notes, u(8), tw), cred = wrapLines(set.credit, u(8), tw);
-    body.forEach(t => { ny2 += u(11); o.push(text(side.x + pad2, ny2, t, u(8))); });
-    if (cred.length) ny2 += u(8);
-    cred.forEach(t => { ny2 += u(11); if (ny2 < y + nh - u(22)) o.push(text(side.x + pad2, ny2, t, u(8))); });
-    o.push(text(side.x + pad2, y + nh - u(10), /©/.test(set.credit || "") ? "limitless-diving.com" : "© " + new Date().getFullYear() + " Jamie M Lichner · limitless-diving.com", u(7.5)));
+    if (kinds.has("marina")) lineRow(LK.marina, "Boat traffic overhead");
+    if (set.points && geo.stakes.some(p => p.kind === "stake")) rows.push([(x, yy) => el("rect", { x: n(x + u(9)), y: n(yy - u(2)), width: n(u(4)), height: n(u(4)), fill: "#8b3a1f" }), "Stake"]);
+    if (set.points && geo.tieoffs.length) rows.push([(x, yy) => el("circle", { cx: n(x + u(11)), cy: n(yy), r: n(u(2)), fill: "#c2255c" }), "Tie-off"]);
+    if (set.moorings && geo.landmarks.some(l => l.icon === MOORING)) rows.push([(x, yy) => el("rect", { x: n(x + u(7)), y: n(yy - u(3)), width: n(u(8)), height: n(u(6)), fill: "#b9c3c7", stroke: "#5f6d73", "stroke-width": n(u(0.6)) }), "Mooring block"]);
+    rows.push([(x, yy) => sym("green", x + u(11), yy, u(9)), "Green circle · open water"]);
+    if (ratings.has("blue")) rows.push([(x, yy) => sym("blue", x + u(11), yy, u(9)), "Blue square · advanced"]);
+    if (ratings.has("black")) rows.push([(x, yy) => sym("black", x + u(11), yy, u(9)), "Black diamond · tech"]);
+    if (ratings.has("double-black")) rows.push([(x, yy) => sym("double-black", x + u(11), yy, u(8)), "Double black · tech on scooters"]);
+    if (set.depths) rows.push([(x, yy) => text(x + u(3), yy + u(3), "66'", u(8), { fill: "#0b4f6c" }), "Depth in feet"]);
+    if (bg) rows.push([(x, yy) => el("rect", { x: n(x + u(2)), y: n(yy - u(5)), width: n(u(18)), height: n(u(10)), fill: "#e8e0c8", stroke: ink, "stroke-width": n(u(0.4)) }), `Background: ${bg.name}`]);
+    cx0 = cols[1]; frame2(cx0);
+    o.push(text(cx0 + pad2, sy + u(18), "Legend", u(12), { "font-family": SERIF, "font-weight": "bold" }));
+    const rowH = u(13.5), perCol = Math.max(1, Math.floor((sh - u(32)) / rowH)), lcols = Math.ceil(rows.length / perCol), lw = (colW - 2 * pad2) / lcols;
+    rows.forEach(([draw, label], i) => {
+      const x = cx0 + pad2 + Math.floor(i / perCol) * lw, yy = sy + u(33) + (i % perCol) * rowH;
+      o.push(draw(x, yy)); o.push(text(x + u(28), yy + u(3), label, u(lcols > 1 ? 7.5 : 8.5)));
+    });
+    // Title block (right).
+    cx0 = cols[2]; frame2(cx0);
+    o.push(text(cx0 + pad2, sy + u(16), "LIMITLESS DIVING · SITE SURVEY", u(7.5), { "letter-spacing": n(u(1.2)), fill: "#444444" }));
+    const titleLines = wrapLines(set.title, u(20), tw).slice(0, 2), placeLines = wrapLines(set.place, u(10.5), tw).slice(0, 2);
+    let ty = sy + u(22);
+    titleLines.forEach(t => { ty += u(21); o.push(text(cx0 + pad2, ty, t, u(20), { "font-family": SERIF, "font-weight": "bold" })); });
+    placeLines.forEach(t => { ty += u(13); o.push(text(cx0 + pad2, ty, t, u(10.5), { "font-family": SERIF })); });
+    const ly = sy + sh - u(36);
+    o.push(el("line", { x1: n(cx0 + pad2), y1: n(ly), x2: n(cx0 + colW - pad2), y2: n(ly), stroke: ink, "stroke-width": n(u(0.5)) }));
+    const when = new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    o.push(text(cx0 + pad2, ly + u(13), `Version ${S.version || 0} · Printed ${when}`, u(8)));
+    o.push(text(cx0 + pad2, ly + u(25), `Lines shown: ${LEVEL_TEXT[set.levels]}`, u(8)));
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${o.join("")}</svg>`;
     return { svg, W, H, map, unP };
@@ -334,8 +337,8 @@
       const set = Object.assign({}, st.set), pics = imageLayers();
       const bg = pics.find(l => l.id === set.background);
       if (bg && !bg.printHref) bg.printHref = await dataUrl(bg.imageUrl);
-      const was = st.showBottom; st.showBottom = false;
-      const sh = sheet(set); st.showBottom = was;
+      st.forPrint = true;
+      let sh; try { sh = sheet(set); } finally { st.forPrint = false; }
       const holder = document.createElement("div"); holder.style.cssText = "position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden";
       holder.innerHTML = sh.svg; document.body.appendChild(holder);
       const doc = new jsPDF({ orientation: sh.W > sh.H ? "landscape" : "portrait", unit: "pt", format: [sh.W, sh.H] });
