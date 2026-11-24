@@ -86,7 +86,7 @@
     const u = v => +(v * f).toFixed(2);
     const M = u(30), gap = u(12);
     // The map fills the top; the title block, legend and notes sit side by side in a strip along the bottom.
-    const stripH = u(150), inner = W - 2 * M - u(16);
+    const stripH = u(128), inner = W - 2 * M - u(16);
     const map = { x: M + u(8), y: M + u(8), w: inner, h: H - 2 * M - u(16) - stripH - gap };
     const strip = { x: map.x, y: map.y + map.h + gap, w: inner, h: stripH };
     const { data, ratingOf } = surveyFor(set.levels);
@@ -225,13 +225,13 @@
     const pad2 = u(10), tw = colW - 2 * pad2;
     // Notes and credits (left).
     let cx0 = cols[0]; frame2(cx0);
-    let ny2 = sy + u(17);
+    let ny2 = sy + u(15);
     o.push(text(cx0 + pad2, ny2, "NOT FOR NAVIGATION", u(9.5), { "font-weight": "bold" }));
     const body = wrapLines(set.notes, u(7.5), tw), cred = wrapLines(set.credit, u(7.5), tw);
-    const room = sy + sh - u(20);
-    body.forEach(t => { ny2 += u(10); if (ny2 < room) o.push(text(cx0 + pad2, ny2, t, u(7.5))); });
-    if (cred.length) ny2 += u(5);
-    cred.forEach(t => { ny2 += u(10); if (ny2 < room) o.push(text(cx0 + pad2, ny2, t, u(7.5))); });
+    const room = sy + sh - u(17);
+    body.forEach(t => { ny2 += u(9.2); if (ny2 < room) o.push(text(cx0 + pad2, ny2, t, u(7.5))); });
+    if (cred.length) ny2 += u(4);
+    cred.forEach(t => { ny2 += u(9.2); if (ny2 < room) o.push(text(cx0 + pad2, ny2, t, u(7.5))); });
     o.push(text(cx0 + pad2, sy + sh - u(8), /©/.test(set.credit || "") ? "limitless-diving.com" : "© " + new Date().getFullYear() + " Jamie M Lichner · limitless-diving.com", u(7.5)));
     // Legend (middle): only what is on this sheet, in as many columns as it needs.
     const kinds = new Set(geo.segments.map(s => s.kind)), ratings = new Set(Object.values(ratingOf));
@@ -252,23 +252,23 @@
     if (bg) rows.push([(x, yy) => el("rect", { x: n(x + u(2)), y: n(yy - u(5)), width: n(u(18)), height: n(u(10)), fill: "#e8e0c8", stroke: ink, "stroke-width": n(u(0.4)) }), `Background: ${bg.name}`]);
     cx0 = cols[1]; frame2(cx0);
     o.push(text(cx0 + pad2, sy + u(18), "Legend", u(12), { "font-family": SERIF, "font-weight": "bold" }));
-    const rowH = u(13.5), perCol = Math.max(1, Math.floor((sh - u(32)) / rowH)), lcols = Math.ceil(rows.length / perCol), lw = (colW - 2 * pad2) / lcols;
+    const rowH = u(12.5), perCol = Math.max(1, Math.floor((sh - u(28)) / rowH)), lcols = Math.ceil(rows.length / perCol), lw = (colW - 2 * pad2) / lcols;
     rows.forEach(([draw, label], i) => {
-      const x = cx0 + pad2 + Math.floor(i / perCol) * lw, yy = sy + u(33) + (i % perCol) * rowH;
+      const x = cx0 + pad2 + Math.floor(i / perCol) * lw, yy = sy + u(30) + (i % perCol) * rowH;
       o.push(draw(x, yy)); o.push(text(x + u(28), yy + u(3), label, u(lcols > 1 ? 7.5 : 8.5)));
     });
     // Title block (right).
     cx0 = cols[2]; frame2(cx0);
     o.push(text(cx0 + pad2, sy + u(16), "LIMITLESS DIVING · SITE SURVEY", u(7.5), { "letter-spacing": n(u(1.2)), fill: "#444444" }));
-    const titleLines = wrapLines(set.title, u(20), tw).slice(0, 2), placeLines = wrapLines(set.place, u(10.5), tw).slice(0, 2);
-    let ty = sy + u(22);
-    titleLines.forEach(t => { ty += u(21); o.push(text(cx0 + pad2, ty, t, u(20), { "font-family": SERIF, "font-weight": "bold" })); });
+    const titleLines = wrapLines(set.title, u(28), tw).slice(0, 2), placeLines = wrapLines(set.place, u(10.5), tw).slice(0, 2);
+    let ty = sy + u(20);
+    titleLines.forEach(t => { ty += u(28); o.push(text(cx0 + pad2, ty, t, u(28), { "font-family": SERIF, "font-weight": "bold" })); });
     placeLines.forEach(t => { ty += u(13); o.push(text(cx0 + pad2, ty, t, u(10.5), { "font-family": SERIF })); });
-    const ly = sy + sh - u(36);
+    const ly = sy + sh - u(32);
     o.push(el("line", { x1: n(cx0 + pad2), y1: n(ly), x2: n(cx0 + colW - pad2), y2: n(ly), stroke: ink, "stroke-width": n(u(0.5)) }));
     const when = new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
     o.push(text(cx0 + pad2, ly + u(13), `Version ${S.version || 0} · Printed ${when}`, u(8)));
-    o.push(text(cx0 + pad2, ly + u(25), `Lines shown: ${LEVEL_TEXT[set.levels]}`, u(8)));
+    o.push(text(cx0 + pad2, ly + u(23), `Lines shown: ${LEVEL_TEXT[set.levels]}`, u(8)));
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${o.join("")}</svg>`;
     return { svg, W, H, map, unP };
