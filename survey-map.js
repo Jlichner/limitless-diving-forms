@@ -114,6 +114,7 @@
           <label>Icon size <select id="sm-icon-size"><option value="0.75">Small</option><option value="1">Medium</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
           <span class="sm-tools-end"><button type="button" class="btn" id="sm-kml" hidden>Google Earth file</button>
           <button type="button" class="btn" id="sm-fit">Show the whole site</button>
+          <button type="button" class="btn" id="sm-print-btn" hidden>Print map</button>
           <button type="button" class="btn primary" id="sm-edit-btn" hidden>Edit map</button></span></div>
         <div class="sm-work" id="sm-work">
           <div class="dm-map sm-map" id="sm-map" aria-label="Survey map of ${esc(S.data.title)}"></div>
