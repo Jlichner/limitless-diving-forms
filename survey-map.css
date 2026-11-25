@@ -55,6 +55,7 @@
 .sm-stake.removed { background: #b4bcc0; }
 .sm-lm.new { outline: 3px solid #e8590c; outline-offset: 1px; border-radius: 4px; }
 .sm-edit { max-height: min(82vh, 820px); overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 6px 8px 2px; font-size: 14px; }
+.sm-edit[hidden] { display: none; }
 .se-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; position: sticky; top: 0; background: var(--surface); padding: 4px 0; z-index: 1; }
 .se-head h2 { font-size: 22px; }
 .se-card { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid #e8590c; border-radius: 0; background: var(--surface-2); }
