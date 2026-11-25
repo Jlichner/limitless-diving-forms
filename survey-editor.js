@@ -39,7 +39,7 @@
   function preview() {
     if (!st.open) return;
     if (st.review) { S.show(st.review.data, { base: S.data }); S.select(null); if (st.review.focus) { st.review.focus = false; S.focusChanges(); } return; }
-    const changes = st.draft.concat(st.mode === "add" && !st.add.pickingEnd ? addChanges(false) : []);
+    const changes = st.draft.concat(st.mode === "add" && !st.add.pickingEnd ? addChanges(false) : st.mode === "point" ? pointChanges() : []);
     const b = base(), r = E.apply(b.data, changes);
     // Admins edit with the layers in the data; for the survey team the map adds the rated lines on top as usual.
     S.show(r.data, b.runLayer ? { base: b.data, runLayer: b.runLayer } : { base: b.data });
@@ -146,6 +146,62 @@
     say("Added to your changes. Keep going, or send them below.", "ok");
     render();
   }
+
+  // ----- a point placed by tapping the map (e.g. on a picture layer), with its name shown on the map -----
+  // Saved as a hidden Jump from the starting point straight to the spot, then the landmark, so it rides with the
+  // survey (and the picture layers lined up on it) and goes through the Survey book and the sheet like any line.
+  function startPoint() {
+    st.mode = "point"; st.sel = null;
+    st.pt = { at: null, name: "", depth: "", label: true, run: E.newId(current().data, "PT"), key: null };
+    say(null); setPlacing(true);
+  }
+  function setPlacing(on) { const m = document.getElementById("sm-map"); if (m) m.classList.toggle("placing", !!on); }
+  function pointChanges() {
+    const p = st.pt; if (!p || !p.at) return [];
+    const d = current().data, origin = d.origin || "BAR";
+    const [x, y] = p.at, L = Math.hypot(x, y);
+    if (L < 1 / 12) return [];
+    const ang = Math.round(((90 - Math.atan2(y, x) * 180 / Math.PI) % 360 + 360) % 360 * 1e4) / 1e4;
+    const ft = Math.floor(L), inch = Math.min(11.99, Math.round((L - ft) * 12 * 100) / 100);
+    p.key = p.key || E.newId(d, "LM");
+    const name = p.name.trim() || "New point";
+    const lm = { type: "SaveLandmark", landmark: p.key };
+    if (p.depth !== "" && Number(p.depth) >= 0 && Number(p.depth) <= 400) lm.depth = Number(p.depth);
+    if (p.label) lm.show_label = true;
+    return [{ op: "add_run", run: p.run, name: `${name} (placed on the map)`, start: origin, end: null,
+      entries: [{ type: "Jump", length_ft: ft, length_in: inch, angle: ang }, lm], landmarks: { [p.key]: name } }];
+  }
+  function placeAt(latlng) {
+    if (st.mode !== "point" || !st.open) return;
+    st.pt.at = S.toXY(latlng.lat, latlng.lng);
+    say(null); render();
+    const n = panel.querySelector("#se-pt-name"); if (n && !st.pt.name) n.focus();
+  }
+  function savePoint() {
+    const p = st.pt;
+    if (!p.at) { say("Tap the map where the point goes.", "bad"); return render(); }
+    if (!p.name.trim()) { say("Give the point a name.", "bad"); return render(); }
+    if (p.depth !== "" && !(Number(p.depth) >= 0 && Number(p.depth) <= 400)) { say("Depth is in feet, 0 to 400.", "bad"); return render(); }
+    const ch = pointChanges();
+    if (!ch.length) { say("That's right on the starting point. Tap a little way off it.", "bad"); return render(); }
+    const r = E.apply(base().data, st.draft.concat(ch));
+    if (r.error) { say(r.error, "bad"); return render(); }
+    pushDraft(ch);
+    st.mode = "idle"; st.pt = null; setPlacing(false);
+    say(`Added "${p.name.trim()}" to your changes. Add another point, or send them below.`, "ok");
+    render();
+  }
+  function pointForm() {
+    const p = st.pt;
+    return `<section class="se-sec"><h3>Add a point on the map</h3>
+      <p class="hint">${p.at ? "Tap the map again to move it." : "Tap the map where the point is. You can tap on a picture layer (photo map): turn it on in Layers and line it up first."}</p>
+      <label class="se-wide">Name (shown on the map) <input id="se-pt-name" data-p="name" maxlength="120" value="${esc(p.name)}" placeholder="e.g. Old dock"></label>
+      <label>Depth ft <input data-p="depth" inputmode="decimal" size="4" value="${esc(p.depth)}"></label>
+      <label class="se-check"><input type="checkbox" data-p="label"${p.label ? " checked" : ""}> Show the name on the map</label>
+      <div class="se-acts"><button type="button" class="btn primary" data-act="pt-save"${p.at ? "" : " disabled"}>Add to my changes</button>
+        <button type="button" class="btn" data-act="pt-cancel">Cancel</button></div></section>`;
+  }
+  S.map.on("click", e => placeAt(e.latlng));
 
   // ----- deleting and marking removed -----
   function startRemove(f, how) {
@@ -311,7 +367,8 @@
   // ----- drawing the panel -----
   function selCard() {
     const f = st.sel;
-    if (!f) return `<p class="hint">Tap a stake, tie-off, landmark or line on the map. Then add a new line from it, or delete or mark as removed the line it's on.</p>`;
+    if (!f) return `<p class="hint">Tap a stake, tie-off, landmark or line on the map. Then add a new line from it, or delete or mark as removed the line it's on.</p>
+      <div class="se-acts"><button type="button" class="btn" data-act="pt-start">Add a point on the map</button></div>`;
     const d = current().data, r = f.run && d.runs[f.run];
     const after = r ? (f.kind === "segment" ? f.index : f.index + 1) : 0;
     const hasAfter = r && r.slice(after).some(e => E.LINE.test(e.type) || e.type === "Jump");
@@ -401,7 +458,7 @@
       return;
     }
     const descs = E.describeAll(base().data, st.draft), cur = current();
-    const body = st.review ? reviewCard() : st.mode === "add" ? addForm() : st.mode === "confirm" ? confirmCard() : selCard();
+    const body = st.review ? reviewCard() : st.mode === "add" ? addForm() : st.mode === "point" ? pointForm() : st.mode === "confirm" ? confirmCard() : selCard();
     panel.innerHTML = `<div class="se-head"><h2>Edit the map</h2><button type="button" class="btn" data-act="close">Done</button></div>
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
       ${body}
@@ -427,8 +484,9 @@
   }
 
   // ----- events -----
-  function pick(f) {
+  function pick(f, latlng) {
     if (st.review) return;
+    if (st.mode === "point") { if (latlng) placeAt(latlng); return; }
     if (st.mode === "add") {
       if (!st.add.pickingEnd) return;
       if (f.layer && !isAdmin()) { say("Pick a point on the main survey.", "bad"); return render(); }
@@ -438,7 +496,7 @@
       if (fillStraight()) say("Filled in a straight line between the two points. Change the length and heading if you measured them.", "ok");
       return render();
     }
-    if (st.mode === "confirm") return;
+    if (st.mode === "confirm" || st.mode === "point") return;
     if (f.layer && !isAdmin()) { st.sel = null; say("That line is in a rated layer. An Admin or Dive site admin changes it.", "bad"); return render(); }
     st.sel = f; say(null); render();
   }
@@ -462,6 +520,9 @@
     if (act === "end-cancel") { st.add.pickingEnd = false; return render(); }
     if (act === "end-clear") { st.add.end = null; return render(); }
     if (act === "add-save") return saveAdd();
+    if (act === "pt-start") { startPoint(); return render(); }
+    if (act === "pt-save") return savePoint();
+    if (act === "pt-cancel") { st.mode = "idle"; st.pt = null; setPlacing(false); say(null); return render(); }
     if (act === "add-cancel") { st.mode = "idle"; st.add = null; say(null); return render(); }
     if (act === "confirm-all") return commit(st.confirm.ops.concat(st.confirm.deps.map(run => ({ op: "remove_run", run }))));
     if (act === "confirm-mark") { const o = st.confirm.ops[0]; return commit([{ op: "mark_removed", run: o.run, from: o.op === "remove_run" ? 0 : o.from }]); }
@@ -482,6 +543,12 @@
   function onField(e) {
     const el = e.target;
     if (el.id === "se-summary") { st.summary = el.value; saveDraft(); return; }
+    if (el.dataset.p && st.pt) {
+      const p = el.dataset.p;
+      st.pt[p] = p === "label" ? el.checked : el.value;
+      preview();
+      return;
+    }
     const k = el.dataset.f;
     if (!k || !st.add) return;
     if (k === "name") { st.add.name = el.value; return; }
@@ -504,7 +571,7 @@
   // Done always closes the panel first, so a problem redrawing the map can't leave it stuck open
   // (Jamie 2026-11-24: "the done button does not do anything"). A redraw problem is shown under the map.
   function close() {
-    st.open = false; S.editing = false; st.sel = null; st.review = null; st.mode = "idle"; st.add = null; st.confirm = null;
+    st.open = false; S.editing = false; st.sel = null; st.review = null; st.mode = "idle"; st.add = null; st.confirm = null; st.pt = null; setPlacing(false);
     render();
     try { S.setPicker(null); S.reset(); }
     catch (err) {

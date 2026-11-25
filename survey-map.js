@@ -239,7 +239,7 @@
   function clickable(layer, feature, popup) {
     layer.on("click", ev => {
       if (ev.originalEvent) L.DomEvent.stopPropagation(ev);
-      if (picker) { picker(feature); return; }
+      if (picker) { picker(feature, ev.latlng); return; }
       // The content is a node, not a string, so a hook can fill it in (photos) and pop.update() keeps that.
       const box = document.createElement("div");
       box.innerHTML = popup();
@@ -542,6 +542,8 @@ ${marks}
         m = L.circleMarker(ll(l.x, l.y), { renderer: cv(l), pane, radius: 4.5, color: fresh ? NEW : "#0f7c8c", weight: 2, fillColor: "#ffffff", fillOpacity: 1 });
         layers.icons.addLayer(clickable(m.bindTooltip(esc(S.name(l.landmark)), l.origin && !geo.segments.length ? { permanent: true, direction: "right", offset: [8, 0] } : {}), f, () => landmarkPopup(f)));
       }
+      // Points placed with a label (Edit map → Add a point on the map, or "show name = yes" in Drawing) show their name.
+      if (l.label && m) m.unbindTooltip().bindTooltip(esc(S.name(l.landmark)), { permanent: true, direction: "right", offset: [l.icon ? 10 * iconScale : 6, 0], className: "sm-lm-label" + (fresh ? " new" : "") });
       markerFor[l.landmark] = m;
     }
     for (const dp of geo.depths) {
