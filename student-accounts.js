@@ -438,7 +438,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     ["green", "Green circle: open water divers", "They see the green circle lines."],
     ["blue", "Blue square: advanced divers", "They see the green circle and blue square lines."],
     ["black", "Black diamond: tech divers", "They see the green circle, blue square and black diamond lines."],
-    ["double-black", "Double black diamond: tech on scooters", "They see every rated line."],
+    ["double-black", "Double black diamond: tech on scooters", "They see every rated line (Secret Squirrel lines only if they're picked for them)."],
     ["survey", "Survey team", "They see every line and can suggest changes to the maps. An admin approves each change before it goes on."],
     ["site-admin", "Dive site admin", "They run the site maps: publish changes, rate lines, place maps, add layers, approve photos and set other members' access below Dive site admin. None of the website's other Admin powers."],
   ];

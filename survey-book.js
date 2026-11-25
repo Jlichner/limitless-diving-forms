@@ -20,8 +20,8 @@
   // The book opens in its own tab: the same site map page with ?book, showing just the map and the book.
   const PAGE = new URLSearchParams(location.search).has("book");
   const bookUrl = () => location.pathname + "?book";
-  const LEVELS = ["Green circle", "Blue square", "Black diamond", "Double black diamond"];
-  const LEVEL_DOT = { "green circle": "#2e7d32", "blue square": "#1565c0", "black diamond": "#111", "double black diamond": "#111" };
+  const LEVELS = ["Green circle", "Blue square", "Black diamond", "Double black diamond", "Secret Squirrel"];
+  const LEVEL_DOT = { "green circle": "#2e7d32", "blue square": "#1565c0", "black diamond": "#111", "double black diamond": "#111", "secret squirrel": "#111" };
   const KINDS = ["Surveyed", "Unsurveyed", "Platform", "Jump"];
   const str = v => (v == null ? "" : String(v)).trim();
   const blankRow = () => ["", "", "", "", "", "", "", "", "", "", ""];
@@ -91,7 +91,7 @@
     const c = st.check;
     if (!st.open || !c || !c.data) return;
     const runLayer = {};
-    ["blue", "black", "double-black"].forEach(k => {
+    ["blue", "black", "double-black", "squirrel"].forEach(k => {
       const l = S.layers.find(x => x.kind === "survey" && x.rating === k), src = c.sp && c.sp.src[k];
       if (l && src) Object.keys(src.runs).forEach(r => { runLayer[r] = l.id; });
     });
@@ -296,7 +296,7 @@
       const before = current();
       const summary = (st.summary.trim() ? st.summary.trim() + " — " : "") + "from the Survey book: " + SS.describeChange(before, c.data);
       const { data: v, error } = await C.client.rpc("publish_site_map_book", { site, new_data: c.sp.src.green, expected_version: S.version, summary: summary.slice(0, 2000),
-        layers: { blue: c.sp.src.blue, black: c.sp.src.black, "double-black": c.sp.src["double-black"] } });
+        layers: { blue: c.sp.src.blue, black: c.sp.src.black, "double-black": c.sp.src["double-black"], squirrel: c.sp.src.squirrel } });
       if (error) throw error;
       S.setPublished(c.sp.src.green, v, new Date().toISOString());
       try { localStorage.setItem(SIGNAL, JSON.stringify({ at: Date.now(), name: S.versionName ? S.versionName() : String(v) })); } catch (e) { /* the map tab just won't hear */ }

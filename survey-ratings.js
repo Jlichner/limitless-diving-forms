@@ -7,8 +7,8 @@
   "use strict";
   const E = root.SurveyEdits || (typeof require === "function" && require("./survey-edits.js"));
   const G = root.SurveyGeometry || (typeof require === "function" && require("./survey-geometry.js"));
-  const ORDER = ["green", "blue", "black", "double-black"];
-  const RANK = { green: 0, blue: 1, black: 2, "double-black": 3 };
+  const ORDER = ["green", "blue", "black", "double-black", "squirrel"];
+  const RANK = { green: 0, blue: 1, black: 2, "double-black": 3, squirrel: 4 };
 
   // Put plan steps in an order where each starts from a point already drawn.
   function orderPlan(plan, runs, known) {
@@ -26,7 +26,7 @@
     for (const d of parts) { Object.assign(out.runs, d.runs); out.plan = out.plan.concat(d.plan); Object.assign(out.landmarks, d.landmarks); Object.assign(out.runNames, d.runNames); }
     return out;
   }
-  // Rate runs: src is { green, blue, black, "double-black" } survey data (green = the main survey), changed in
+  // Rate runs: src is { green, blue, black, "double-black", squirrel } survey data (green = the main survey), changed in
   // place. picks are { run, index, whole } (index = the entry of the line tapped). Throws with a plain message
   // when it can't be done. Returns { moving }: the ids of the runs now in the target rating.
   function rate(src, picks0, target, opts) {

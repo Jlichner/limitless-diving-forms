@@ -460,8 +460,8 @@
   "use strict";
   const E = root.SurveyEdits || (typeof require === "function" && require("./survey-edits.js"));
   const G = root.SurveyGeometry || (typeof require === "function" && require("./survey-geometry.js"));
-  const ORDER = ["green", "blue", "black", "double-black"];
-  const RANK = { green: 0, blue: 1, black: 2, "double-black": 3 };
+  const ORDER = ["green", "blue", "black", "double-black", "squirrel"];
+  const RANK = { green: 0, blue: 1, black: 2, "double-black": 3, squirrel: 4 };
 
   // Put plan steps in an order where each starts from a point already drawn.
   function orderPlan(plan, runs, known) {
@@ -595,11 +595,12 @@
   const KINDS = { "": "SurveyedLine", surveyed: "SurveyedLine", unsurveyed: "UnsurveyedLine", jump: "Jump", platform: "PlatformLine", "boat traffic": "MarinaLine", arrow: "Arrow" };
   const KIND_NAME = { SurveyedLine: "Surveyed", UnsurveyedLine: "Unsurveyed", Jump: "Jump", PlatformLine: "Platform", MarinaLine: "Boat traffic", Arrow: "Arrow" };
   const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing", "Level"];
-  const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond" };
+  const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond", squirrel: "Secret Squirrel" };
   // Level words people type: "Black diamond", "black", "double", "double diamond", "◆◆"...
   function levelOf(text) {
     const t = str(text).toLowerCase().replace(/[^a-z◆●■]+/g, " ").trim();
     if (!t) return null;
+    if (/squirrel|secret/.test(t)) return "squirrel";
     if (/double|◆◆|expert/.test(t)) return "double-black";
     if (/black|diamond|◆|advanced/.test(t)) return "black";
     if (/blue|square|■|intermediate/.test(t)) return "blue";
@@ -796,10 +797,10 @@
   function splitLevels(data, levels, stated) {
     const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
     const empty = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
-    const src = { green: JSON.parse(JSON.stringify(data)), blue: empty(), black: empty(), "double-black": empty() };
+    const src = { green: JSON.parse(JSON.stringify(data)), blue: empty(), black: empty(), "double-black": empty(), squirrel: empty() };
     const errors = [], warnings = [];
     if (!levels || !levels.length) return { src, errors, warnings };
-    const runName = r => data.runNames[r] || ["blue", "black", "double-black"].map(k => src[k].runNames[r]).find(Boolean) || r;
+    const runName = r => data.runNames[r] || ["blue", "black", "double-black", "squirrel"].map(k => src[k].runNames[r]).find(Boolean) || r;
     // Last change along each line first, so earlier changes still find their place in the line.
     const picks = levels.slice().sort((a, b) => a.run === b.run ? b.index - a.index : 0);
     // A line that another line still needs (it starts or ends there) can't go up first, so anything that fails
@@ -961,7 +962,7 @@
   function joinLevels(green, layers) {
     const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
     const parts = [green || {}], runLevel = {};
-    ["blue", "black", "double-black"].forEach(k => {
+    ["blue", "black", "double-black", "squirrel"].forEach(k => {
       const sv = layers && layers[k];
       if (!sv || !sv.runs) return;
       Object.keys(sv.runs).forEach(r => { runLevel[r] = k; });
@@ -1063,7 +1064,7 @@ function checkRows() {
     const { rows, lmRows } = readRows_(), r = SurveySheet.toSurvey(rows, lmRows, {});
     const sp = r.errors.length ? { errors: [], warnings: [], src: null } : SurveySheet.splitLevels(r.data, r.levels, r.stated);
     r.errors = r.errors.concat(sp.errors); r.warnings = r.warnings.concat(sp.warnings);
-    const levelOfRun = id => sp.src ? ["double-black", "black", "blue"].find(k => sp.src[k].runs[id]) : null;
+    const levelOfRun = id => sp.src ? ["squirrel", "double-black", "black", "blue"].find(k => sp.src[k].runs[id]) : null;
     const lines = r.data.plan.flatMap(p => [p.run, p.run2]).filter(Boolean).map(id => {
       const ft = r.data.runs[id].reduce((t, e) => t + (e.type === "SurveyedLine" ? (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12 : 0), 0);
       const lv = levelOfRun(id);
@@ -1102,7 +1103,7 @@ function getFromWebsite() {
     sh.setFrozenRows(1);
     const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Surveyed", "Unsurveyed", "Platform", "Jump"], true).setAllowInvalid(true).build();
     sh.getRange(2, 8, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(kinds);
-    const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond"], true).setAllowInvalid(true).build();
+    const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond", "Secret Squirrel"], true).setAllowInvalid(true).build();
     sh.getRange(2, 11, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(lvl);
     let lm = SpreadsheetApp.getActive().getSheetByName(LANDMARKS_TAB) || SpreadsheetApp.getActive().insertSheet(LANDMARKS_TAB);
     lm.getRange(1, 1, Math.max(lm.getLastRow(), 1), 2).clearContent();
@@ -1137,7 +1138,7 @@ function publishToWebsite() {
     if (said.getSelectedButton() !== ui.Button.OK) return;
     const summary = (said.getResponseText().trim() ? said.getResponseText().trim() + " — " : "") + "from the Google Sheet: " + SurveySheet.describeChange(before, m.data);
     const v = rpc_("sheet_publish_site_map", { sheet_key: s.key, site: s.site, new_data: sp.src.green, expected_version: cur.version || 0, summary,
-      layers: { blue: sp.src.blue, black: sp.src.black, "double-black": sp.src["double-black"] } });
+      layers: { blue: sp.src.blue, black: sp.src.black, "double-black": sp.src["double-black"], squirrel: sp.src.squirrel } });
     props_().setProperty("version", String(v));
     ui.alert(`Published version ${v}. See it at ${LD.site}${s.site}-map.html`);
   } catch (e) { ui.alert("Not published: " + e.message); }

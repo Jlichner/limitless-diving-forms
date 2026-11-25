@@ -85,6 +85,15 @@ ok("bad level word", SS.toSurvey([["", "Log"], ["X"], ["Log", "Rock", 1, "", 0, 
   const sp = SS.splitLevels(r.data, r.levels, r.stated);
   ok("rated line ended on by a later rated line", !r.errors.length && !sp.errors.length && Object.keys(sp.src["double-black"].runs).length === 2, r.errors.concat(sp.errors));
 }
+// Secret Squirrel lines go in their own layer (Jamie 2026-11-25).
+{
+  const Q = "Secret Squirrel", S = "Surveyed";
+  const r = SS.toSurvey([["", "Log"], ["Hidden"], ["Log", "X", 1, "", 90, 10, "", S, "", "", Q]], []);
+  const sp = SS.splitLevels(r.data, r.levels, r.stated);
+  ok("secret squirrel level", !r.errors.length && !sp.errors.length && Object.keys(sp.src.squirrel.runs).length === 1 && !Object.keys(sp.src.green.runs).length, r.errors.concat(sp.errors));
+  const j = SS.joinLevels(sp.src.green, { squirrel: sp.src.squirrel }), back = SS.fromSurvey(j.data, j.runLevel);
+  ok("secret squirrel goes back to the sheet", back.rows.some(row => row[10] === Q), back);
+}
 // The real Bonnie Castle survey, when it's on this computer (it's private, so not in the repository).
 let full = null; try { full = require("./local/bonnie-castle-data.js"); } catch (e) { }
 if (full && full.runs && Object.keys(full.runs).length) {
