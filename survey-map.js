@@ -230,7 +230,7 @@
   }
   function pointPopup(f) {
     const e = S.shown.runs[f.run][f.index] || {};
-    return `<b>${f.kind === "stake" ? "Stake" : "Tie-off"}</b><br><span class="dm-pop">On ${esc(S.runName(f.run))}</span>${e.note ? `<br><span class="dm-pop">Note: ${esc(e.note)}</span>` : ""}`;
+    return `<b>${f.kind === "stake" ? "Stake" : "Tie-off"}</b>${e.depth != null ? `<br>${esc(e.depth)} ft deep` : ""}<br><span class="dm-pop">On ${esc(S.runName(f.run))}</span>${e.note ? `<br><span class="dm-pop">Note: ${esc(e.note)}</span>` : ""}`;
   }
 
   // Tapping a feature: in the editor it's picked; otherwise its popup opens.
