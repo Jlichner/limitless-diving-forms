@@ -100,7 +100,7 @@
         x: xy[0], y: xy[1], status, note: form.querySelector("textarea").value.trim(), reporter: C.user.id });
       if (error) { btn.disabled = false; msg.textContent = /site_map_issues/.test(error.message || "") ? "Reports aren't turned on yet. Please tell Jamie." : C.explain(error); return; }
       if (C.client.functions) Promise.resolve(C.client.functions.invoke("notify-signup", { body: { mapIssue: id } })).catch(() => {});
-      slot.innerHTML = `<p class="se-msg ok">Thanks! Jamie has been told${status === "broken" ? ". Please take care on this line" : ""}.</p>`;
+      slot.innerHTML = `<p class="se-msg ok">Thanks! The authorities have been notified.${status === "broken" ? " Please take care on this line." : ""}</p>`;
       pop.update();
       load();
     });
