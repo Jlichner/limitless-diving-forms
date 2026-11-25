@@ -36,11 +36,12 @@
   const KINDS = { "": "SurveyedLine", surveyed: "SurveyedLine", unsurveyed: "UnsurveyedLine", jump: "Jump", platform: "PlatformLine", "boat traffic": "MarinaLine", arrow: "Arrow" };
   const KIND_NAME = { SurveyedLine: "Surveyed", UnsurveyedLine: "Unsurveyed", Jump: "Jump", PlatformLine: "Platform", MarinaLine: "Boat traffic", Arrow: "Arrow" };
   const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing", "Level"];
-  const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond" };
+  const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond", squirrel: "Secret Squirrel" };
   // Level words people type: "Black diamond", "black", "double", "double diamond", "◆◆"...
   function levelOf(text) {
     const t = str(text).toLowerCase().replace(/[^a-z◆●■]+/g, " ").trim();
     if (!t) return null;
+    if (/squirrel|secret/.test(t)) return "squirrel";
     if (/double|◆◆|expert/.test(t)) return "double-black";
     if (/black|diamond|◆|advanced/.test(t)) return "black";
     if (/blue|square|■|intermediate/.test(t)) return "blue";
@@ -237,10 +238,10 @@
   function splitLevels(data, levels, stated) {
     const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
     const empty = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
-    const src = { green: JSON.parse(JSON.stringify(data)), blue: empty(), black: empty(), "double-black": empty() };
+    const src = { green: JSON.parse(JSON.stringify(data)), blue: empty(), black: empty(), "double-black": empty(), squirrel: empty() };
     const errors = [], warnings = [];
     if (!levels || !levels.length) return { src, errors, warnings };
-    const runName = r => data.runNames[r] || ["blue", "black", "double-black"].map(k => src[k].runNames[r]).find(Boolean) || r;
+    const runName = r => data.runNames[r] || ["blue", "black", "double-black", "squirrel"].map(k => src[k].runNames[r]).find(Boolean) || r;
     // Last change along each line first, so earlier changes still find their place in the line.
     const picks = levels.slice().sort((a, b) => a.run === b.run ? b.index - a.index : 0);
     // A line that another line still needs (it starts or ends there) can't go up first, so anything that fails
@@ -402,7 +403,7 @@
   function joinLevels(green, layers) {
     const R = root.SurveyRatings || (typeof require === "function" ? require("./survey-ratings.js") : null);
     const parts = [green || {}], runLevel = {};
-    ["blue", "black", "double-black"].forEach(k => {
+    ["blue", "black", "double-black", "squirrel"].forEach(k => {
       const sv = layers && layers[k];
       if (!sv || !sv.runs) return;
       Object.keys(sv.runs).forEach(r => { runLevel[r] = k; });

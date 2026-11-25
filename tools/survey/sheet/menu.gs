@@ -84,7 +84,7 @@ function checkRows() {
     const { rows, lmRows } = readRows_(), r = SurveySheet.toSurvey(rows, lmRows, {});
     const sp = r.errors.length ? { errors: [], warnings: [], src: null } : SurveySheet.splitLevels(r.data, r.levels, r.stated);
     r.errors = r.errors.concat(sp.errors); r.warnings = r.warnings.concat(sp.warnings);
-    const levelOfRun = id => sp.src ? ["double-black", "black", "blue"].find(k => sp.src[k].runs[id]) : null;
+    const levelOfRun = id => sp.src ? ["squirrel", "double-black", "black", "blue"].find(k => sp.src[k].runs[id]) : null;
     const lines = r.data.plan.flatMap(p => [p.run, p.run2]).filter(Boolean).map(id => {
       const ft = r.data.runs[id].reduce((t, e) => t + (e.type === "SurveyedLine" ? (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12 : 0), 0);
       const lv = levelOfRun(id);
@@ -123,7 +123,7 @@ function getFromWebsite() {
     sh.setFrozenRows(1);
     const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Surveyed", "Unsurveyed", "Platform", "Jump"], true).setAllowInvalid(true).build();
     sh.getRange(2, 8, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(kinds);
-    const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond"], true).setAllowInvalid(true).build();
+    const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond", "Secret Squirrel"], true).setAllowInvalid(true).build();
     sh.getRange(2, 11, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(lvl);
     let lm = SpreadsheetApp.getActive().getSheetByName(LANDMARKS_TAB) || SpreadsheetApp.getActive().insertSheet(LANDMARKS_TAB);
     lm.getRange(1, 1, Math.max(lm.getLastRow(), 1), 2).clearContent();
@@ -158,7 +158,7 @@ function publishToWebsite() {
     if (said.getSelectedButton() !== ui.Button.OK) return;
     const summary = (said.getResponseText().trim() ? said.getResponseText().trim() + " — " : "") + "from the Google Sheet: " + SurveySheet.describeChange(before, m.data);
     const v = rpc_("sheet_publish_site_map", { sheet_key: s.key, site: s.site, new_data: sp.src.green, expected_version: cur.version || 0, summary,
-      layers: { blue: sp.src.blue, black: sp.src.black, "double-black": sp.src["double-black"] } });
+      layers: { blue: sp.src.blue, black: sp.src.black, "double-black": sp.src["double-black"], squirrel: sp.src.squirrel } });
     props_().setProperty("version", String(v));
     ui.alert(`Published version ${v}. See it at ${LD.site}${s.site}-map.html`);
   } catch (e) { ui.alert("Not published: " + e.message); }

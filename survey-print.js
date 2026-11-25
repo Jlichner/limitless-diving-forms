@@ -14,21 +14,22 @@
   const allowed = () => S.isSiteAdmin();
   btn.hidden = !allowed();
 
-  const RANK = { green: 1, blue: 2, black: 3, "double-black": 4 };
+  const RANK = { green: 1, blue: 2, black: 3, "double-black": 4, squirrel: 5 };
   const LEVEL_SETS = [
     { id: "green", label: "Green circle only" },
     { id: "blue", label: "Green and blue square" },
     { id: "black", label: "Up to black diamond" },
-    { id: "double-black", label: "All levels" },
+    { id: "double-black", label: "Up to double black diamond" },
+    { id: "squirrel", label: "All levels, with Secret Squirrel" },
   ];
-  const LEVEL_TEXT = { green: "Green circle", blue: "Green circle and blue square", black: "Green circle, blue square and black diamond", "double-black": "All levels" };
+  const LEVEL_TEXT = { green: "Green circle", blue: "Green circle and blue square", black: "Green circle, blue square and black diamond", "double-black": "Green circle to double black diamond", squirrel: "All levels, with Secret Squirrel" };
   const PAPER = {
     letter: { label: "Letter, 11 × 8.5 in", w: 792, h: 612 },
     tabloid: { label: "Tabloid, 17 × 11 in", w: 1224, h: 792 },
     archd: { label: "Poster, 36 × 24 in", w: 2592, h: 1728 },
   };
   const SERIF = "Times, 'Times New Roman', serif", SANS = "Helvetica, Arial, sans-serif";
-  const RATING_COLOR = { blue: "#1c7ed6", black: "#111111", "double-black": "#111111" };
+  const RATING_COLOR = { blue: "#1c7ed6", black: "#111111", "double-black": "#111111", squirrel: "#111111" };
   const MOORING = "icons/mooringblock.png";
 
   const st = { open: false, picking: null, busy: false, msg: null, set: null };
@@ -118,7 +119,7 @@
     const out = Object.assign({}, d0, { runs: Object.assign({}, d0.runs), plan: (d0.plan || []).slice(), landmarks: Object.assign({}, d0.landmarks), runNames: Object.assign({}, d0.runNames) });
     const ratingOf = {};
     for (const l of (S.layers || []).filter(x => x.kind === "survey" && x.survey && x.survey.runs)) {
-      if (l.rating ? RANK[l.rating] > max : levels !== "double-black") continue;
+      if (l.rating ? RANK[l.rating] > max : max < 4) continue;
       for (const [k, v] of Object.entries(l.survey.runs)) { if (out.runs[k]) continue; out.runs[k] = v; if (l.rating) ratingOf[k] = l.rating; }
       Object.assign(out.landmarks, l.survey.landmarks || {}); Object.assign(out.runNames, l.survey.runNames || {});
       for (const s of l.survey.plan || []) if (l.survey.runs[s.run] && out.runs[s.run] === l.survey.runs[s.run]) out.plan.push(s);
@@ -216,6 +217,7 @@
       const dia = cx2 => `M${n(cx2)} ${n(y - z * 0.6)} L${n(cx2 + z * 0.6)} ${n(y)} L${n(cx2)} ${n(y + z * 0.6)} L${n(cx2 - z * 0.6)} ${n(y)} Z`;
       if (rid === "black") return el("path", { d: dia(x), fill: "#111", stroke: "#fff", "stroke-width": n(u(0.8)) });
       if (rid === "double-black") return el("path", { d: dia(x - z * 0.6) + " " + dia(x + z * 0.6), fill: "#111", stroke: "#fff", "stroke-width": n(u(0.8)) });
+      if (rid === "squirrel") { const k = z * 1.3 / 16; return `<g transform="translate(${n(x - 8 * k, 2)} ${n(y - 8 * k, 2)}) scale(${n(k, 4)})">${el("path", { d: S.SQUIRREL, fill: "#111", stroke: "#fff", "stroke-width": n(u(0.8) / k), "stroke-linejoin": "round", "paint-order": "stroke" })}</g>`; }
       return el("circle", { cx: n(x), cy: n(y), r: n(z / 2), fill: "#2b8a3e", stroke: "#fff", "stroke-width": n(u(0.8)) });
     };
     for (const [run, segs] of Object.entries(byRun)) {
@@ -312,6 +314,7 @@
     if (ratings.has("blue")) rows.push([(x, yy) => sym("blue", x + u(11), yy, u(9)), "Blue square · advanced"]);
     if (ratings.has("black")) rows.push([(x, yy) => sym("black", x + u(11), yy, u(9)), "Black diamond · tech"]);
     if (ratings.has("double-black")) rows.push([(x, yy) => sym("double-black", x + u(11), yy, u(8)), "Double black · tech on scooters"]);
+    if (ratings.has("squirrel")) rows.push([(x, yy) => sym("squirrel", x + u(11), yy, u(9)), "Secret Squirrel"]);
     if (set.depths) rows.push([(x, yy) => text(x + u(3), yy + u(3), "66'", u(8), { fill: "#0b4f6c" }), "Depth in feet"]);
     if (bg) rows.push([(x, yy) => el("rect", { x: n(x + u(2)), y: n(yy - u(5)), width: n(u(18)), height: n(u(10)), fill: "#e8e0c8", stroke: ink, "stroke-width": n(u(0.4)) }), `Background: ${bg.name}`]);
     cx0 = cols[1]; frame2(cx0);

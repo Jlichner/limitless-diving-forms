@@ -20,8 +20,11 @@
   const VIEW = "ld-sitemap-view2-" + site;
   const cloud = () => !!(C && C.available);
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
-  const RANK = { green: 0, blue: 1, black: 2, "double-black": 3 };
+  const RANK = { green: 0, blue: 1, black: 2, "double-black": 3, squirrel: 4 };
   const rating = id => S.RATINGS.find(r => r.id === id);
+  // Layers that only the divers picked one by one see: restricted picture layers, and Secret Squirrel lines
+  // (Jamie 2026-11-25: hand-picked, not a level). The survey team and Dive site admins see them all.
+  const handPicked = l => l.restricted && (!l.rating || l.rating === "squirrel");
   const EMPTY = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
   const st = { layers: [], loadErr: null, photos: [], urls: {}, setupOpen: false, msg: null, busy: false,
     people: null, access: {}, align: null, rate: null, open: {} };
@@ -80,7 +83,7 @@
     if (S.geoRef()) out.push({ id: "satellite", name: "Satellite pictures", hint: "Esri World Imagery" });
     for (const l of st.layers.filter(l => l.kind === "image")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note,
       hint: !l.imageUrl ? "Picture not added yet" : !l.bounds ? "Not lined up yet" : l.bounds.north != null && !S.geoRef() ? "Shows once the map is placed on the earth" : "" });
-    out.push({ id: "survey", name: "Open water", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
+    out.push({ id: "survey", name: "Green Circle - Beginner", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
     for (const l of st.layers.filter(l => l.kind === "survey")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note, rating: l.rating,
       hint: l.survey && Object.keys(l.survey.runs || {}).length ? `${Object.keys(l.survey.runs).length} runs of line` : "No lines yet" });
     return out;
@@ -90,7 +93,7 @@
     box.innerHTML = `<ul class="sm-layer-list">${rows().map(r => {
       const vv = v(r.id), pct = Math.round(vv.opacity * 100);
       return `<li><label class="sm-layer-on"><input type="checkbox" data-lv="${esc(r.id)}"${vv.visible ? " checked" : ""}>
-          ${r.rating ? S.ratingSvg(r.rating) : ""}<b>${esc(r.name)}</b>${r.rating && r.rating !== "green" ? ` <span class="sm-lock" title="Only divers whose Site maps access is ${esc(rating(r.rating).name.toLowerCase())} or higher see it">${esc(rating(r.rating).divers)} and up</span>` : r.restricted ? ` <span class="sm-lock" title="Only divers who've been granted this layer can see it">Restricted</span>` : ""}</label>
+          ${r.rating ? S.ratingSvg(r.rating) : ""}<b>${esc(r.name)}</b>${r.rating === "squirrel" ? ` <span class="sm-lock" title="Only the divers picked for it see it">Hand-picked</span>` : r.rating && r.rating !== "green" ? ` <span class="sm-lock" title="Only divers whose Site maps access is ${esc(rating(r.rating).name.toLowerCase())} or higher see it">${esc(rating(r.rating).divers)} and up</span>` : r.restricted ? ` <span class="sm-lock" title="Only divers who've been granted this layer can see it">Restricted</span>` : ""}</label>
         <span class="sm-layer-hint">${esc([r.note, r.hint].filter(Boolean).join(" · "))}</span>
         <label class="sm-slider"><span class="sr-only">How see-through: ${esc(r.name)}</span>
           <input type="range" min="0" max="100" step="5" value="${pct}" data-lo="${esc(r.id)}" aria-valuetext="${pct}% visible"><output>${pct}%</output></label></li>`;
@@ -295,11 +298,11 @@
         <button type="button" class="btn primary" data-su="add-image"${st.busy ? " disabled" : ""}>Add picture layer</button>
 </details>
 
-      <details class="sm-su"${st.open.rate ? " open" : ""} data-sec="rate"><summary>Rate lines and points (green circle to double black diamond)</summary>${rateCard()}</details>
+      <details class="sm-su"${st.open.rate ? " open" : ""} data-sec="rate"><summary>Rate lines and points (green circle to Secret Squirrel)</summary>${rateCard()}</details>
 
       <p class="hint">Who sees which lines: each member's <b>Site maps access</b> is set in Records → Student accounts${C.can("admin") ? ` (<a href="index.html">open it</a>, then <b>Site maps access</b> under the list of registered students)` : ", by an Admin"}.</p>
 
-      ${st.layers.some(l => l.restricted && !l.rating) ? `<details class="sm-su"${st.open.access ? " open" : ""} data-sec="access"><summary>Who can see restricted picture layers</summary>${accessCard()}</details>` : ""}
+      ${st.layers.some(handPicked) ? `<details class="sm-su"${st.open.access ? " open" : ""} data-sec="access"><summary>Who can see restricted layers and Secret Squirrel lines</summary>${accessCard()}</details>` : ""}
 
       <details class="sm-su"${st.open.photos || pending.length ? " open" : ""} data-sec="photos"><summary>Photos to approve (${pending.length})</summary>
         ${pending.length ? `<ul class="sm-su-list">${pending.map(p => `<li class="sm-su-photo">${st.urls[p.path] ? `<img src="${esc(st.urls[p.path])}" alt="">` : ""}
@@ -313,7 +316,7 @@
   function layerRow(l, i) {
     const al = st.align && st.align.id === l.id;
     if (l.rating) return `<li class="sm-su-layer"><b>${S.ratingSvg(l.rating)} ${esc(l.name)}</b>
-      <span class="hint">${Object.keys((l.survey && l.survey.runs) || {}).length} runs · only divers you give this rating or higher can see it. Change its lines under "Rate lines".</span></li>`;
+      <span class="hint">${Object.keys((l.survey && l.survey.runs) || {}).length} runs · ${l.rating === "squirrel" ? `only the divers you pick under "Who can see restricted layers", the survey team and Dive site admins see it` : "only divers you give this rating or higher can see it"}. Change its lines under "Rate lines".</span></li>`;
     return `<li class="sm-su-layer"><div class="sm-form">
         <label>Name <input data-ly="${esc(l.id)}" data-k="name" value="${esc(l.name)}" maxlength="120"></label>
         <label>Note <input data-ly="${esc(l.id)}" data-k="note" value="${esc(l.note)}" maxlength="500"></label>
@@ -584,6 +587,7 @@
     say(`Rated ${moving.size} run${moving.size === 1 ? "" : "s"} ${rating(target).name.toLowerCase()}.`, "ok");
     stopRate();
     await loadLayers();
+    if (target === "squirrel") await loadAccess();
   }
   // Adds a layer row. The id is made here and the row read back separately, rather than asking the insert to
   // return it: a returning insert also has to pass the read rules for a row that's still being added, which
@@ -599,8 +603,8 @@
     const have = st.layers.find(l => l.rating === id);
     if (have) return have;
     const r = rating(id);
-    const ins = await addLayerRow({ site_id: site, name: `${r.name} · ${r.level}`, kind: "survey", rating: id, restricted: true,
-      note: `${r.divers} and up`, sort: 100 + RANK[id], survey: EMPTY() });
+    const ins = await addLayerRow({ site_id: site, name: id === "squirrel" ? r.name : `${r.name} · ${r.level}`, kind: "survey", rating: id, restricted: true,
+      note: id === "squirrel" ? "Hand-picked divers only" : `${r.divers} and up`, sort: 100 + RANK[id], survey: EMPTY() });
     if (ins.error) throw ins.error;
     st.layers.push(ins.data);
     return ins.data;
@@ -609,7 +613,7 @@
   // ----- who can see restricted layers -----
   function accessCard() {
     if (!st.people) return `<p class="hint">Loading members…</p>`;
-    return st.layers.filter(l => l.restricted && !l.rating).map(l => {
+    return st.layers.filter(handPicked).map(l => {
       const ids = st.access[l.id] || [];
       const name = id => (st.people.find(p => p.id === id) || {}).full_name || "A member";
       return `<div class="sm-access"><h3>${esc(l.name)}</h3>${l.note ? `<p class="hint">${esc(l.note)}</p>` : ""}
@@ -621,7 +625,7 @@
     }).join("");
   }
   async function loadAccess() {
-    const pics = st.layers.filter(l => l.restricted && !l.rating).map(l => l.id);
+    const pics = st.layers.filter(handPicked).map(l => l.id);
     const [p, a] = await Promise.all([
       C.client.rpc("site_map_people"),
       pics.length ? C.client.from("site_map_layer_access").select("layer_id, user_id").in("layer_id", pics) : Promise.resolve({ data: [] }),
@@ -782,13 +786,16 @@
       if (error) throw error;
       stopAlign(); await loadLayers(); say("Saved where the picture sits. Fade it with its slider under Layers.", "ok");
     });
-    if (act === "ac-add") return run(async () => {
-      const sel = setupBox.querySelector(`[data-ac="${CSS.escape(b.dataset.layer)}"]`);
-      if (!sel || !sel.value) { say("Choose a member first.", "bad"); return; }
-      const { error } = await C.client.from("site_map_layer_access").insert({ layer_id: b.dataset.layer, user_id: sel.value });
+    if (act === "ac-add") {
+      // Read the choice before run() redraws the panel (which put the list back to "Choose a member…").
+      const sel = setupBox.querySelector(`[data-ac="${CSS.escape(b.dataset.layer)}"]`), member = sel && sel.value;
+      return run(async () => {
+      if (!member) { say("Choose a member first.", "bad"); return; }
+      const { error } = await C.client.from("site_map_layer_access").insert({ layer_id: b.dataset.layer, user_id: member });
       if (error) throw error;
       await loadAccess(); st.clearForms = true; say("Access given.", "ok");
-    });
+      });
+    }
     if (act === "ac-del") return run(async () => {
       const { error } = await C.client.from("site_map_layer_access").delete().eq("layer_id", b.dataset.layer).eq("user_id", b.dataset.user);
       if (error) throw error;
