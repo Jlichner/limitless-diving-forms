@@ -1863,3 +1863,65 @@ end;
 $$;
 revoke all on function public.promo_recipients(uuid[]) from public, anon;
 grant execute on function public.promo_recipients(uuid[]) to authenticated;
+
+-- ---------- Site map version names like 2.0.1 (added 2026-11-25) ----------
+-- The whole-number version stays (it guards against two people publishing at once); label is the name people see.
+-- Every publish takes the last label and adds one to the end (2.0.1 → 2.0.2). site_map_next_minor starts the next
+-- minor version (2.0.7 → 2.1.0). The map that was live on 2026-11-25 became 2.0.1; older versions keep no label.
+alter table public.site_maps add column if not exists label text;
+alter table public.site_map_history add column if not exists label text;
+
+create or replace function public.site_map_history_label()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare prev text; p text[];
+begin
+  if new.label is null then
+    select h.label into prev from public.site_map_history h
+     where h.site_id = new.site_id and h.version < new.version and h.label is not null
+     order by h.version desc limit 1;
+    if prev ~ '^\d+\.\d+\.\d+$' then
+      p := string_to_array(prev, '.');
+      new.label := p[1] || '.' || p[2] || '.' || ((p[3])::int + 1)::text;
+    end if;
+  end if;
+  update public.site_maps set label = new.label where id = new.site_id and version = new.version;
+  return new;
+end $$;
+drop trigger if exists site_map_history_label on public.site_map_history;
+create trigger site_map_history_label before insert on public.site_map_history
+  for each row execute function public.site_map_history_label();
+-- site_maps is written just before its history row, so the trigger above can copy the label across.
+
+-- Start numbering at 2.0.1 on each published map, once (running this file again does not reset it).
+update public.site_map_history h set label = '2.0.1'
+  from public.site_maps m
+ where h.site_id = m.id and h.version = m.version
+   and not exists (select 1 from public.site_map_history x where x.site_id = m.id and x.label is not null);
+update public.site_maps m set label = h.label
+  from public.site_map_history h where h.site_id = m.id and h.version = m.version and m.label is distinct from h.label;
+
+-- Start the next minor version: publishes the live map again unchanged as X.(Y+1).0 (Admins and Dive site admins).
+create or replace function public.site_map_next_minor(site text, expected_version integer)
+returns text language plpgsql security definer set search_path = '' as $$
+declare cur integer; d jsonb; lab text; p text[]; nl text; who text;
+begin
+  if not public.is_site_map_admin() then
+    raise exception 'Only Admins and Dive site admins can do this' using errcode = '42501';
+  end if;
+  select m.version, m.data, m.label into cur, d, lab from public.site_maps m where m.id = site for update;
+  if cur is null then raise exception 'This map hasn''t been published yet' using errcode = '22023'; end if;
+  if cur <> coalesce(expected_version, -1) then
+    raise exception 'Someone else published this map while you were working. Refresh the page and try again.' using errcode = '40001';
+  end if;
+  if coalesce(lab, '') !~ '^\d+\.\d+\.\d+$' then lab := '2.0.0'; end if;
+  p := string_to_array(lab, '.');
+  nl := p[1] || '.' || ((p[2])::int + 1)::text || '.0';
+  select coalesce(nullif(pr.full_name, ''), u.email::text, '') into who
+    from auth.users u left join public.student_profiles pr on pr.id = u.id where u.id = (select auth.uid());
+  update public.site_maps set version = cur + 1, updated_at = now(), updated_by = (select auth.uid()) where id = site;
+  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name, label)
+    values (site, cur + 1, d, 'Started version ' || nl, (select auth.uid()), coalesce(who, ''), nl);
+  return nl;
+end $$;
+revoke all on function public.site_map_next_minor(text, integer) from public, anon;
+grant execute on function public.site_map_next_minor(text, integer) to authenticated;
