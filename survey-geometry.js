@@ -75,7 +75,7 @@
         } else if (e.type === "SaveLandmark") {
           at[key(e.landmark)] = [x, y];
           out.landmarks.push(Object.assign({ landmark: e.landmark, x, y, icon: e.icon_path || null,
-            transparent: !!e.transparent_icon, depth: e.depth == null ? null : Number(e.depth) }, ref));
+            transparent: !!e.transparent_icon, label: !!e.show_label, depth: e.depth == null ? null : Number(e.depth) }, ref));
           if (e.depth != null) {
             const da = e.depth_angle == null ? 90 : Number(e.depth_angle), dz = e.depth_distance_zoom == null ? 1 : Number(e.depth_distance_zoom);
             out.depths.push(Object.assign({ landmark: e.landmark, depth: Number(e.depth), x, y, angle: da, zoom: dz }, ref));

@@ -78,7 +78,7 @@
         } else if (e.type === "SaveLandmark") {
           at[key(e.landmark)] = [x, y];
           out.landmarks.push(Object.assign({ landmark: e.landmark, x, y, icon: e.icon_path || null,
-            transparent: !!e.transparent_icon, depth: e.depth == null ? null : Number(e.depth) }, ref));
+            transparent: !!e.transparent_icon, label: !!e.show_label, depth: e.depth == null ? null : Number(e.depth) }, ref));
           if (e.depth != null) {
             const da = e.depth_angle == null ? 90 : Number(e.depth_angle), dz = e.depth_distance_zoom == null ? 1 : Number(e.depth_distance_zoom);
             out.depths.push(Object.assign({ landmark: e.landmark, depth: Number(e.depth), x, y, angle: da, zoom: dz }, ref));
@@ -304,6 +304,7 @@
       out.landmark = e.landmark;
       if (e.depth != null && e.depth !== "") { const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep; out.depth_angle = 90; }
       if (e.icon_path) out.icon_path = String(e.icon_path).slice(0, 200);
+      if (e.show_label) out.show_label = true;
     }
     if ((e.type === "Stake" || e.type === "TieOff") && e.depth != null && e.depth !== "") {
       const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep;
@@ -416,6 +417,8 @@
       case "name_point": return `Name a point on ${runName(c.run)}: ${c.name}`;
       case "add_run": {
         const lines = (c.entries || []).filter(e => LINE.test(e.type));
+        const placed = !lines.length && (c.entries || []).find(e => e.type === "SaveLandmark");
+        if (placed) return `Add the point ${(c.landmarks && c.landmarks[placed.landmark]) || lm(placed.landmark)}${placed.show_label ? " (name shown on the map)" : ""}`;
         const total = lines.reduce((t, e) => t + (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12, 0);
         const startName = (c.landmarks && c.landmarks[c.start]) || lm(c.start), endName = c.end && ((c.landmarks && c.landmarks[c.end]) || lm(c.end));
         return `Add ${c.name}: ${lines.length} ${lines.length === 1 ? "line" : "lines"}, ${Math.round(total)} ft, from ${startName}${endName ? " to " + endName : ""}`;
@@ -606,8 +609,8 @@
   // Drawing details: the name in the sheet, the field on the website, and whether it's a yes/no or a number.
   const DRAW = [["icon", "icon_path"], ["see-through icon", "transparent_icon", "yes"], ["depth label angle", "depth_angle", "num"],
     ["depth label distance", "depth_distance_zoom", "num"], ["always draw", "force_draw", "yes"], ["label", "alt_text"],
-    ["label side", "flip_text_side", "side"], ["color", "color"], ["line note", "note"]];
-  const LINE_DRAW = ["alt_text", "flip_text_side", "color"], POINT_DRAW = ["icon_path", "transparent_icon", "depth_angle", "depth_distance_zoom", "force_draw"];
+    ["label side", "flip_text_side", "side"], ["color", "color"], ["line note", "note"], ["show name", "show_label", "yes"]];
+  const LINE_DRAW = ["alt_text", "flip_text_side", "color"], POINT_DRAW = ["icon_path", "transparent_icon", "depth_angle", "depth_distance_zoom", "force_draw", "show_label"];
   const str = v => (v == null ? "" : String(v)).trim();
   const num = v => { const s = str(v).replace(",", "."); if (s === "") return null; const n = Number(s); return isFinite(n) ? n : NaN; };
   const has = v => v != null && !isNaN(v);

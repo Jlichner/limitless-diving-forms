@@ -50,8 +50,8 @@
   // Drawing details: the name in the sheet, the field on the website, and whether it's a yes/no or a number.
   const DRAW = [["icon", "icon_path"], ["see-through icon", "transparent_icon", "yes"], ["depth label angle", "depth_angle", "num"],
     ["depth label distance", "depth_distance_zoom", "num"], ["always draw", "force_draw", "yes"], ["label", "alt_text"],
-    ["label side", "flip_text_side", "side"], ["color", "color"], ["line note", "note"]];
-  const LINE_DRAW = ["alt_text", "flip_text_side", "color"], POINT_DRAW = ["icon_path", "transparent_icon", "depth_angle", "depth_distance_zoom", "force_draw"];
+    ["label side", "flip_text_side", "side"], ["color", "color"], ["line note", "note"], ["show name", "show_label", "yes"]];
+  const LINE_DRAW = ["alt_text", "flip_text_side", "color"], POINT_DRAW = ["icon_path", "transparent_icon", "depth_angle", "depth_distance_zoom", "force_draw", "show_label"];
   const str = v => (v == null ? "" : String(v)).trim();
   const num = v => { const s = str(v).replace(",", "."); if (s === "") return null; const n = Number(s); return isFinite(n) ? n : NaN; };
   const has = v => v != null && !isNaN(v);

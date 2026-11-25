@@ -60,6 +60,7 @@
       out.landmark = e.landmark;
       if (e.depth != null && e.depth !== "") { const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep; out.depth_angle = 90; }
       if (e.icon_path) out.icon_path = String(e.icon_path).slice(0, 200);
+      if (e.show_label) out.show_label = true;
     }
     if ((e.type === "Stake" || e.type === "TieOff") && e.depth != null && e.depth !== "") {
       const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep;
@@ -172,6 +173,8 @@
       case "name_point": return `Name a point on ${runName(c.run)}: ${c.name}`;
       case "add_run": {
         const lines = (c.entries || []).filter(e => LINE.test(e.type));
+        const placed = !lines.length && (c.entries || []).find(e => e.type === "SaveLandmark");
+        if (placed) return `Add the point ${(c.landmarks && c.landmarks[placed.landmark]) || lm(placed.landmark)}${placed.show_label ? " (name shown on the map)" : ""}`;
         const total = lines.reduce((t, e) => t + (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12, 0);
         const startName = (c.landmarks && c.landmarks[c.start]) || lm(c.start), endName = c.end && ((c.landmarks && c.landmarks[c.end]) || lm(c.end));
         return `Add ${c.name}: ${lines.length} ${lines.length === 1 ? "line" : "lines"}, ${Math.round(total)} ft, from ${startName}${endName ? " to " + endName : ""}`;
