@@ -45,6 +45,7 @@
     { id: "blue", name: "Blue square", level: "Intermediate", divers: "Advanced divers", color: "#1c7ed6", line: "#1c7ed6" },
     { id: "black", name: "Black diamond", level: "Advanced", divers: "Tech divers", color: "#111111", line: "#111111" },
     { id: "double-black", name: "Double black diamond", level: "Expert", divers: "Tech divers on scooters", color: "#111111", line: "#111111" },
+    { id: "squirrel", name: "Secret Squirrel", level: "Secret", divers: "Hand-picked divers", color: "#111111", line: "#111111" },
   ];
   // Site maps access levels (site_map_members in supabase/schema.sql), lowest first. Same list in student-accounts.js.
   const LEVELS = [
@@ -56,12 +57,15 @@
     { id: "survey", label: "Survey team: sees everything, suggests changes" },
     { id: "site-admin", label: "Dive site admin: runs the site maps" },
   ];
+  const SQUIRREL = "M6.2 15C2.6 15 .6 12.2 1 8.9 1.4 5.6 3.7 3.4 5.6 4.3 7.3 5.1 6.6 7.4 5.4 8.6 4.6 9.5 4.4 11 5.3 11.8 5.9 12.4 6.8 12.1 7.3 11.5 7.1 9.6 8 8.1 9.4 7.5 8.9 6.4 9 4.9 10.2 4.1L10.4 2.6 11.4 3.8C13.1 3.8 14.6 4.9 14.8 6.4L13.6 7C13.3 7.8 13.9 8.7 13.8 10.2 13.7 12 12.9 13.6 12 14.2L13.2 15Z";
   function ratingSvg(id, size) {
     const z = size || 14;
     if (id === "green") return `<svg viewBox="0 0 16 16" width="${z}" height="${z}" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="#2b8a3e" stroke="#fff" stroke-width="1.5"/></svg>`;
     if (id === "blue") return `<svg viewBox="0 0 16 16" width="${z}" height="${z}" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" fill="#1c7ed6" stroke="#fff" stroke-width="1.5"/></svg>`;
     const d = x => `<path d="M${x} 1 L${x + 7} 8 L${x} 15 L${x - 7} 8 Z" fill="#111" stroke="#fff" stroke-width="1.5"/>`;
     if (id === "black") return `<svg viewBox="0 0 16 16" width="${z}" height="${z}" aria-hidden="true">${d(8)}</svg>`;
+    // Secret Squirrel: a tiny black squirrel (Jamie 2026-11-25).
+    if (id === "squirrel") return `<svg viewBox="0 0 16 16" width="${z}" height="${z}" aria-hidden="true"><path d="${SQUIRREL}" fill="#111" stroke="#fff" stroke-width="1" stroke-linejoin="round" paint-order="stroke"/><circle cx="12.3" cy="5.3" r=".6" fill="#fff"/></svg>`;
     return `<svg viewBox="0 0 30 16" width="${Math.round(z * 30 / 16)}" height="${z}" aria-hidden="true">${d(8)}${d(22)}</svg>`;
   }
   const MOORING = "icons/mooringblock.png";
@@ -76,7 +80,7 @@
     layers: [], view: {}, setLayers, setLayerView, popupHooks: [], ll, geoRef: () => GEO, toXY: (lat, lng) => GEO ? GEO.toXY(lat, lng) : [lng, lat],
     runLayer: {}, RATINGS, ratingSvg, LEVELS, adminListeners: [], level: null, rank: 0,
     levelName: id => id === "admin" ? "Admin (everything)" : (LEVELS.find(l => l.id === id) || LEVELS[0]).label,
-    isSiteAdmin: () => S.rank >= 6, canEdit: () => S.rank >= 5,
+    isSiteAdmin: () => S.rank >= 6, canEdit: () => S.rank >= 5, SQUIRREL,
     ratingOf: run => { const id = S.runLayer[run], l = id && S.layers.find(x => x.id === id); return (l && l.rating) || (id ? null : "green"); },
     name: lm => (S.shown && S.shown.landmarks && S.shown.landmarks[lm]) || (S.data.landmarks && S.data.landmarks[lm]) || lm,
     runName: r => (S.shown && S.shown.runNames && S.shown.runNames[r]) || (S.data.runNames && S.data.runNames[r]) || r,
@@ -177,7 +181,7 @@
       <li><span class="sm-sw" aria-hidden="true"><span class="sm-arrow"><svg viewBox="0 0 12 12"><polygon points="6,1 11,11 1,11"/></svg></span></span>Line arrow</li>
       <li><span class="sm-sw" aria-hidden="true"><span class="sm-plat"></span></span>Platform</li>
       <li><span class="sm-sw" aria-hidden="true"><span class="sm-num">66'</span></span>Depth in feet</li>
-      ${RATINGS.map(r => `<li><span class="sm-sw" aria-hidden="true">${ratingSvg(r.id)}</span>${esc(r.name)}: ${esc(r.level.toLowerCase())}</li>`).join("")}
+      ${RATINGS.filter(r => r.id !== "squirrel" || S.rank >= 5 || S.layers.some(l => l.rating === "squirrel")).map(r => `<li><span class="sm-sw" aria-hidden="true">${ratingSvg(r.id)}</span>${esc(r.name)}: ${esc(r.level.toLowerCase())}</li>`).join("")}
       ${legendIcons.map(i => `<li><span class="sm-sw" aria-hidden="true"><span class="sm-lm${i.bg ? " bg" : ""}">${iconHtml(i.icon)}</span></span>${esc(i.label)}</li>`).join("")}`;
     const places = geo.landmarks.filter(l => (l.icon && l.icon !== MOORING) || l.depth != null || l.origin)
       .filter((l, i, a) => a.findIndex(o => o.landmark === l.landmark) === i)

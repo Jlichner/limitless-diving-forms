@@ -4,7 +4,7 @@ const E = require("../../survey-edits.js"), G = require("../../survey-geometry.j
 const base = require("./local-data.js")("bonnie-castle");
 let n = 0; const t = (name, fn) => { fn(); n++; console.log("ok -", name); };
 const EMPTY = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
-const fresh = () => ({ green: E.copy(base), blue: EMPTY(), black: EMPTY(), "double-black": EMPTY() });
+const fresh = () => ({ green: E.copy(base), blue: EMPTY(), black: EMPTY(), "double-black": EMPTY(), squirrel: EMPTY() });
 const all = src => G.compute(R.merge(R.ORDER.map(k => src[k])));
 const pos = (geo) => JSON.stringify(geo.segments.map(s => [s.x0, s.y0, s.x1, s.y1].map(v => v.toFixed(6))).sort());
 const before = all(fresh());
@@ -68,6 +68,13 @@ t("a higher-rated run that starts from a moved one stays where it is", () => {
   const { moving } = R.rate(src, [{ run: "LisasGiftToBensT", index: 0, whole: true }], "blue", opts);
   assert.ok(!moving.has("BensTToJoshsWreck"));
   assert.ok(src["double-black"].runs.BensTToJoshsWreck);
+  assert.strictEqual(pos(all(src)), pos(before));
+});
+
+t("Secret Squirrel rates like the other levels", () => {
+  const src = fresh();
+  const { moving } = R.rate(src, [{ run: "LisasGiftToBensT", index: 0, whole: true }], "squirrel", opts);
+  assert.ok(moving.has("LisasGiftToBensT") && src.squirrel.runs.BensTToJoshsWreck && !src.green.runs.LisasGiftToBensT);
   assert.strictEqual(pos(all(src)), pos(before));
 });
 

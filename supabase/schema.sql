@@ -1431,10 +1431,12 @@ create table if not exists public.site_map_layers (
 create index if not exists site_map_layers_site on public.site_map_layers (site_id, sort);
 -- Ski-style difficulty: a survey layer can hold all the lines of one rating. Green circle (novice) lines stay
 -- on the main survey, which everyone sees; blue square, black diamond and double black diamond each get a layer.
+-- Secret Squirrel (added 2026-11-25) is a rated layer too, but hand-picked: only divers granted it one by one
+-- (site_map_layer_access), plus the survey team and Dive site admins, see it, whatever their level.
 alter table public.site_map_layers add column if not exists rating text;
 alter table public.site_map_layers drop constraint if exists site_map_layers_rating;
 alter table public.site_map_layers add constraint site_map_layers_rating
-  check (rating is null or (kind = 'survey' and rating in ('blue', 'black', 'double-black')));
+  check (rating is null or (kind = 'survey' and rating in ('blue', 'black', 'double-black', 'squirrel')));
 create unique index if not exists site_map_layers_one_per_rating on public.site_map_layers (site_id, rating) where rating is not null;
 drop trigger if exists site_map_layers_touch on public.site_map_layers;
 create trigger site_map_layers_touch before update on public.site_map_layers
@@ -1455,8 +1457,9 @@ create or replace function public.site_map_layer_visible(layer uuid, layer_ratin
 returns boolean language sql stable security definer set search_path = '' as $$
   select public.site_map_rank() >= 1 and (
     public.site_map_rank() >= 5
-    or (layer_rating is not null and array_position(array['green', 'blue', 'black', 'double-black'], layer_rating) <= public.site_map_rank())
-    or (layer_rating is null and (not coalesce(layer_restricted, false)
+    or (layer_rating is not null and layer_rating <> 'squirrel'
+        and array_position(array['green', 'blue', 'black', 'double-black'], layer_rating) <= public.site_map_rank())
+    or ((layer_rating is null or layer_rating = 'squirrel') and (not coalesce(layer_restricted, false)
         or exists (select 1 from public.site_map_layer_access a where a.layer_id = layer and a.user_id = (select auth.uid())))));
 $$;
 revoke all on function public.site_map_layer_visible(uuid, text, boolean) from public;
@@ -1643,7 +1646,8 @@ returns integer language plpgsql security definer set search_path = '' as $$
 declare l text; cur integer; nv integer; k text; sv jsonb;
   names jsonb := '{"blue": ["Blue square · Intermediate", "Advanced divers and up", 101],
                    "black": ["Black diamond · Advanced", "Tech divers and up", 102],
-                   "double-black": ["Double black diamond · Expert", "Tech divers on scooters and up", 103]}';
+                   "double-black": ["Double black diamond · Expert", "Tech divers on scooters and up", 103],
+                   "squirrel": ["Secret Squirrel", "Hand-picked divers only", 104]}';
 begin
   l := public.site_map_sheet_key_label(sheet_key);
   if l is null then raise exception 'That sheet key isn''t right. Check Limitless Diving → Set up.' using errcode = '42501'; end if;
@@ -1663,7 +1667,7 @@ begin
     values (site, nv, new_data, left(coalesce(summary, ''), 2000), null, left('Google Sheet' || case when l <> '' then ' (' || l || ')' else '' end, 200));
   if layers is not null then
     if jsonb_typeof(layers) <> 'object' then raise exception 'The rated layers aren''t complete' using errcode = '22023'; end if;
-    foreach k in array array['blue', 'black', 'double-black'] loop
+    foreach k in array array['blue', 'black', 'double-black', 'squirrel'] loop
       sv := layers -> k;
       if sv is null or jsonb_typeof(sv) <> 'object' or jsonb_typeof(sv -> 'runs') <> 'object' then
         sv := '{"runs": {}, "plan": [], "landmarks": {}, "runNames": {}}'::jsonb;
@@ -1689,9 +1693,10 @@ begin
     insert into public.site_map_members (user_id, level)
     select a.user_id, (array['green', 'blue', 'black', 'double-black'])[max(array_position(array['green', 'blue', 'black', 'double-black'], l.rating))]
       from public.site_map_layer_access a join public.site_map_layers l on l.id = a.layer_id
-     where l.rating is not null group by a.user_id
+     where l.rating is not null and l.rating <> 'squirrel' group by a.user_id
     on conflict (user_id) do nothing;
-    delete from public.site_map_layer_access a using public.site_map_layers l where l.id = a.layer_id and l.rating is not null;
+    -- Secret Squirrel grants are how that layer works, so they stay.
+    delete from public.site_map_layer_access a using public.site_map_layers l where l.id = a.layer_id and l.rating is not null and l.rating <> 'squirrel';
   end if;
   if to_regclass('public.site_map_admins') is not null then
     insert into public.site_map_members (user_id, level) select user_id, 'site-admin' from public.site_map_admins
@@ -2006,7 +2011,8 @@ returns integer language plpgsql security definer set search_path = '' as $$
 declare cur integer; nv integer; k text; sv jsonb; who text;
   names jsonb := '{"blue": ["Blue square · Intermediate", "Advanced divers and up", 101],
                    "black": ["Black diamond · Advanced", "Tech divers and up", 102],
-                   "double-black": ["Double black diamond · Expert", "Tech divers on scooters and up", 103]}';
+                   "double-black": ["Double black diamond · Expert", "Tech divers on scooters and up", 103],
+                   "squirrel": ["Secret Squirrel", "Hand-picked divers only", 104]}';
 begin
   if not public.is_site_map_admin() then
     raise exception 'Only Admins and Dive site admins can publish site maps' using errcode = '42501';
@@ -2030,7 +2036,7 @@ begin
     values (site, nv, new_data, left(coalesce(summary, ''), 2000), (select auth.uid()), coalesce(who, ''));
   if layers is not null then
     if jsonb_typeof(layers) <> 'object' then raise exception 'The rated layers aren''t complete' using errcode = '22023'; end if;
-    foreach k in array array['blue', 'black', 'double-black'] loop
+    foreach k in array array['blue', 'black', 'double-black', 'squirrel'] loop
       sv := layers -> k;
       if sv is null or jsonb_typeof(sv) <> 'object' or jsonb_typeof(sv -> 'runs') <> 'object' then
         sv := '{"runs": {}, "plan": [], "landmarks": {}, "runNames": {}}'::jsonb;
