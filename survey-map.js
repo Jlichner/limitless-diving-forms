@@ -115,6 +115,7 @@
           <span class="sm-tools-end"><button type="button" class="btn" id="sm-kml" hidden>Google Earth file</button>
           <button type="button" class="btn" id="sm-fit">Show the whole site</button>
           <button type="button" class="btn" id="sm-print-btn" hidden>Print map</button>
+          <button type="button" class="btn" id="sm-book-btn" hidden aria-pressed="false">Survey book</button>
           <button type="button" class="btn primary" id="sm-edit-btn" hidden>Edit map</button></span></div>
         <div class="sm-work" id="sm-work">
           <div class="dm-map sm-map" id="sm-map" aria-label="Survey map of ${esc(S.data.title)}"></div>
@@ -230,7 +231,7 @@
   }
   function pointPopup(f) {
     const e = S.shown.runs[f.run][f.index] || {};
-    return `<b>${f.kind === "stake" ? "Stake" : "Tie-off"}</b><br><span class="dm-pop">On ${esc(S.runName(f.run))}</span>${e.note ? `<br><span class="dm-pop">Note: ${esc(e.note)}</span>` : ""}`;
+    return `<b>${f.kind === "stake" ? "Stake" : "Tie-off"}</b>${e.depth != null ? `<br>${esc(e.depth)} ft deep` : ""}<br><span class="dm-pop">On ${esc(S.runName(f.run))}</span>${e.note ? `<br><span class="dm-pop">Note: ${esc(e.note)}</span>` : ""}`;
   }
 
   // Tapping a feature: in the editor it's picked; otherwise its popup opens.

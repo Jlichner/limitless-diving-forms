@@ -1996,3 +1996,53 @@ begin
 end $$;
 revoke all on function public.claim_site_map_issue_notice(uuid) from public, anon;
 grant execute on function public.claim_site_map_issue_notice(uuid) to authenticated;
+
+-- ---------- Survey book: publish the whole survey from the website (added 2026-11-25) ----------
+-- The website's Survey book (survey-book.js) replaces the Google Sheet. Like sheet_publish_site_map, it publishes the
+-- main (green) map and the blue, black and double black layers together, but as the signed-in Admin or Dive site admin.
+create or replace function public.publish_site_map_book(site text, new_data jsonb, expected_version integer,
+                                                        summary text default '', layers jsonb default null)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare cur integer; nv integer; k text; sv jsonb; who text;
+  names jsonb := '{"blue": ["Blue square · Intermediate", "Advanced divers and up", 101],
+                   "black": ["Black diamond · Advanced", "Tech divers and up", 102],
+                   "double-black": ["Double black diamond · Expert", "Tech divers on scooters and up", 103]}';
+begin
+  if not public.is_site_map_admin() then
+    raise exception 'Only Admins and Dive site admins can publish site maps' using errcode = '42501';
+  end if;
+  if site !~ '^[a-z0-9][a-z0-9-]{0,60}$' then raise exception 'That site name isn''t right' using errcode = '22023'; end if;
+  if new_data is null or jsonb_typeof(new_data) <> 'object' or jsonb_typeof(new_data -> 'runs') <> 'object'
+     or jsonb_typeof(new_data -> 'plan') <> 'array' then
+    raise exception 'That map data isn''t complete' using errcode = '22023';
+  end if;
+  select version into cur from public.site_maps where id = site for update;
+  if coalesce(cur, 0) <> coalesce(expected_version, -1) then
+    raise exception 'Someone else published this map while you were working. Your changes are kept on this page: use "Start from the website" to see theirs.'
+      using errcode = '40001';
+  end if;
+  nv := coalesce(cur, 0) + 1;
+  select coalesce(nullif(p.full_name, ''), u.email::text, '') into who
+    from auth.users u left join public.student_profiles p on p.id = u.id where u.id = (select auth.uid());
+  insert into public.site_maps (id, data, version, updated_at, updated_by) values (site, new_data, nv, now(), (select auth.uid()))
+    on conflict (id) do update set data = excluded.data, version = excluded.version, updated_at = excluded.updated_at, updated_by = excluded.updated_by;
+  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name)
+    values (site, nv, new_data, left(coalesce(summary, ''), 2000), (select auth.uid()), coalesce(who, ''));
+  if layers is not null then
+    if jsonb_typeof(layers) <> 'object' then raise exception 'The rated layers aren''t complete' using errcode = '22023'; end if;
+    foreach k in array array['blue', 'black', 'double-black'] loop
+      sv := layers -> k;
+      if sv is null or jsonb_typeof(sv) <> 'object' or jsonb_typeof(sv -> 'runs') <> 'object' then
+        sv := '{"runs": {}, "plan": [], "landmarks": {}, "runNames": {}}'::jsonb;
+      end if;
+      update public.site_map_layers set survey = sv, updated_at = now() where site_id = site and rating = k;
+      if not found and sv -> 'runs' <> '{}'::jsonb then
+        insert into public.site_map_layers (site_id, name, kind, rating, restricted, note, sort, survey)
+        values (site, names -> k ->> 0, 'survey', k, true, names -> k ->> 1, (names -> k ->> 2)::int, sv);
+      end if;
+    end loop;
+  end if;
+  return nv;
+end $$;
+revoke all on function public.publish_site_map_book(text, jsonb, integer, text, jsonb) from public, anon;
+grant execute on function public.publish_site_map_book(text, jsonb, integer, text, jsonb) to authenticated;

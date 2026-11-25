@@ -99,6 +99,7 @@
     if (r.angle === "" || !(ang >= 0 && ang <= 360)) return { error: "Enter a compass heading from 0 to 360°." };
     if (r.end === "landmark" && !r.lmName.trim()) return { error: "Name the landmark." };
     if (r.depth !== "" && !(Number(r.depth) >= 0 && Number(r.depth) <= 400)) return { error: "Depth is in feet, 0 to 400." };
+    if (r.depth !== "" && r.end === "none") return { error: "The depth is taken at the end of the line: choose a stake, tie-off or landmark under At the end." };
     return { ok: true };
   }
   // The changes the add form makes. strict: every filled row must be right (for saving).
@@ -109,8 +110,9 @@
       if (s.empty) continue;
       if (!s.ok) { if (strict) return null; break; }
       entries.push({ type: r.type, length_ft: Number(r.ft || 0), length_in: Number(r.inch || 0), angle: Number(r.angle) });
-      if (r.end === "stake") entries.push({ type: "Stake" });
-      if (r.end === "tieoff") entries.push({ type: "TieOff" });
+      const dep = r.depth === "" ? {} : { depth: Number(r.depth) };
+      if (r.end === "stake") entries.push(Object.assign({ type: "Stake" }, dep));
+      if (r.end === "tieoff") entries.push(Object.assign({ type: "TieOff" }, dep));
       if (r.end === "landmark") {
         r.key = r.key || E.newId(d, "LM");
         landmarks[r.key] = r.lmName.trim();
@@ -337,8 +339,8 @@
         <label>Heading ° <input data-f="angle" inputmode="decimal" value="${esc(r.angle)}" size="4"></label>
         <label>At the end <select data-f="end">${[["none", "Nothing"], ["stake", "Stake"], ["tieoff", "Tie-off"], ["landmark", "A landmark"]]
           .map(([v, l]) => `<option value="${v}"${r.end === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
-        ${r.end === "landmark" ? `<label>Landmark name <input data-f="lmName" value="${esc(r.lmName)}" maxlength="120"></label>
-          <label>Depth ft <input data-f="depth" inputmode="decimal" value="${esc(r.depth)}" size="4"></label>` : ""}
+        ${r.end === "landmark" ? `<label>Landmark name <input data-f="lmName" value="${esc(r.lmName)}" maxlength="120"></label>` : ""}
+        <label>Depth ft <input data-f="depth" inputmode="decimal" value="${esc(r.depth)}" size="4"></label>
         ${a.rows.length > 1 ? `<button type="button" class="btn se-x" data-act="row-del" data-i="${i}" aria-label="Remove line ${i + 1}">✕</button>` : ""}
         <p class="se-err" data-err="${i}"${s.error ? "" : " hidden"}>${esc(s.error || "")}</p></fieldset>`;
     }).join("");

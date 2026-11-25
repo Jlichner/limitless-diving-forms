@@ -27,6 +27,7 @@
     people: null, access: {}, align: null, rate: null, open: {} };
 
   // ----- loading -----
+  S.reloadLayers = () => loadLayers();
   async function loadLayers() {
     if (!cloud()) return;
     const { data, error } = await C.client.from("site_map_layers").select("*").eq("site_id", site).order("sort").order("created_at");

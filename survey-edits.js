@@ -61,6 +61,9 @@
       if (e.depth != null && e.depth !== "") { const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep; out.depth_angle = 90; }
       if (e.icon_path) out.icon_path = String(e.icon_path).slice(0, 200);
     }
+    if ((e.type === "Stake" || e.type === "TieOff") && e.depth != null && e.depth !== "") {
+      const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep;
+    }
     if (e.type === "Arrow") { out.angle = Number(e.angle) || 0; out.distance = Number(e.distance) || 10; }
     if (e.note) out.note = String(e.note).slice(0, 300);
     return out;
