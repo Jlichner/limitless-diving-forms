@@ -166,3 +166,7 @@ body.pm-open { overflow: hidden; }
 .pm-sheet svg { display: block; width: 100%; height: auto; }
 .pm-sheet.picking { cursor: crosshair; outline: 3px solid #e8590c; }
 @media (max-width: 760px) { .pm-page { grid-template-columns: 1fr; grid-template-rows: auto 1fr; margin: 0; border-radius: 0; } .pm-side { max-height: 55vh; border-right: 0; border-bottom: 1px solid var(--line, #d7e3e6); } .pm-preview { padding: 8px; } }
+/* Map setup: drag and turn the survey into place */
+.sm-move-pin { background: #e8590c; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 1px 6px rgba(0, 0, 0, .5); cursor: grab; }
+.sm-move.on { border: 2px solid #e8590c; border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
+.sm-move .sm-align-row b { min-width: 4em; text-align: center; }
