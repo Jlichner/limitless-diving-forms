@@ -71,6 +71,12 @@ const uRows = under.concat([[], ["UNDER", "", "", "", "", "", "", "", "", "", "G
 const uv = SS.toSurvey(uRows, []), us = SS.splitLevels(uv.data, uv.levels, uv.stated);
 ok("a line said to be green under a black line goes black, with a warning", !uv.errors.length && us.src.black.runs.Under && us.warnings.length === 1, [uv.errors, us.warnings]);
 ok("bad level word", SS.toSurvey([["", "Log"], ["X"], ["Log", "Rock", 1, "", 0, 1, "", "", "", "", "purple"]], []).errors.length === 1);
+// A Level filled down into the blank row between two lines still splits them (Jamie's sheet, 2026-11-25).
+{
+  const D = "Double black diamond", r = SS.toSurvey([["", "Log"], ["A", "", "", "", "", "", "", "", "", "", D], ["Log", "Pen", 1, "", 90, 10, "", "Surveyed", "", "", D],
+    ["", "", "", "", "", "", "", "", "", "", D], ["B", "", "", "", "", "", "", "", "", "", D], ["Log", "Rock", 1, "", 0, 5, "", "Surveyed", "", "", D]], []);
+  ok("level in the blank row between lines", !r.errors.length && Object.keys(r.data.runs).length === 2, r.errors);
+}
 // The real Bonnie Castle survey, when it's on this computer (it's private, so not in the repository).
 let full = null; try { full = require("./local/bonnie-castle-data.js"); } catch (e) { }
 if (full && full.runs && Object.keys(full.runs).length) {

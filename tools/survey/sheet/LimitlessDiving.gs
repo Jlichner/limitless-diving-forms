@@ -660,8 +660,9 @@
     rows.forEach((row, i) => {
       const r = Array.from({ length: 11 }, (_, k) => row[k]), rowNo = i + 1;
       if (isHeader(r)) { cur = null; return; }
-      // Blank (a leftover 0 in Distance (m) from a formula counts as blank).
-      if (r.slice(0, 6).every(v => str(v) === "") && (str(r[6]) === "" || num(r[6]) === 0) && r.slice(7).every(v => str(v) === "")) { cur = null; return; }
+      // Blank (a leftover 0 in Distance (m) from a formula counts as blank, and so does a Level filled down
+      // into the gap between two lines).
+      if (r.slice(0, 6).every(v => str(v) === "") && (str(r[6]) === "" || num(r[6]) === 0) && r.slice(7, 10).every(v => str(v) === "")) { cur = null; return; }
       if (!blocks.some(b => b.legs.length) && !originRow && !str(r[0]) && str(r[1]) && str(r[4]) === "" && str(r[5]) === "") { originRow = { r, rowNo }; return; }
       if (!cur) { cur = { title: "", loopWith: "", legs: [], firstRow: rowNo }; blocks.push(cur); }
       const isTitle = str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^loop with /i.test(str(r[1])) || GPS_TITLE.test(str(r[1])));
