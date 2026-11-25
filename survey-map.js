@@ -407,6 +407,13 @@
     applyViews();
   }
   S.imageCorners = imageCorners;
+  // Map setup's drag-and-turn: place the map with a trial georef (or the published one, with null), keeping the view.
+  S.previewPlace = gr => {
+    const keep = S.map && GEO ? [S.map.getCenter(), S.map.getZoom()] : null;
+    if (placeOnEarth(gr ? Object.assign({}, S.data, { georef: gr }) : S.data)) { show(S.data, {}); drawImages(); }
+    if (keep && GEO) S.map.setView(keep[0], keep[1], { animate: false });
+    return GEO;
+  };
   S.imageOverlay = id => images[id];
   S.redrawImages = drawImages;
 

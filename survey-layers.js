@@ -195,6 +195,49 @@
   // Redrawing the setup panel keeps whatever was being typed or chosen in it (except picked files).
   const FIELDS = "input[id]:not([type=file]), select[id], [data-g], [data-al], [data-ly]";
   const fieldKey = el => el.id || ["g", "al", "ly", "k"].map(k => el.dataset[k] || "").join("|");
+  // ----- drag and turn the whole survey into place over the satellite -----
+  // One landmark (e.g. the Bike Rack) is pinned at a spot on the earth and the survey is turned around it.
+  function moveBox() {
+    const m = st.move;
+    if (!m) return `<div class="sm-move"><p class="hint">Or move it by hand: drag a landmark to where it really is on the satellite, and turn the whole survey around it.</p>
+      <button type="button" class="btn" data-su="move"${st.busy ? " disabled" : ""}>Drag and turn it into place</button></div>`;
+    const t = n => `<button type="button" class="btn" data-su="turn" data-d="${n}">${n > 0 ? "⟳" : "⟲"} ${Math.abs(n)}°</button>`;
+    return `<div class="sm-move on"><p><b>Drag the orange pin</b> to where <b>${esc(S.name(m.landmark))}</b> really is on the satellite. The whole survey moves with it.</p>
+      <label>Pin on <select data-mv="landmark">${landmarkOptions(m.landmark)}</select></label>
+      <p>Turn the survey around the pin:</p>
+      <div class="sm-align-row">${t(-5)}${t(-1)}${t(-0.2)}<b>${m.declination.toFixed(1)}°</b>${t(0.2)}${t(1)}${t(5)}</div>
+      ${m.twoPoint ? `<p class="hint">Saving this uses one pin, so the second landmark's position is dropped and lengths are drawn as measured.</p>` : ""}
+      <div class="se-acts"><button type="button" class="btn primary" data-su="move-save"${st.busy ? " disabled" : ""}>Save and publish</button>
+        <button type="button" class="btn" data-su="move-cancel">Cancel</button></div></div>`;
+  }
+  function moveGr() { const m = st.move; return { landmark: m.landmark, lat: m.lat, lon: m.lon, declination: Math.round(m.declination * 100) / 100 }; }
+  function movePin() {
+    const m = st.move; if (!m) return;
+    if (m.pin) m.pin.remove();
+    m.pin = L.marker([m.lat, m.lon], { draggable: true, zIndexOffset: 2000, title: S.name(m.landmark), icon: L.divIcon({ className: "sm-move-pin", iconSize: [22, 22] }) }).addTo(S.map);
+    m.pin.on("dragend", () => { const p = m.pin.getLatLng(); m.lat = +p.lat.toFixed(7); m.lon = +p.lng.toFixed(7); movePreview(); });
+  }
+  function movePreview() { S.previewPlace(moveGr()); movePin(); }
+  // Where a landmark is on the earth right now (with the trial placement, while moving).
+  function landmarkLatLng(code) {
+    const g = S.geoRef(), at = G.compute(S.combine(S.data).data).at[code];
+    return g && at ? g.toLatLng(at[0], at[1]) : null;
+  }
+  function startMove() {
+    const g = S.geoRef(), gr = S.data.georef || {};
+    const code = gr.landmark || S.data.origin || "BAR", ll = landmarkLatLng(code);
+    if (!g || !ll) { say("Place the map on the earth first.", "bad"); return; }
+    st.move = { landmark: code, lat: +ll[0].toFixed(7), lon: +ll[1].toFixed(7), declination: g.turn, twoPoint: !!gr.landmark2 };
+    S.setLayerView("satellite", { visible: true }); render();
+    movePreview();
+  }
+  function stopMove(keep) {
+    const m = st.move; if (!m) return;
+    if (m.pin) m.pin.remove();
+    st.move = null;
+    if (!keep) S.previewPlace(null);
+  }
+
   function renderSetup() {
     const kept = {};
     if (!st.clearForms) setupBox.querySelectorAll(FIELDS).forEach(el => { kept[fieldKey(el)] = el.type === "checkbox" ? el.checked : el.value; });
@@ -237,7 +280,8 @@
         <p class="hint">Tip: you can paste "44.3421, -75.9165" into the latitude box.</p>
         ${g ? `<p class="hint">Now placed: turned ${g.turn.toFixed(1)}° from the compass${g.twoPoint ? `, drawn at ${(g.scale * 100).toFixed(1)}% of the measured lengths to fit both points` : ""}.</p>` : ""}
         <div class="se-acts"><button type="button" class="btn primary" data-su="place"${st.busy ? " disabled" : ""}>Save and publish</button>
-          ${S.data.georef ? `<button type="button" class="btn" data-su="unplace"${st.busy ? " disabled" : ""}>Take it off the earth</button>` : ""}</div></details>
+          ${S.data.georef ? `<button type="button" class="btn" data-su="unplace"${st.busy ? " disabled" : ""}>Take it off the earth</button>` : ""}</div>
+        ${g ? moveBox() : ""}</details>
 
       <details class="sm-su"${st.open.layers ? " open" : ""} data-sec="layers"><summary>Layers (${st.layers.length})</summary>
         ${st.layers.length ? `<ul class="sm-su-list">${st.layers.map((l, i) => layerRow(l, i)).join("")}</ul>` : `<p class="hint">No layers yet.</p>`}
@@ -520,13 +564,35 @@
     const lon = setupBox.querySelector(`[data-g="${g === "lat" ? "lon" : "lon2"}"]`);
     if (pair && lon) { el.value = pair[0]; lon.value = pair[1]; }
   });
+  async function publishPlace(gr) {
+    const data = Object.assign({}, S.data);
+    if (gr) { data.georef = gr; G.stampGeoref(data, Object.assign({}, S.combine(S.data).data, { georef: gr })); } else delete data.georef;
+    const { data: ver, error } = await C.client.rpc("publish_site_map", { site, new_data: data, expected_version: S.version,
+      summary: gr ? `Placed the map on the earth at ${S.name(gr.landmark)} (${gr.lat}, ${gr.lon}), declination ${gr.declination}°` : "Took the map off the earth", edit_id: null });
+    if (error) throw error;
+    S.setPublished(data, ver, new Date().toISOString());
+    st.clearForms = true;
+    pushLayers();
+    say(`Published as version ${ver}.`, "ok");
+  }
+  setupBox.addEventListener("change", e => {
+    const el = e.target;
+    if (el.dataset.mv !== "landmark" || !st.move) return;
+    const ll = landmarkLatLng(el.value); if (!ll) return;
+    Object.assign(st.move, { landmark: el.value, lat: +ll[0].toFixed(7), lon: +ll[1].toFixed(7) });
+    movePreview(); renderSetup();
+  });
   setupBox.addEventListener("click", async e => {
     const b = e.target.closest("[data-su]");
     if (!b) return;
     const act = b.dataset.su, id = b.dataset.id, layer = id && st.layers.find(l => l.id === id);
     const run = async fn => { st.busy = true; renderSetup(); try { await fn(); } catch (err) { say(C.explain ? C.explain(err) : err.message, "bad"); } st.busy = false; renderSetup(); };
     if (act === "open") { st.setupOpen = true; say(null); renderSetup(); await loadAccess(); renderSetup(); return; }
-    if (act === "close") { stopAlign(); stopRate(); st.setupOpen = false; return renderSetup(); }
+    if (act === "close") { stopAlign(); stopRate(); stopMove(); st.setupOpen = false; return renderSetup(); }
+    if (act === "move") { say(null); startMove(); return renderSetup(); }
+    if (act === "move-cancel") { stopMove(); say(null); return renderSetup(); }
+    if (act === "turn" && st.move) { st.move.declination = ((st.move.declination + Number(b.dataset.d) + 540) % 360) - 180; movePreview(); return renderSetup(); }
+    if (act === "move-save" && st.move) return run(async () => { await publishPlace(moveGr()); stopMove(true); });
     if (act === "rate-start") { st.open.rate = true; startRate(); say(null); return renderSetup(); }
     if (act === "rate-stop") { stopRate(); say(null); return renderSetup(); }
     if (act === "rate-del") { st.rate.sel.splice(Number(b.dataset.i), 1); renderSetup(); return highlight(); }
@@ -556,15 +622,7 @@
           Object.assign(gr, { landmark2: v("landmark2"), lat2: p2[0], lon2: p2[1] });
         }
       }
-      const data = Object.assign({}, S.data);
-      if (gr) { data.georef = gr; G.stampGeoref(data, Object.assign({}, S.combine(S.data).data, { georef: gr })); } else delete data.georef;
-      const { data: ver, error } = await C.client.rpc("publish_site_map", { site, new_data: data, expected_version: S.version,
-        summary: gr ? `Placed the map on the earth at ${S.name(gr.landmark)} (${gr.lat}, ${gr.lon}), declination ${gr.declination}°` : "Took the map off the earth", edit_id: null });
-      if (error) throw error;
-      S.setPublished(data, ver, new Date().toISOString());
-      st.clearForms = true;
-      pushLayers();
-      say(`Published as version ${ver}.`, "ok");
+      await publishPlace(gr);
     });
     if (act === "add-image") return run(async () => {
       const name = setupBox.querySelector("#su-img-name").value.trim(), file = setupBox.querySelector("#su-img-file").files[0] || st.imgFile;
