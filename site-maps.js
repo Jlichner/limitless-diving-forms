@@ -20,7 +20,7 @@
   const latTile = (lat, z) => { const s = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 2 ** z; };
   function satTiles(gr, box, X, Y) {
     // The area to cover: the drawing plus a wide margin, as the card is often wider than the drawing.
-    const [[x0, y0], [x1, y1]] = box, mx = (x1 - x0) * 0.9 + 200, my = (y1 - y0) * 0.9 + 200;
+    const [[x0, y0], [x1, y1]] = box, m = Math.max(x1 - x0, y1 - y0) * 1.2 + 200, mx = m, my = m;
     const lls = [[x0 - mx, y0 - my], [x1 + mx, y0 - my], [x0 - mx, y1 + my], [x1 + mx, y1 + my]].map(([x, y]) => gr.toLatLng(x, y));
     const lats = lls.map(p => p[0]), lngs = lls.map(p => p[1]);
     let z = 18;
@@ -37,14 +37,22 @@
     }
     return out.join("");
   }
+  // The card fits the lines it draws, not the whole map: jumps, points placed far out and the starting point
+  // would otherwise zoom the card out and crowd the lines into a corner (Jamie 2026-11-25).
+  function lineBox(segs) {
+    const xs = segs.flatMap(s => [s.x0, s.x1]), ys = segs.flatMap(s => [s.y0, s.y1]);
+    return [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]];
+  }
   function thumbnail(geo, d) {
-    const [[x0, y0], [x1, y1]] = geo.bounds, pad = 20, w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+    const drawn = geo.segments.filter(s => s.kind !== "removed");
+    const box = drawn.length ? lineBox(drawn) : geo.bounds;
+    const [[x0, y0], [x1, y1]] = box, pad = Math.max(20, (x1 - x0 + y1 - y0) * 0.04), w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
     const X = x => x - x0 + pad, Y = y => y1 - y + pad;
-    const lines = geo.segments.filter(s => s.kind !== "removed")
+    const lines = drawn
       .map(s => `M${X(s.x0).toFixed(1)} ${Y(s.y0).toFixed(1)}L${X(s.x1).toFixed(1)} ${Y(s.y1).toFixed(1)}`).join("");
     let gr = null;
     try { gr = d.georef && G.georef ? G.georef(d.georef, geo.at) : null; } catch (e) { gr = null; }
-    const sat = gr ? satTiles(gr, geo.bounds, X, Y) : "";
+    const sat = gr ? satTiles(gr, box, X, Y) : "";
     return `<svg class="sm-thumb${sat ? " sat" : ""}" viewBox="0 0 ${w.toFixed(0)} ${h.toFixed(0)}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
       ${sat ? `<g class="sm-thumb-sat">${sat}</g>` : ""}
       <path d="${lines}" fill="none" stroke="currentColor" stroke-width="${(w / (sat ? 180 : 260)).toFixed(2)}" stroke-linecap="round"/></svg>`;
