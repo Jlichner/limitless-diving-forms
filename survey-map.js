@@ -543,7 +543,8 @@ ${marks}
         layers.icons.addLayer(clickable(m.bindTooltip(esc(S.name(l.landmark)), l.origin && !geo.segments.length ? { permanent: true, direction: "right", offset: [8, 0] } : {}), f, () => landmarkPopup(f)));
       }
       // Points placed with a label (Edit map → Add a point on the map, or "show name = yes" in Drawing) show their name.
-      if (l.label && m) m.unbindTooltip().bindTooltip(esc(S.name(l.landmark)), { permanent: true, direction: "right", offset: [l.icon ? 10 * iconScale : 6, 0], className: "sm-lm-label" + (fresh ? " new" : "") });
+      const lr = l.label && l.run && S.ratingOf(l.run);
+      if (l.label && m) m.unbindTooltip().bindTooltip((lr && lr !== "green" ? ratingSvg(lr, 11) + " " : "") + esc(S.name(l.landmark)), { permanent: true, direction: "right", offset: [l.icon ? 10 * iconScale : 6, 0], className: "sm-lm-label" + (fresh ? " new" : "") });
       markerFor[l.landmark] = m;
     }
     for (const dp of geo.depths) {

@@ -295,7 +295,7 @@
         <button type="button" class="btn primary" data-su="add-image"${st.busy ? " disabled" : ""}>Add picture layer</button>
 </details>
 
-      <details class="sm-su"${st.open.rate ? " open" : ""} data-sec="rate"><summary>Rate lines (green circle to double black diamond)</summary>${rateCard()}</details>
+      <details class="sm-su"${st.open.rate ? " open" : ""} data-sec="rate"><summary>Rate lines and points (green circle to double black diamond)</summary>${rateCard()}</details>
 
       <p class="hint">Who sees which lines: each member's <b>Site maps access</b> is set in Records → Student accounts${C.can("admin") ? ` (<a href="index.html">open it</a>, then <b>Site maps access</b> under the list of registered students)` : ", by an Admin"}.</p>
 
@@ -501,14 +501,15 @@
     const r = st.rate;
     if (!r) return `<p class="hint">Every line on the main survey is a green circle and every diver sees it. Rate a line blue, black or double black
         and it moves into that rating's layer, which only divers you've given that rating (or higher) can see.</p>
-      <button type="button" class="btn primary" data-su="rate-start">Pick lines on the map</button>`;
+      <button type="button" class="btn primary" data-su="rate-start">Pick lines or points on the map</button>`;
     const label = sel => { const d = S.shown, e = d.runs[sel.run] || [], n = e.slice(0, sel.index + 1).filter(x => E.LINE.test(x.type)).length;
+      if (sel.point) return `The point ${S.name(sel.point)}`;
       return `${S.runName(sel.run)}: ${sel.whole ? "the whole run" : `from line ${n} to the end`}`; };
-    return `<p class="se-pick">Tap the lines to rate on the map. ${r.sel.length ? "" : "Nothing picked yet."}</p>
+    return `<p class="se-pick">Tap the lines (or points you added on the map) to rate. ${r.sel.length ? "" : "Nothing picked yet."}</p>
       ${r.sel.length ? `<ul class="sm-su-list">${r.sel.map((x, i) => {
         const cur = S.ratingOf(x.run), cr = cur && rating(cur);
         return `<li>${cr ? S.ratingSvg(cur, 12) : ""} ${esc(label(x))}
-          <span class="se-acts"><label class="sm-check"><input type="checkbox" data-rt-whole="${i}"${x.whole ? " checked" : ""}> Whole run</label>
+          <span class="se-acts">${x.point ? "" : `<label class="sm-check"><input type="checkbox" data-rt-whole="${i}"${x.whole ? " checked" : ""}> Whole run</label>`}
           <button type="button" class="btn" data-su="rate-del" data-i="${i}" aria-label="Take it off the list">✕</button></span></li>`; }).join("")}</ul>` : ""}
       <fieldset class="sm-ratings"><legend>Rating</legend>${S.RATINGS.map(x => `<label class="sm-check"><input type="radio" name="sm-rating" value="${x.id}"${r.rating === x.id ? " checked" : ""}>
         ${S.ratingSvg(x.id)} ${esc(x.name)} <span class="hint">${esc(x.level)}</span></label>`).join("")}</fieldset>
@@ -522,21 +523,27 @@
     if (rateHi) { rateHi.remove(); rateHi = null; }
     if (!st.rate || !st.rate.sel.length || !S.geo) return;
     const segs = S.geo.segments.filter(s => st.rate.sel.some(x => x.run === s.run && (x.whole || s.index >= x.index)));
-    rateHi = L.layerGroup(segs.map(s => L.polyline([S.ll(s.x0, s.y0), S.ll(s.x1, s.y1)], { color: "#e8590c", weight: 7, opacity: 0.5, interactive: false }))).addTo(S.map);
+    const pts = S.geo.landmarks.filter(l => st.rate.sel.some(x => x.point && x.point === l.landmark));
+    rateHi = L.layerGroup(segs.map(s => L.polyline([S.ll(s.x0, s.y0), S.ll(s.x1, s.y1)], { color: "#e8590c", weight: 7, opacity: 0.5, interactive: false }))
+      .concat(pts.map(p => L.circleMarker(S.ll(p.x, p.y), { radius: 14, color: "#e8590c", weight: 4, opacity: 0.6, fill: false, interactive: false })))).addTo(S.map);
   }
   function startRate() {
     stopAlign();
     st.rate = { sel: [], rating: "blue" };
     S.setPicker(f => {
-      if (f.kind !== "segment") { say("Tap a line, not a point.", "bad"); return renderSetup(); }
+      // A point placed on its own (Edit map → Add a point on the map) is rated like a run: the whole of it.
+      const pointRun = f.kind === "landmark" && f.run && isPointRun(f.run);
+      if (f.kind !== "segment" && !pointRun) { say(f.kind === "landmark" && f.run ? "That point is on a line: tap the line to rate it, and the point goes with it." : "Tap a line, or a point you added on the map.", "bad"); return renderSetup(); }
       const lay = f.layer && st.layers.find(l => l.id === f.layer);
       if (lay && !lay.rating) { say("That line is in another layer and can't be rated.", "bad"); return renderSetup(); }
       const have = st.rate.sel.findIndex(x => x.run === f.run);
       if (have >= 0) st.rate.sel.splice(have, 1);
-      st.rate.sel.push({ run: f.run, index: f.index, whole: false });
+      st.rate.sel.push(pointRun ? { run: f.run, index: 0, whole: true, point: f.landmark } : { run: f.run, index: f.index, whole: false });
       say(null); renderSetup(); highlight();
     });
   }
+  // A run with no drawn lines (a hidden jump to a point): rating it rates the point.
+  function isPointRun(run) { const e = (S.shown && S.shown.runs[run]) || []; return e.length > 0 && !e.some(x => E.LINE.test(x.type)) && e.some(x => x.type === "SaveLandmark"); }
   function stopRate() { if (!st.rate) return; st.rate = null; S.setPicker(null); highlight(); }
 
   async function applyRating() {
