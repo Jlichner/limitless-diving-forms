@@ -39,7 +39,7 @@
   function preview() {
     if (!st.open) return;
     if (st.review) { S.show(st.review.data, { base: S.data }); S.select(null); if (st.review.focus) { st.review.focus = false; S.focusChanges(); } return; }
-    const changes = st.draft.concat(st.mode === "add" && !st.add.pickingEnd ? addChanges(false) : st.mode === "point" ? pointChanges() : []);
+    const changes = st.draft.concat(st.mode === "add" && !st.add.pickingEnd ? addChanges(false) : st.mode === "point" ? pointChanges() : st.mode === "move" ? moveChanges() : []);
     const b = base(), r = E.apply(b.data, changes);
     // Admins edit with the layers in the data; for the survey team the map adds the rated lines on top as usual.
     S.show(r.data, b.runLayer ? { base: b.data, runLayer: b.runLayer } : { base: b.data });
@@ -201,7 +201,53 @@
       <div class="se-acts"><button type="button" class="btn primary" data-act="pt-save"${p.at ? "" : " disabled"}>Add to my changes</button>
         <button type="button" class="btn" data-act="pt-cancel">Cancel</button></div></section>`;
   }
-  S.map.on("click", e => placeAt(e.latlng));
+  S.map.on("click", e => { placeAt(e.latlng); moveAt(e.latlng); });
+
+  // ----- sliding a stake or tie-off along its line (Jamie 2026-11-25) -----
+  // The stake stays on its own run: tapping the line splits that line where it goes, so no line moves.
+  function startMove(f) {
+    st.mode = "move"; st.mv = { run: f.run, index: f.index, kind: f.kind, seg: null, frac: null };
+    say(null); setPlacing(true);
+  }
+  function moveChanges() {
+    const m = st.mv; if (!m || m.seg == null) return [];
+    return [{ op: "move_point", run: m.run, index: m.index, seg: m.seg, frac: m.frac }];
+  }
+  // The nearest spot on the stake's own run to where the map was tapped, within a finger's width.
+  function moveAt(latlng) {
+    if (st.mode !== "move" || !st.open || !latlng) return;
+    const m = st.mv, d = current().data, map = S.map, G = window.SurveyGeometry;
+    const px = map.latLngToContainerPoint(latlng);
+    let best = null;
+    for (const sg of G.compute(d).segments.filter(x => x.run === m.run)) {
+      if (!E.LINE.test((d.runs[m.run][sg.index] || {}).type)) continue;
+      const a = map.latLngToContainerPoint(S.ll(sg.x0, sg.y0)), b = map.latLngToContainerPoint(S.ll(sg.x1, sg.y1));
+      const vx = b.x - a.x, vy = b.y - a.y, len2 = vx * vx + vy * vy;
+      const t = len2 ? Math.max(0, Math.min(1, ((px.x - a.x) * vx + (px.y - a.y) * vy) / len2)) : 0;
+      const dist = Math.hypot(a.x + t * vx - px.x, a.y + t * vy - px.y);
+      if (!best || dist < best.dist) best = { dist, seg: sg.index, frac: Math.round(t * 1000) / 1000 };
+    }
+    if (!best || best.dist > 40) { say(`Tap on ${S.runName(m.run)}: the ${m.kind === "tieoff" ? "tie-off" : "stake"} stays on its own line.`, "bad"); return render(); }
+    m.seg = best.seg; m.frac = best.frac; say(null); render();
+  }
+  function saveMove() {
+    const ch = moveChanges();
+    if (!ch.length) { say("Tap the line where it should go.", "bad"); return render(); }
+    const r = E.apply(base().data, st.draft.concat(ch));
+    if (r.error) { say(r.error, "bad"); return render(); }
+    pushDraft(ch);
+    const what = st.mv.kind === "tieoff" ? "tie-off" : "stake";
+    st.mode = "idle"; st.mv = null; st.sel = null; setPlacing(false);
+    say(`Moved the ${what}. It's in your changes.`, "ok");
+    render();
+  }
+  function moveForm() {
+    const m = st.mv, what = m.kind === "tieoff" ? "tie-off" : "stake";
+    return `<section class="se-sec"><h3>Move the ${what}</h3>
+      <p class="hint">${m.seg == null ? `Tap ${esc(S.runName(m.run))} where the ${what} should be. It slides along its own line; the line doesn't move.` : `The new spot is in orange. Tap again to change it.`}</p>
+      <div class="se-acts"><button type="button" class="btn primary" data-act="mv-save"${m.seg == null ? " disabled" : ""}>Add to my changes</button>
+        <button type="button" class="btn" data-act="mv-cancel">Cancel</button></div></section>`;
+  }
 
   // ----- deleting and marking removed -----
   function startRemove(f, how) {
@@ -379,6 +425,7 @@
         ${onRun && hasAfter ? `<button type="button" class="btn" data-act="cut">${f.kind === "segment" ? "Delete this line and the rest of the run" : "Delete the rest of this run from here"}</button>
           <button type="button" class="btn" data-act="mark">${f.kind === "segment" ? "Mark as removed line from here" : "Mark the rest as removed line"}</button>` : ""}
         ${f.kind === "segment" ? `<button type="button" class="btn" data-act="drop">Take out just this line</button>` : ""}
+        ${(f.kind === "stake" || f.kind === "tieoff") && r && r[f.index] && E.MOVABLE.test(r[f.index].type) ? `<button type="button" class="btn" data-act="move">Move it along the line</button>` : ""}
         ${onRun ? `<button type="button" class="btn danger" data-act="run">Delete the whole run: ${esc(S.runName(f.run))}</button>` : ""}
         <button type="button" class="btn" data-act="unselect">Cancel</button></div>
       ${f.kind === "segment" ? `<p class="hint">"Take out just this line" keeps everything after it where it is. "Mark as removed line" keeps it on the map in grey, for line that was pulled.</p>` : ""}</div>`;
@@ -458,7 +505,7 @@
       return;
     }
     const descs = E.describeAll(base().data, st.draft), cur = current();
-    const body = st.review ? reviewCard() : st.mode === "add" ? addForm() : st.mode === "point" ? pointForm() : st.mode === "confirm" ? confirmCard() : selCard();
+    const body = st.review ? reviewCard() : st.mode === "add" ? addForm() : st.mode === "point" ? pointForm() : st.mode === "move" ? moveForm() : st.mode === "confirm" ? confirmCard() : selCard();
     panel.innerHTML = `<div class="se-head"><h2>Edit the map</h2><button type="button" class="btn" data-act="close">Done</button></div>
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
       ${body}
@@ -487,6 +534,7 @@
   function pick(f, latlng) {
     if (st.review) return;
     if (st.mode === "point") { if (latlng) placeAt(latlng); return; }
+    if (st.mode === "move") { if (latlng) moveAt(latlng); return; }
     if (st.mode === "add") {
       if (!st.add.pickingEnd) return;
       if (f.layer && !isAdmin()) { say("Pick a point on the main survey.", "bad"); return render(); }
@@ -522,6 +570,9 @@
     if (act === "add-save") return saveAdd();
     if (act === "pt-start") { startPoint(); return render(); }
     if (act === "pt-save") return savePoint();
+    if (act === "move") { startMove(f); return render(); }
+    if (act === "mv-save") return saveMove();
+    if (act === "mv-cancel") { st.mode = "idle"; st.mv = null; setPlacing(false); say(null); return render(); }
     if (act === "pt-cancel") { st.mode = "idle"; st.pt = null; setPlacing(false); say(null); return render(); }
     if (act === "add-cancel") { st.mode = "idle"; st.add = null; say(null); return render(); }
     if (act === "confirm-all") return commit(st.confirm.ops.concat(st.confirm.deps.map(run => ({ op: "remove_run", run }))));
@@ -571,7 +622,7 @@
   // Done always closes the panel first, so a problem redrawing the map can't leave it stuck open
   // (Jamie 2026-11-24: "the done button does not do anything"). A redraw problem is shown under the map.
   function close() {
-    st.open = false; S.editing = false; st.sel = null; st.review = null; st.mode = "idle"; st.add = null; st.confirm = null; st.pt = null; setPlacing(false);
+    st.open = false; S.editing = false; st.sel = null; st.review = null; st.mode = "idle"; st.add = null; st.confirm = null; st.pt = null; st.mv = null; setPlacing(false);
     render();
     try { S.setPicker(null); S.reset(); }
     catch (err) {
