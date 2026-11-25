@@ -544,7 +544,8 @@ ${marks}
       }
       // Points placed with a label (Edit map → Add a point on the map, or "show name = yes" in Drawing) show their name.
       const lr = l.label && l.run && S.ratingOf(l.run);
-      if (l.label && m) m.unbindTooltip().bindTooltip((lr && lr !== "green" ? ratingSvg(lr, 11) + " " : "") + esc(S.name(l.landmark)), { permanent: true, direction: "right", offset: [l.icon ? 10 * iconScale : 6, 0], className: "sm-lm-label" + (fresh ? " new" : "") });
+      if (l.label && m) m.unbindTooltip().bindTooltip((lr && lr !== "green" ? ratingSvg(lr, 11) + " " : "") + esc(S.name(l.landmark)), { permanent: true, direction: "right", offset: [l.icon ? 10 * iconScale : 6, 0], pane,   // in the point's own layer pane, so turning the layer off hides the name too
+          className: "sm-lm-label" + (fresh ? " new" : "") });
       markerFor[l.landmark] = m;
     }
     for (const dp of geo.depths) {
