@@ -19,7 +19,7 @@
      S.onPublished(fn)     called when the published survey changes
      S.setLayers(list)     extra layers: { id, name, kind: "survey" | "image", survey, imageUrl, bounds, ... }
      S.setLayerView(id, { visible, opacity })   show, hide or fade a layer ("survey" = the main lines, "satellite")
-     S.popupHooks          functions (feature, element) called when a landmark's popup opens (photos)
+     S.popupHooks          functions (feature, element, popup) called when a feature's popup opens (photos, line problems)
      S.ready               a promise that resolves once the member's access is checked and the map is drawn
      S.level, S.rank       the member's Site maps access ("green" … "site-admin", "admin") and its rank (1-6)
      S.canEdit()           survey team and up: may suggest changes;  S.isSiteAdmin(): Admins and Dive site admins */
@@ -242,7 +242,7 @@
       const box = document.createElement("div");
       box.innerHTML = popup();
       const pop = L.popup({ maxWidth: 320 }).setLatLng(layer.getLatLng ? layer.getLatLng() : ev.latlng).setContent(box).openOn(S.map);
-      if (feature.kind === "landmark") S.popupHooks.forEach(fn => { try { fn(feature, box, pop); } catch (e) { console.error(e); } });
+      S.popupHooks.forEach(fn => { try { fn(feature, box, pop); } catch (e) { console.error(e); } });
     });
     return layer;
   }

@@ -1925,3 +1925,74 @@ begin
 end $$;
 revoke all on function public.site_map_next_minor(text, integer) from public, anon;
 grant execute on function public.site_map_next_minor(text, integer) to authenticated;
+
+-- ---------- Site map line problems (added 2026-11-25) ----------
+-- Any member who can see a site map can report a problem on a line: broken, broken but temporarily repaired, or
+-- maintenance needed, with a note. Jamie gets a Telegram message (notify-signup { mapIssue: id }). Everyone with map
+-- access sees open reports on the map; Admins and Dive site admins mark them fixed.
+create table if not exists public.site_map_issues (
+  id            uuid primary key default gen_random_uuid(),
+  site_id       text not null check (site_id ~ '^[a-z0-9][a-z0-9-]{0,60}$'),
+  run           text not null default '' check (length(run) <= 200),
+  line_name     text not null default '' check (length(line_name) <= 200),
+  x             double precision,
+  y             double precision,
+  status        text not null check (status in ('broken', 'temp-repaired', 'maintenance')),
+  note          text not null default '' check (length(note) <= 1000),
+  reporter      uuid default auth.uid() references auth.users (id) on delete set null,
+  reporter_name text not null default '',
+  created_at    timestamptz not null default now(),
+  notified_at   timestamptz,
+  resolved_at   timestamptz,
+  resolved_by   uuid references auth.users (id) on delete set null,
+  resolved_note text not null default '' check (length(resolved_note) <= 1000)
+);
+create index if not exists site_map_issues_site on public.site_map_issues (site_id, resolved_at);
+alter table public.site_map_issues enable row level security;
+drop policy if exists "Site map members read line problems" on public.site_map_issues;
+create policy "Site map members read line problems" on public.site_map_issues for select to authenticated
+  using ((select public.site_map_rank()) >= 1);
+drop policy if exists "Site map members report line problems" on public.site_map_issues;
+create policy "Site map members report line problems" on public.site_map_issues for insert to authenticated
+  with check ((select public.site_map_rank()) >= 1 and reporter = (select auth.uid()) and resolved_at is null);
+drop policy if exists "Site map admins update line problems" on public.site_map_issues;
+create policy "Site map admins update line problems" on public.site_map_issues for update to authenticated
+  using ((select public.is_site_map_admin())) with check ((select public.is_site_map_admin()));
+drop policy if exists "Site map admins delete line problems" on public.site_map_issues;
+create policy "Site map admins delete line problems" on public.site_map_issues for delete to authenticated
+  using ((select public.is_site_map_admin()));
+revoke all on public.site_map_issues from anon;
+grant select, insert, update, delete on public.site_map_issues to authenticated;
+
+-- The reporter's name comes from their profile (or email), not from what the page sends.
+create or replace function public.site_map_issue_reporter()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  new.reporter := (select auth.uid());
+  new.notified_at := null; new.resolved_at := null; new.resolved_by := null;
+  select coalesce(nullif(p.full_name, ''), u.email::text, '') into new.reporter_name
+    from auth.users u left join public.student_profiles p on p.id = u.id where u.id = new.reporter;
+  new.reporter_name := coalesce(new.reporter_name, '');
+  return new;
+end $$;
+drop trigger if exists site_map_issues_reporter on public.site_map_issues;
+create trigger site_map_issues_reporter before insert on public.site_map_issues
+  for each row execute function public.site_map_issue_reporter();
+
+-- For the Telegram message: answers once, only for the caller's own report from the last 15 minutes.
+create or replace function public.claim_site_map_issue_notice(p_id uuid)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare r public.site_map_issues%rowtype;
+begin
+  update public.site_map_issues i set notified_at = now()
+   where i.id = p_id and i.reporter = (select auth.uid()) and i.notified_at is null
+     and i.created_at > now() - interval '15 minutes'
+  returning i.* into r;
+  if not found then return null; end if;
+  return jsonb_build_object('kind', 'mapissue', 'site_id', r.site_id, 'status', r.status, 'notes', r.note,
+    'line', coalesce(nullif(r.line_name, ''), r.run), 'created_at', r.created_at,
+    'title', coalesce((select m.data ->> 'title' from public.site_maps m where m.id = r.site_id), r.site_id),
+    'name', coalesce(nullif(r.reporter_name, ''), 'A diver'));
+end $$;
+revoke all on function public.claim_site_map_issue_notice(uuid) from public, anon;
+grant execute on function public.claim_site_map_issue_notice(uuid) to authenticated;
