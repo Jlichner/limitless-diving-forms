@@ -121,8 +121,8 @@
           <aside class="sm-edit" id="sm-edit" hidden aria-label="Map editor"></aside></div>
         ${L ? "" : `<p class="acct-note bad">The map couldn't be loaded. Check your connection and refresh the page.</p>`}
         <p class="hint dm-state" role="status" id="sm-warn" hidden></p></div>
-      <section class="panel" aria-labelledby="sm-layers-h" id="sm-layers-panel"><h2 id="sm-layers-h" class="sec">Layers</h2><div id="sm-layers"></div></section>
       <div id="sm-setup"></div>
+      <section class="panel" aria-labelledby="sm-layers-h" id="sm-layers-panel"><h2 id="sm-layers-h" class="sec">Layers</h2><div id="sm-layers"></div></section>
       <section class="panel" aria-labelledby="sm-key-h"><h2 id="sm-key-h" class="sec">Map key</h2><ul class="sm-key" id="sm-key"></ul></section>
       <section class="panel dm-list-panel" aria-labelledby="sm-list-h"><h2 id="sm-list-h" class="sec">Landmarks</h2><ul class="dm-list" id="sm-list"></ul></section>
       <p class="nx-note" id="sm-credit" style="white-space:pre-line"></p>`;
