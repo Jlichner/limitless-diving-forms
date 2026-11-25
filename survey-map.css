@@ -300,3 +300,20 @@ div.sb-err ul, div.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
 
 /* Site maps cards: the drawing over the satellite pictures (maps placed on the earth). */
 .sm-thumb.sat { padding: 0; background: #1d2a22; color: #ffe066; }
+
+/* The Survey book is always light, like a paper slate, with dark text, also when the computer is in dark mode
+   (Jamie 2026-11-25: pale text on white boxes was hard to read). */
+.sm-book { color-scheme: light; color: #0c2233; background: #ffffff; border-radius: 10px; padding: 10px 12px;
+  --bg: #eaf3f4; --surface: #ffffff; --surface-2: #f4f9fa; --ink: #0b2a3a; --muted: #4f6a73; --line: #c9dce0; --card: #ffffff;
+  --accent: #0f7c8c; --accent-ink: #ffffff; --accent-soft: #d6eef1; --ok: #17683f; --ok-bg: #dcf3e4; --bad: #a1211a; --bad-bg: #fbe2df; }
+.sm-book .btn { color: var(--ink); }
+.sm-book .btn.primary { color: var(--accent-ink); }
+.sm-book h2, .sm-book .sb-name, .sm-book .sb-lh, .sm-book .sb-row { color: #0c2233; }
+.sm-book input, .sm-book select, .sm-book textarea { color: #0c2233; background: #ffffff; border-color: #b8c8cc; }
+.sm-book input::placeholder, .sm-book textarea::placeholder { color: #7d8f96; opacity: 1; }
+.sm-book .sb-origin label, .sm-book .sb-join, .sm-book .sb-sum, .sm-book .sb-ver, .sm-book .sb-what, .sm-book .sb-head { color: #3f5560; }
+.sm-book .sb-c span { color: #3f5560; }
+.sm-book .sb-n { color: #5d7179; }
+.sm-book .sb-pub { background: #ffffff; }
+.sm-book .sb-row.bad { background: #fff1f1; }
+.sm-book .sb-c input:disabled, .sm-book .sb-c select:disabled { color: #5d7179; background: #f2f5f6; }
