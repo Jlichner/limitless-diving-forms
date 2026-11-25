@@ -267,7 +267,7 @@
     const ly = sy + sh - u(32);
     o.push(el("line", { x1: n(cx0 + pad2), y1: n(ly), x2: n(cx0 + colW - pad2), y2: n(ly), stroke: ink, "stroke-width": n(u(0.5)) }));
     const when = new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
-    o.push(text(cx0 + pad2, ly + u(13), `Version ${S.version || 0} · Printed ${when}`, u(8)));
+    o.push(text(cx0 + pad2, ly + u(13), `Version ${S.versionName()} · Printed ${when}`, u(8)));
     o.push(text(cx0 + pad2, ly + u(23), `Lines shown: ${LEVEL_TEXT[set.levels]}`, u(8)));
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${o.join("")}</svg>`;
@@ -372,7 +372,7 @@
       const { data: ver, error } = await C.client.rpc("publish_site_map", { site, new_data: data, expected_version: S.version, summary: "Saved the print map settings", edit_id: null });
       if (error) throw error;
       S.setPublished(data, ver, new Date().toISOString());
-      say(`Saved (version ${ver}).`, "ok");
+      say(`Saved (version ${S.versionName()}).`, "ok");
     } catch (err) { say(C.explain ? C.explain(err) : String(err), "bad"); }
     st.busy = false; render();
   }

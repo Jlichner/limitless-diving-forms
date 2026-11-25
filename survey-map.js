@@ -19,7 +19,7 @@
      S.onPublished(fn)     called when the published survey changes
      S.setLayers(list)     extra layers: { id, name, kind: "survey" | "image", survey, imageUrl, bounds, ... }
      S.setLayerView(id, { visible, opacity })   show, hide or fade a layer ("survey" = the main lines, "satellite")
-     S.popupHooks          functions (feature, element) called when a landmark's popup opens (photos)
+     S.popupHooks          functions (feature, element, popup) called when a feature's popup opens (photos, line problems)
      S.ready               a promise that resolves once the member's access is checked and the map is drawn
      S.level, S.rank       the member's Site maps access ("green" … "site-admin", "admin") and its rank (1-6)
      S.canEdit()           survey team and up: may suggest changes;  S.isSiteAdmin(): Admins and Dive site admins */
@@ -70,7 +70,7 @@
   const LEGEND_NAMES = { "icons/shipwreck.png": "Shipwreck" }; // icons used by more than one landmark
 
   const S = window.SurveyMap = {
-    site, data: (window.SITE_MAPS || {})[site], version: 0, updatedAt: null, map: null, esc,
+    site, data: (window.SITE_MAPS || {})[site], version: 0, label: null, updatedAt: null, map: null, esc,
     show, reset, setPicker, combine: d => combine(d), select, focusChanges, onPublished: fn => published.push(fn), setPublished,
     layers: [], view: {}, setLayers, setLayerView, popupHooks: [], ll, geoRef: () => GEO, toXY: (lat, lng) => GEO ? GEO.toXY(lat, lng) : [lng, lat],
     runLayer: {}, RATINGS, ratingSvg, LEVELS, adminListeners: [], level: null, rank: 0,
@@ -121,8 +121,8 @@
           <aside class="sm-edit" id="sm-edit" hidden aria-label="Map editor"></aside></div>
         ${L ? "" : `<p class="acct-note bad">The map couldn't be loaded. Check your connection and refresh the page.</p>`}
         <p class="hint dm-state" role="status" id="sm-warn" hidden></p></div>
-      <section class="panel" aria-labelledby="sm-layers-h" id="sm-layers-panel"><h2 id="sm-layers-h" class="sec">Layers</h2><div id="sm-layers"></div></section>
       <div id="sm-setup"></div>
+      <section class="panel" aria-labelledby="sm-layers-h" id="sm-layers-panel"><h2 id="sm-layers-h" class="sec">Layers</h2><div id="sm-layers"></div></section>
       <section class="panel" aria-labelledby="sm-key-h"><h2 id="sm-key-h" class="sec">Map key</h2><ul class="sm-key" id="sm-key"></ul></section>
       <section class="panel dm-list-panel" aria-labelledby="sm-list-h"><h2 id="sm-list-h" class="sec">Landmarks</h2><ul class="dm-list" id="sm-list"></ul></section>
       <p class="nx-note" id="sm-credit" style="white-space:pre-line"></p>`;
@@ -152,7 +152,7 @@
       ? `<b>Help us map this site.</b> No lines have been surveyed here yet. Every line is measured from the ${esc(S.name(d.origin || "BAR"))}.
          ${S.canEdit() ? `Tap <b>Edit map</b> to add the first line you surveyed: its length, compass heading, and what's at its end.` : "Our survey team adds the lines as they map it."}`
       : S.version
-      ? `<b>Updated ${esc(when)}</b> (version ${S.version}). Zoom in, and tap a line or landmark to see what was measured.`
+      ? `<b>Updated ${esc(when)}</b> (version ${esc(S.versionName())}). Zoom in, and tap a line or landmark to see what was measured.`
       : `<b>New:</b> the ${esc(String(d.version || "").replace(/^v[\d.]+ /, ""))} survey map, now drawn live from the survey data. Zoom in, and tap a line or landmark to see what was measured.`;
     let ft = 0;
     for (const s of geo.segments) if (s.kind === "surveyed" || s.kind === "marina") ft += lineFeet(d.runs[s.run][s.index]);
@@ -242,7 +242,7 @@
       const box = document.createElement("div");
       box.innerHTML = popup();
       const pop = L.popup({ maxWidth: 320 }).setLatLng(layer.getLatLng ? layer.getLatLng() : ev.latlng).setContent(box).openOn(S.map);
-      if (feature.kind === "landmark") S.popupHooks.forEach(fn => { try { fn(feature, box, pop); } catch (e) { console.error(e); } });
+      S.popupHooks.forEach(fn => { try { fn(feature, box, pop); } catch (e) { console.error(e); } });
     });
     return layer;
   }
@@ -586,7 +586,12 @@ ${marks}
       L.circleMarker(ll(x, y), { radius: 10, color: NEW, weight: 3, fill: false, interactive: false }),
     ].filter(Boolean)).addTo(S.map);
   }
-  function setPublished(d, version, updatedAt) {
+  // Version names like 2.0.1 (site_maps.label). Each publish adds one to the last number, the same as the database
+  // does; versions from before the names started show their whole number.
+  const bumpLabel = l => /^\d+\.\d+\.\d+$/.test(l || "") ? l.replace(/\d+$/, n => String(+n + 1)) : null;
+  S.versionName = (v = S.version, label = v === S.version ? S.label : null) => label || String(v || 0);
+  function setPublished(d, version, updatedAt, label) {
+    S.label = label !== undefined ? label : version === S.version + 1 ? bumpLabel(S.label) : null;
     S.data = d; S.version = version || 0; S.updatedAt = updatedAt || null;
     if (placeOnEarth(d) && !S.editing) { show(S.data); drawImages(); }
     published.forEach(fn => { try { fn(); } catch (e) { console.error(e); } });
@@ -640,9 +645,10 @@ ${marks}
       <p>Ask Jamie at <a href="mailto:jamie@limitless-diving.com">jamie@limitless-diving.com</a>, then refresh this page.</p>
       <p><a href="site-maps.html">← All site maps</a></p>`);
     S.level = me.level; S.rank = RANKS[me.level];
-    const { data, error } = await C.client.from("site_maps").select("data, version, updated_at").eq("id", site).maybeSingle();
+    let { data, error } = await C.client.from("site_maps").select("data, version, updated_at, label").eq("id", site).maybeSingle();
+    if (error && /label/.test(error.message || "")) ({ data, error } = await C.client.from("site_maps").select("data, version, updated_at").eq("id", site).maybeSingle());
     if (error) return gate(`${title}<p>This site map couldn't be loaded: ${esc(C.explain(error))}. Refresh the page to try again.</p>`);
-    if (data) { S.data = data.data; S.version = data.version; S.updatedAt = data.updated_at; }
+    if (data) { S.data = data.data; S.version = data.version; S.updatedAt = data.updated_at; S.label = data.label || null; }
     else if (S.data.privateSurvey) return gate(`${title}<p>This map's survey hasn't been loaded into the website yet.${S.isSiteAdmin()
       ? ` Run its seed file (<code>site-maps-seed-${esc(site)}.sql</code>, in the project files) in the Supabase SQL editor, after <code>supabase/schema.sql</code>.` : " Check back soon."}</p>
       <p><a href="site-maps.html">← All site maps</a></p>`);

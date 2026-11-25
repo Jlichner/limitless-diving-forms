@@ -79,7 +79,7 @@
     if (S.geoRef()) out.push({ id: "satellite", name: "Satellite pictures", hint: "Esri World Imagery" });
     for (const l of st.layers.filter(l => l.kind === "image")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note,
       hint: !l.imageUrl ? "Picture not added yet" : !l.bounds ? "Not lined up yet" : l.bounds.north != null && !S.geoRef() ? "Shows once the map is placed on the earth" : "" });
-    out.push({ id: "survey", name: "Survey lines", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
+    out.push({ id: "survey", name: "Open water", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
     for (const l of st.layers.filter(l => l.kind === "survey")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note, rating: l.rating,
       hint: l.survey && Object.keys(l.survey.runs || {}).length ? `${Object.keys(l.survey.runs).length} runs of line` : "No lines yet" });
     return out;
@@ -264,6 +264,7 @@
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
       ${st.loadErr === "setup" ? `<p class="se-err">Run the latest <code>supabase/schema.sql</code> in Supabase first: layers, access and photos need its new tables.</p>` : ""}
 
+      ${versionCard()}
       <details class="sm-su"${st.open.place ? " open" : ""} data-sec="place"><summary>Place the map on the earth${g ? " ✓" : ""}</summary>
         <p class="hint">Stand on (or float over) a landmark with a GPS, or find it on a satellite map, and enter its coordinates.
           The survey's headings are from a compass, so also enter the magnetic declination for the site
@@ -322,6 +323,16 @@
         ${l.kind === "image" && l.imageUrl ? `<button type="button" class="btn" data-su="align" data-id="${esc(l.id)}">${al ? "Stop lining up" : "Line it up"}</button>` : ""}
         <button type="button" class="btn danger" data-su="ly-del" data-id="${esc(l.id)}">Delete</button></div>
       ${al ? alignCard(l) : ""}</li>`;
+  }
+
+  // Version names: every publish adds one to the last number (2.0.1, 2.0.2…); this starts the next minor version.
+  function versionCard() {
+    if (!S.version) return "";
+    const m = /^(\d+)\.(\d+)\.\d+$/.exec(S.label || ""), next = m ? `${m[1]}.${+m[2] + 1}.0` : null;
+    return `<div class="se-card sm-version"><p><b>Version ${esc(S.versionName())}</b> is on the map now. Each publish adds one to the last number.</p>
+      ${next ? `<button type="button" class="btn" data-su="minor"${st.busy ? " disabled" : ""}>Start version ${next}</button>
+        <span class="hint">Publishes the map as it is now as ${next}; the next changes are ${m[1]}.${+m[2] + 1}.1 and so on.</span>`
+        : `<p class="hint">Run the latest <code>supabase/schema.sql</code> in Supabase to start the version names at 2.0.1.</p>`}</div>`;
   }
 
   // ----- lining up a picture -----
@@ -645,7 +656,7 @@
     S.setPublished(data, ver, new Date().toISOString());
     st.clearForms = true;
     pushLayers();
-    say(`Published as version ${ver}.`, "ok");
+    say(`Published as version ${S.versionName()}.`, "ok");
   }
   setupBox.addEventListener("change", e => {
     const el = e.target;
@@ -664,6 +675,12 @@
     if (act === "move") { say(null); startMove(); return renderSetup(); }
     if (act === "move-cancel") { stopMove(); say(null); return renderSetup(); }
     if (act === "turn" && st.move) { st.move.declination = ((st.move.declination + Number(b.dataset.d) + 540) % 360) - 180; movePreview(); return renderSetup(); }
+    if (act === "minor") return run(async () => {
+      const { data: nl, error } = await C.client.rpc("site_map_next_minor", { site, expected_version: S.version });
+      if (error) throw error;
+      S.setPublished(S.data, S.version + 1, new Date().toISOString(), nl);
+      say(`Started version ${nl}.`, "ok");
+    });
     if (act === "move-save" && st.move) return run(async () => { await publishPlace(moveGr()); stopMove(true); });
     if (act === "rate-start") { st.open.rate = true; startRate(); say(null); return renderSetup(); }
     if (act === "rate-stop") { stopRate(); say(null); return renderSetup(); }

@@ -229,7 +229,7 @@
           const { data, error } = await C.client.rpc("publish_site_map", { site, new_data: sp.green, expected_version: S.version, summary: st.summary.trim(), edit_id: null });
           if (error) throw error;
           S.setPublished(sp.green, data, new Date().toISOString());
-          say(`Published as version ${data}.`, "ok");
+          say(`Published as version ${S.versionName()}.`, "ok");
           st.history = null;
         } catch (err) {
           for (const l of saved) await C.client.from("site_map_layers").update({ survey: l.survey }).eq("id", l.id);
@@ -258,11 +258,15 @@
     st.mine = data.filter(x => x.author === C.user.id).slice(0, 20);
     st.pending = isAdmin() ? data.filter(x => x.status === "pending").reverse() : [];
     if (isAdmin() && !st.history) {
-      const h = await C.client.from("site_map_history").select("version, summary, published_at, published_by_name").eq("site_id", site).order("version", { ascending: false }).limit(30);
+      const hq = cols => C.client.from("site_map_history").select(cols).eq("site_id", site).order("version", { ascending: false }).limit(30);
+      let h = await hq("version, label, summary, published_at, published_by_name");
+      if (h.error && /label/.test(h.error.message || "")) h = await hq("version, summary, published_at, published_by_name");
       st.history = h.error ? [] : h.data;
     }
   }
 
+  // "2.0.3", or "old version 4" from before the names started.
+  function vname(v) { const h = (st.history || []).find(x => x.version === v); return h && h.label ? `version ${h.label}` : `old version ${v}`; }
   function reviewEdit(ed) {
     const r = E.apply(S.data, ed.changes);
     st.review = { kind: "edit", focus: true, edit: ed, data: r.data, error: r.error, failedAt: r.failedAt, warnings: r.error ? [] : window.SurveyGeometry.compute(r.data).warnings };
@@ -279,12 +283,12 @@
     if (!rv || rv.error) return;
     st.busy = true; render();
     try {
-      const summary = rv.kind === "edit" ? `${rv.edit.author_name || "A member"}: ${rv.edit.summary}` : (rv.version ? `Put back version ${rv.version}` : "Put back the original survey map");
+      const summary = rv.kind === "edit" ? `${rv.edit.author_name || "A member"}: ${rv.edit.summary}` : (rv.version ? `Put back ${vname(rv.version)}` : "Put back the original survey map");
       if (rv.kind === "version" && !rv.data.georef && S.data.georef) rv.data = Object.assign({}, rv.data, { georef: S.data.georef });
       const { data, error } = await C.client.rpc("publish_site_map", { site, new_data: rv.data, expected_version: S.version, summary, edit_id: rv.kind === "edit" ? rv.edit.id : null });
       if (error) throw error;
       S.setPublished(rv.data, data, new Date().toISOString());
-      say(`Published as version ${data}.`, "ok");
+      say(`Published as version ${S.versionName()}.`, "ok");
       st.review = null; st.history = null;
       await loadLists();
     } catch (err) { say(C.explain(err), "bad"); }
@@ -365,12 +369,12 @@
 
   function reviewCard() {
     const rv = st.review;
-    const title = rv.kind === "edit" ? `Suggestion from ${esc(rv.edit.author_name || "a member")}` : rv.version ? `Version ${rv.version}` : "The original survey map";
+    const title = rv.kind === "edit" ? `Suggestion from ${esc(rv.edit.author_name || "a member")}` : rv.version ? esc(vname(rv.version).replace(/^./, c => c.toUpperCase())) : "The original survey map";
     const old = rv.kind === "edit" && rv.edit.base_version !== S.version;
     return `<div class="se-card review"><span class="eyebrow">Preview</span><b>${title}</b>
       ${rv.kind === "edit" ? `<p>${esc(rv.edit.summary)}</p><ol>${E.describeAll(S.data, rv.edit.changes).map((t, i) => `<li${i === rv.failedAt ? ' class="bad"' : ""}>${esc(t)}</li>`).join("")}</ol>` : ""}
       <p class="hint">On the map: new in orange, deleted in red.</p>
-      ${old ? `<p class="se-err">Made on version ${rv.edit.base_version}; the map is now version ${S.version}. Check the preview carefully.</p>` : ""}
+      ${old ? `<p class="se-err">Made on an older version of the map; it has been published again since. Check the preview carefully.</p>` : ""}
       ${rv.error ? `<p class="se-err">It doesn't fit the map any more: ${esc(rv.error)} Decline it and ask them to make it again.</p>` : ""}
       ${rv.warnings.length ? `<p class="se-err">${rv.warnings.map(esc).join("<br>")}</p>` : ""}
       <div class="se-acts">
@@ -408,7 +412,7 @@
       ${isAdmin() && !st.review ? `<section class="se-sec"><h3>Suggestions to review${st.pending.length ? ` (${st.pending.length})` : ""}</h3>
         ${st.pending.length ? `<ul class="se-list plain">${st.pending.map(x => `<li><b>${esc(x.author_name || "A member")}</b> · ${esc(when(x.created_at))}<br>${esc(x.summary)}
           <br><button type="button" class="btn" data-act="review" data-id="${esc(x.id)}">Preview and review</button></li>`).join("")}</ul>` : `<p class="hint">None waiting.</p>`}</section>
-        <section class="se-sec"><h3>History</h3>${st.history && st.history.length ? `<ul class="se-list plain">${st.history.map(h => `<li><b>Version ${h.version}</b>${h.version === S.version ? " (on the map now)" : ""} · ${esc(when(h.published_at))}${h.published_by_name ? " · " + esc(h.published_by_name) : ""}<br>${esc(h.summary)}
+        <section class="se-sec"><h3>History</h3>${st.history && st.history.length ? `<ul class="se-list plain">${st.history.map(h => `<li><b>${h.label ? `Version ${esc(h.label)}` : `Old version ${h.version}`}</b>${h.version === S.version ? " (on the map now)" : ""} · ${esc(when(h.published_at))}${h.published_by_name ? " · " + esc(h.published_by_name) : ""}<br>${esc(h.summary)}
           ${h.version !== S.version ? `<br><button type="button" class="btn" data-act="version" data-v="${h.version}">Preview</button>` : ""}</li>`).join("")}
           ${hasFile ? `<li><b>Original survey map</b> (${esc(fileData.version || "")})<br><button type="button" class="btn" data-act="version" data-v="0">Preview</button></li>` : ""}</ul>`
           : `<p class="hint">Not published yet.${hasFile ? ` The map shows the original survey (${esc(fileData.version || "")}).` : ""}</p>`}</section>` : ""}
