@@ -438,8 +438,13 @@
   panel.addEventListener("click", async e => {
     const b = e.target.closest("[data-act]");
     if (!b) return;
-    const act = b.dataset.act, f = st.sel;
+    const act = b.dataset.act;
     if (act === "close") return close();
+    try { await onAct(act, b); }
+    catch (err) { console.error(err); say("Something went wrong: " + (err && err.message || err), "bad"); try { render(); } catch (e2) { console.error(e2); } }
+  });
+  async function onAct(act, b) {
+    const f = st.sel;
     if (act === "unselect") { st.sel = null; return render(); }
     if (act === "add") { startAdd(f); return render(); }
     if (act === "cut" || act === "mark" || act === "run" || act === "drop") return startRemove(f, act);
@@ -463,7 +468,7 @@
     if (act === "decline") { st.declining = st.review.edit.id; return render(); }
     if (act === "decline-go") return decline(st.review.edit.id, (panel.querySelector("#se-decline-note") || {}).value);
     if (act === "withdraw") return withdraw(b.dataset.id);
-  });
+  }
 
   // Typing in the add form updates the preview without redrawing the form, so the cursor stays put.
   function onField(e) {
@@ -488,9 +493,17 @@
     say(null); render();
     if (C && C.user) { await loadLists(); render(); }
   }
+  // Done always closes the panel first, so a problem redrawing the map can't leave it stuck open
+  // (Jamie 2026-11-24: "the done button does not do anything"). A redraw problem is shown under the map.
   function close() {
     st.open = false; S.editing = false; st.sel = null; st.review = null; st.mode = "idle"; st.add = null; st.confirm = null;
-    S.setPicker(null); S.reset(); render();
+    render();
+    try { S.setPicker(null); S.reset(); }
+    catch (err) {
+      console.error(err);
+      const warn = document.getElementById("sm-warn");
+      if (warn) { warn.hidden = false; warn.textContent = "The map couldn't be redrawn after editing (" + (err && err.message || err) + "). Refresh the page to see it."; }
+    }
   }
 
   btn.addEventListener("click", () => (st.open ? close() : open()));
