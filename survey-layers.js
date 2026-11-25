@@ -48,6 +48,9 @@
     return out;
   }
   function pushLayers() {
+    for (const l of st.layers) if (l.kind === "image" && !startedOff.has(l.id)) {
+      startedOff.add(l.id); S.view[l.id] = Object.assign({ opacity: l.opacity == null ? 1 : Number(l.opacity) }, S.view[l.id], { visible: false });
+    }
     const al = st.align;
     S.setLayers(st.layers.map(l => Object.assign({}, l, al && al.id === l.id
       ? { bounds: al.bounds, onImage: img => { al.overlay = img; } } : {})));
@@ -64,7 +67,12 @@
   // ----- the layers panel -----
   function loadView() { try { return JSON.parse(localStorage.getItem(VIEW) || "{}") || {}; } catch (e) { return {}; } }
   function saveView() { try { localStorage.setItem(VIEW, JSON.stringify(S.view)); } catch (e) { /* private mode */ } }
-  Object.assign(S.view, loadView());
+  // Every visit starts with the satellite and picture layers switched off (Jamie 2026-11-25); how see-through
+  // they were set is remembered, and the survey line layers keep their saved on/off.
+  const savedView = loadView();
+  Object.assign(S.view, savedView);
+  S.setLayerView("satellite", { visible: false, opacity: (savedView.satellite && savedView.satellite.opacity) || 1 });
+  const startedOff = new Set();
 
   function rows() {
     const out = [];
