@@ -342,7 +342,9 @@
   function printSlate(blk) {
     const t = blk && blk.title != null ? st.rows[blk.title] : null;
     const legs = blk ? blk.legs.map(i => st.rows[i]) : [];
-    const n = Math.max(15, legs.length + 6);
+    // Big rows, 10 to a page, so they're easy to write in underwater (Jamie 2026-11-25). A filled slate gets a few
+    // spare rows and as many pages as it needs.
+    const PER = 10, pages = Math.max(1, Math.ceil((legs.length + (legs.length ? 3 : 0)) / PER)), n = pages * PER;
     const cell = v => esc(str(v));
     const rows = Array.from({ length: n }, (_, k) => {
       const r = legs[k];
@@ -353,13 +355,14 @@
         <td>${r ? esc(ft) : ""}</td><td>${r ? esc(inch) : ""}</td><td class="sl-kind">${box(r && (kind === "" || kind === "surveyed"), "Surv")} ${box(kind === "unsurveyed", "Unsurv")} ${box(kind === "platform", "Plat")}</td><td>${r ? cell(r[8]) : ""}</td></tr>`;
     }).join("");
     const startAt = legs.length ? str(legs[0][0]) : "";
-    printBox.innerHTML = `<div class="slate">
-      <div class="sl-head"><h1>LIMITLESS DIVING · SURVEY SLATE</h1><span>${esc(S.data.title || site)} · page ___ of ___</span></div>
+    const rowList = rows.split("</tr>").filter(x => x.trim()).map(x => x + "</tr>");
+    printBox.innerHTML = Array.from({ length: pages }, (_, p) => `<div class="slate">
+      <div class="sl-head"><h1>LIMITLESS DIVING · SURVEY SLATE</h1><span>${esc(S.data.title || site)} · page ${pages > 1 ? `${p + 1} of ${pages}` : "___ of ___"}</span></div>
       <div class="sl-top"><div><span>Date</span></div><div><span>Divers</span></div><div><span>Line name</span><b>${t ? cell(t[0]) : ""}</b></div><div><span>Starts at station</span><b>${esc(startAt)}</b></div></div>
       <table><thead><tr><th>#</th><th>From</th><th>To<br><small>Rock / Stake / name</small></th><th>Depth<br>ft</th><th>Heading<br>°</th><th>Back<br>°</th><th>Feet</th><th>In</th><th>Kind</th><th>Note</th></tr></thead>
-      <tbody>${rows}</tbody></table>
+      <tbody>${rowList.slice(p * PER, (p + 1) * PER).join("")}</tbody></table>
       <p class="sl-hint"><b>To:</b> Rock for a tie-off, Stake for a stake, or the station's name. <b>Heading:</b> compass, from → to. <b>Back:</b> to → from.
-        ${t ? `Printed from the map, version ${esc(S.versionName ? S.versionName() : String(S.version))}, ${esc(new Date().toLocaleDateString())}.` : "Same rows as the Survey book on the website, so typing it in is straight across."}</p></div>`;
+        ${t ? `Printed from the map, version ${esc(S.versionName ? S.versionName() : String(S.version))}, ${esc(new Date().toLocaleDateString())}.` : "Same rows as the Survey book on the website, so typing it in is straight across."}</p></div>`).join("");
     document.body.classList.add("sb-printing");
     const done = () => { document.body.classList.remove("sb-printing"); window.removeEventListener("afterprint", done); };
     window.addEventListener("afterprint", done);

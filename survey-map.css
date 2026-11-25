@@ -265,23 +265,24 @@ div.sb-err ul, div.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
   body.sb-printing #sb-print { display: block; }
   @page { size: landscape; margin: 0.4in; }
 }
-#sb-print .slate { font-family: Arial, Helvetica, sans-serif; color: #000; border: 2px solid #000; padding: 14px 16px; }
+#sb-print .slate { font-family: Arial, Helvetica, sans-serif; color: #000; border: 2px solid #000; padding: 12px 16px; break-after: page; page-break-after: always; }
+#sb-print .slate:last-child { break-after: auto; page-break-after: auto; }
 #sb-print .sl-head { display: flex; justify-content: space-between; align-items: baseline; }
 #sb-print h1 { font-size: 18pt; margin: 0; letter-spacing: .02em; }
 #sb-print .sl-top { display: grid; grid-template-columns: 1fr 1fr 1.3fr 1.3fr; gap: 12px; margin: 8px 0 10px; }
-#sb-print .sl-top div { border-bottom: 1.5px solid #000; min-height: 34px; display: flex; flex-direction: column; justify-content: space-between; }
+#sb-print .sl-top div { border-bottom: 1.5px solid #000; min-height: 44px; display: flex; flex-direction: column; justify-content: space-between; }
 #sb-print .sl-top span { font-size: 8pt; color: #333; }
 #sb-print .sl-top b { font: 13pt "Courier New", monospace; }
 #sb-print table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 #sb-print th { border: 1.5px solid #000; background: #e8e8e8; font-size: 8.5pt; padding: 3px; text-align: center; }
 #sb-print th small { font-weight: 400; font-size: 7pt; }
-#sb-print td { border: 1.5px solid #000; height: 31px; padding: 1px 4px; font: 11pt "Courier New", monospace; overflow: hidden; white-space: nowrap; }
+#sb-print td { border: 1.5px solid #000; height: 0.55in; padding: 1px 5px; font: 13pt "Courier New", monospace; overflow: hidden; white-space: nowrap; }
 #sb-print th:nth-child(1) { width: 4%; } #sb-print th:nth-child(2), #sb-print th:nth-child(3) { width: 15%; }
-#sb-print th:nth-child(4), #sb-print th:nth-child(5), #sb-print th:nth-child(6), #sb-print th:nth-child(7) { width: 7%; } #sb-print th:nth-child(8) { width: 5%; } #sb-print th:nth-child(9) { width: 12%; }
+#sb-print th:nth-child(4), #sb-print th:nth-child(5), #sb-print th:nth-child(6), #sb-print th:nth-child(7) { width: 7%; } #sb-print th:nth-child(8) { width: 5%; } #sb-print th:nth-child(9) { width: 17%; }
 #sb-print .sl-n { color: #555; text-align: right; }
-#sb-print .sl-kind { font: 8pt Arial, sans-serif; }
-#sb-print .sl-chk { display: inline-block; width: 9px; height: 9px; border: 1.3px solid #000; margin: 0 2px 0 1px; vertical-align: -1px; }
-#sb-print .sl-chk { text-align: center; line-height: 8px; font-size: 9px; font-weight: 700; }
+#sb-print .sl-kind { font: 9pt Arial, sans-serif; white-space: normal; }
+#sb-print .sl-chk { display: inline-block; width: 13px; height: 13px; border: 1.5px solid #000; margin: 0 2px 0 1px; vertical-align: -2px; }
+#sb-print .sl-chk { text-align: center; line-height: 12px; font-size: 11px; font-weight: 700; }
 #sb-print .sl-hint { font-size: 8pt; margin: 6px 0 0; }
 
 /* The Survey book's own tab (site map page opened with ?book): just the map and the book. */
