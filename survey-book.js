@@ -16,7 +16,10 @@
   const btn = document.getElementById("sm-book-btn");
   if (!btn) return;
   btn.hidden = !S.isSiteAdmin();
-  const KEY = "ld-survey-book-" + site;
+  const KEY = "ld-survey-book-" + site, SIGNAL = "ld-survey-book-published-" + site;
+  // The book opens in its own tab: the same site map page with ?book, showing just the map and the book.
+  const PAGE = new URLSearchParams(location.search).has("book");
+  const bookUrl = () => location.pathname + "?book";
   const LEVELS = ["Green circle", "Blue square", "Black diamond", "Double black diamond"];
   const LEVEL_DOT = { "green circle": "#2e7d32", "blue square": "#1565c0", "black diamond": "#111", "double black diamond": "#111" };
   const KINDS = ["Surveyed", "Unsurveyed", "Platform", "Jump"];
@@ -169,7 +172,7 @@
     box.hidden = false;
     box.innerHTML = `<div class="sb-top"><h2 class="sec">Survey book</h2>
         <span class="sb-ver">Version ${esc(S.versionName ? S.versionName() : String(S.version))} on the map${changed ? " · <b>changes not published yet</b>" : ""}</span>
-        <button type="button" class="btn" data-sb="close">Close</button></div>
+        <button type="button" class="btn" data-sb="close">${PAGE ? "Close this tab" : "Close"}</button></div>
       <p class="hint">Enter the survey the way it's written on the slate: one row per leg, from station to station. <b>To</b> is Rock for a tie-off,
         Stake for a stake, or the station's name. Mistakes show in red as you type, and the map above shows the result (new lines in orange, removed ones in red).
         Your work is kept in this browser until you publish.</p>
@@ -296,6 +299,7 @@
         layers: { blue: c.sp.src.blue, black: c.sp.src.black, "double-black": c.sp.src["double-black"] } });
       if (error) throw error;
       S.setPublished(c.sp.src.green, v, new Date().toISOString());
+      try { localStorage.setItem(SIGNAL, JSON.stringify({ at: Date.now(), name: S.versionName ? S.versionName() : String(v) })); } catch (e) { /* the map tab just won't hear */ }
       if (S.reloadLayers) await S.reloadLayers();
       dropDraft(); st.summary = ""; st.confirm = false;
       const w = fromWebsite(); st.rows = w.rows; st.lm = w.lm; st.base = S.version;
@@ -376,7 +380,7 @@
     host.classList.add("sb-open"); btn.classList.add("on"); btn.setAttribute("aria-pressed", "true");
     setTimeout(() => S.map.invalidateSize(), 50);
     start(false);
-    box.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!PAGE) box.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function close() {
     st.open = false; S.editing = false;
@@ -385,6 +389,33 @@
     setTimeout(() => S.map.invalidateSize(), 50);
     try { S.reset(); } catch (e) { console.error(e); }
   }
-  btn.addEventListener("click", () => (st.open ? close() : open()));
   S.onPublished(() => { if (st.open) render(); });
+  if (!PAGE) {
+    // On the map: the button opens the book in a new tab. When the book there publishes, offer a refresh here.
+    btn.addEventListener("click", () => { const w = window.open(bookUrl(), "_blank"); if (!w) location.href = bookUrl(); });
+    window.addEventListener("storage", e => {
+      if (e.key !== SIGNAL || !e.newValue) return;
+      let name = ""; try { name = JSON.parse(e.newValue).name || ""; } catch (x) { /* ignore */ }
+      const w = document.getElementById("sm-warn"); if (!w) return;
+      w.hidden = false;
+      w.innerHTML = `The Survey book published ${name ? "version " + esc(name) : "a new version"}. <a href="${esc(location.pathname)}">Refresh to see it</a>.`;
+    });
+    return;
+  }
+  // The book's own tab.
+  document.body.classList.add("sb-page");
+  document.title = "Survey book · " + (S.data.title || "Site map");
+  const h1 = document.querySelector("#surveymap h1"); if (h1) h1.textContent = "Survey book · " + (S.data.title || "");
+  const back = document.querySelector("#surveymap .back"); if (back) { back.href = location.pathname; back.textContent = "← " + (S.data.title || "Site map") + " map"; }
+  btn.hidden = true;
+  close = function () {
+    window.close();   // works when the map opened this tab
+    setTimeout(() => { location.href = location.pathname; }, 200);
+  };
+  if (!S.isSiteAdmin()) {
+    box.hidden = false;
+    box.innerHTML = `<p class="acct-note bad">The Survey book is for Admins and Dive site admins. <a href="${esc(location.pathname)}">Back to the map</a></p>`;
+    return;
+  }
+  open();
 });

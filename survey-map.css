@@ -283,3 +283,10 @@ div.sb-err ul, div.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
 #sb-print .sl-chk { display: inline-block; width: 9px; height: 9px; border: 1.3px solid #000; margin: 0 2px 0 1px; vertical-align: -1px; }
 #sb-print .sl-chk { text-align: center; line-height: 8px; font-size: 9px; font-weight: 700; }
 #sb-print .sl-hint { font-size: 8pt; margin: 6px 0 0; }
+
+/* The Survey book's own tab (site map page opened with ?book): just the map and the book. */
+.sb-page #sm-stats, .sb-page #sm-setup, .sb-page #sm-layers-panel, .sb-page #sm-issues-panel, .sb-page #sm-key, .sb-page #sm-list,
+.sb-page #surveymap > section.panel:not(.dm-panel), .sb-page #sm-credit,
+.sb-page #sm-kml, .sb-page #sm-print-btn, .sb-page #sm-edit-btn { display: none !important; }
+.sb-page .pub-hero { padding-bottom: 4px; }
+.sb-page .pub-hero p { display: none; }
