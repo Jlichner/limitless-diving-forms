@@ -18,7 +18,7 @@
 (function (root) {
   "use strict";
 
-  const LINE = /^(SurveyedLine|UnsurveyedLine|MarinaLine|RemovedLine)$/;
+  const LINE = /^(SurveyedLine|UnsurveyedLine|MarinaLine|PlatformLine|RemovedLine)$/;
   const SAVES = e => (e.type === "SaveLandmark" || e.type === "SavedStake") && e.landmark ? e.landmark : null;
   const KEY = /^[A-Z][A-Z0-9_]{0,59}$/;
 
@@ -45,7 +45,7 @@
   function runOf(d, run) { check(Array.isArray(d.runs[run]), `There's no line called ${run}.`); return d.runs[run]; }
   function cleanEntry(e) {
     check(e && typeof e === "object" && typeof e.type === "string", "A new entry is missing its type.");
-    const ok = ["SurveyedLine", "UnsurveyedLine", "Jump", "Stake", "TieOff", "SaveLandmark", "Arrow"];
+    const ok = ["SurveyedLine", "UnsurveyedLine", "PlatformLine", "Jump", "Stake", "TieOff", "SaveLandmark", "Arrow"];
     check(ok.includes(e.type), `Entries of type ${e.type} can't be added here.`);
     const out = { type: e.type };
     if (LINE.test(e.type) || e.type === "Jump") {
@@ -109,7 +109,7 @@
         check(Number.isInteger(c.from) && c.from >= 0 && to <= r.length && c.from < to, "That part isn't on this line any more.");
         for (let i = c.from; i < to; i++) {
           const e = r[i];
-          if (/^(SurveyedLine|UnsurveyedLine|MarinaLine)$/.test(e.type)) r[i] = Object.assign({}, e, { type: "RemovedLine" });
+          if (/^(SurveyedLine|UnsurveyedLine|MarinaLine|PlatformLine)$/.test(e.type)) r[i] = Object.assign({}, e, { type: "RemovedLine" });
           else if (e.type === "Stake") r[i] = Object.assign({}, e, { type: "RemovedStake" });
         }
         return;

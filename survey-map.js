@@ -36,6 +36,7 @@
     unsurveyed: { label: "Unsurveyed line", color: "#1c2b33", weight: 1.4, dashArray: "5 5" },
     removed: { label: "Removed line", color: "#b4bcc0", weight: 1.6 },
     marina: { label: "Caution: boat traffic overhead", color: "#d7263d", weight: 2.4 },
+    platform: { label: "Platform", color: "#8b5a2b", weight: 14, opacity: 0.9 },
   };
   const NEW = "#e8590c", GONE = "#d7263d";
   // Ski-style difficulty. Green lines are on the main survey; the others are in a layer of their own (survey-layers.js).
@@ -451,7 +452,7 @@
         parts[parts.length - 1].push(pt(s.x1, s.y1)); cur = { x: s.x1, y: s.y1 };
       }
       const lay = S.runLayer[run] && S.layers.find(l => l.id === S.runLayer[run]);
-      return `<Placemark><name>${x(S.runName(run))}${lay ? " (" + x(lay.name) + ")" : ""}</name><styleUrl>#${kind === "unsurveyed" ? "unsurveyed" : kind === "marina" ? "marina" : "line"}</styleUrl>
+      return `<Placemark><name>${x(S.runName(run))}${lay ? " (" + x(lay.name) + ")" : ""}</name><styleUrl>#${kind === "unsurveyed" ? "unsurveyed" : kind === "marina" ? "marina" : kind === "platform" ? "platform" : "line"}</styleUrl>
 <MultiGeometry>${parts.map(p => `<LineString><tessellate>1</tessellate><coordinates>${p.join(" ")}</coordinates></LineString>`).join("")}</MultiGeometry></Placemark>`;
     }).join("\n");
     const seen = new Set();
@@ -463,6 +464,7 @@
 <Style id="line"><LineStyle><color>ff33ffff</color><width>2</width></LineStyle></Style>
 <Style id="unsurveyed"><LineStyle><color>ff33ffff</color><width>1</width></LineStyle></Style>
 <Style id="marina"><LineStyle><color>ff3d26d7</color><width>3</width></LineStyle></Style>
+<Style id="platform"><LineStyle><color>ff2b5a8b</color><width>8</width></LineStyle></Style>
 <Style id="landmark"><IconStyle><scale>0.8</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle></Style>
 <Folder><name>Lines</name>
 ${lines}
@@ -499,11 +501,12 @@ ${marks}
         : { renderer: canvas, pane: "sm-p-base", color: "#1c2b33", weight: 1, fillColor: "#1c2b33", fillOpacity: 1 }).bindTooltip(esc(s.label))));
 
     const changed = [];
-    const lines = geo.segments.map(s => {
+    // Platforms first, so the lines that cross them are drawn on top.
+    const lines = geo.segments.slice().sort((a, b) => (b.kind === "platform") - (a.kind === "platform")).map(s => {
       const k = KIND[s.kind], fresh = isNew(s), rl = runLayer[s.run] && S.layers.find(x => x.id === runLayer[s.run]);
-      const rc = rl && rl.rating && s.kind !== "removed" ? RATINGS.find(r => r.id === rl.rating).line : null;
+      const rc = rl && rl.rating && s.kind !== "removed" && s.kind !== "platform" ? RATINGS.find(r => r.id === rl.rating).line : null;
       if (fresh) changed.push(ll(s.x0, s.y0), ll(s.x1, s.y1));
-      const pl = L.polyline([ll(s.x0, s.y0), ll(s.x1, s.y1)], { renderer: cv(s), pane: paneOf(s), color: fresh ? NEW : rc || (GEO && (s.kind === "surveyed" || s.kind === "unsurveyed") ? "#ffe066" : k.color), weight: fresh ? 3 : k.weight + (GEO || rc ? 0.6 : 0), dashArray: k.dashArray || null, lineCap: "butt" });
+      const pl = L.polyline([ll(s.x0, s.y0), ll(s.x1, s.y1)], { renderer: cv(s), pane: paneOf(s), color: fresh ? NEW : rc || (GEO && (s.kind === "surveyed" || s.kind === "unsurveyed") ? "#ffe066" : k.color), weight: fresh ? (s.kind === "platform" ? k.weight : 3) : k.weight + (GEO || rc ? 0.6 : 0), dashArray: k.dashArray || null, opacity: k.opacity || 1, lineCap: "butt" });
       return clickable(pl, Object.assign({}, s, { kind: "segment", lineKind: s.kind, layer: runLayer[s.run] || null }), () => segmentPopup(s));
     });
     if (opts.base) {

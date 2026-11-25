@@ -23,7 +23,7 @@
   // base.py __degrees. Only ever used for differences between two angles, where it gives the right turn.
   const degrees = rad => (rad + PI / 2) / 2 / PI * 360;
 
-  const LINE_TYPES = { SurveyedLine: "surveyed", UnsurveyedLine: "unsurveyed", RemovedLine: "removed", MarinaLine: "marina" };
+  const LINE_TYPES = { SurveyedLine: "surveyed", UnsurveyedLine: "unsurveyed", RemovedLine: "removed", MarinaLine: "marina", PlatformLine: "platform" };
   const STAKE_TYPES = { Stake: "stake", SavedStake: "stake", RemovedStake: "removed-stake" };
   const feet = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
 
@@ -69,7 +69,7 @@
           if (lineType) {
             out.segments.push(Object.assign({ kind: lineType, x0: x, y0: y, x1, y1, lengthFt: L, heading: Number(e.angle) }, ref,
               e.alt_text ? { text: e.alt_text, flipText: !!e.flip_text_side } : null));
-            out.totalSurveyedFt += L;
+            if (lineType !== "platform") out.totalSurveyedFt += L;
           }
           x = x1; y = y1;
         } else if (e.type === "Arrow") {
@@ -262,7 +262,7 @@
 (function (root) {
   "use strict";
 
-  const LINE = /^(SurveyedLine|UnsurveyedLine|MarinaLine|RemovedLine)$/;
+  const LINE = /^(SurveyedLine|UnsurveyedLine|MarinaLine|PlatformLine|RemovedLine)$/;
   const SAVES = e => (e.type === "SaveLandmark" || e.type === "SavedStake") && e.landmark ? e.landmark : null;
   const KEY = /^[A-Z][A-Z0-9_]{0,59}$/;
 
@@ -289,7 +289,7 @@
   function runOf(d, run) { check(Array.isArray(d.runs[run]), `There's no line called ${run}.`); return d.runs[run]; }
   function cleanEntry(e) {
     check(e && typeof e === "object" && typeof e.type === "string", "A new entry is missing its type.");
-    const ok = ["SurveyedLine", "UnsurveyedLine", "Jump", "Stake", "TieOff", "SaveLandmark", "Arrow"];
+    const ok = ["SurveyedLine", "UnsurveyedLine", "PlatformLine", "Jump", "Stake", "TieOff", "SaveLandmark", "Arrow"];
     check(ok.includes(e.type), `Entries of type ${e.type} can't be added here.`);
     const out = { type: e.type };
     if (LINE.test(e.type) || e.type === "Jump") {
@@ -304,6 +304,9 @@
       out.landmark = e.landmark;
       if (e.depth != null && e.depth !== "") { const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep; out.depth_angle = 90; }
       if (e.icon_path) out.icon_path = String(e.icon_path).slice(0, 200);
+    }
+    if ((e.type === "Stake" || e.type === "TieOff") && e.depth != null && e.depth !== "") {
+      const dep = Number(e.depth); check(isFinite(dep) && dep >= 0 && dep <= 400, "Depths must be 0–400 ft."); out.depth = dep;
     }
     if (e.type === "Arrow") { out.angle = Number(e.angle) || 0; out.distance = Number(e.distance) || 10; }
     if (e.note) out.note = String(e.note).slice(0, 300);
@@ -350,7 +353,7 @@
         check(Number.isInteger(c.from) && c.from >= 0 && to <= r.length && c.from < to, "That part isn't on this line any more.");
         for (let i = c.from; i < to; i++) {
           const e = r[i];
-          if (/^(SurveyedLine|UnsurveyedLine|MarinaLine)$/.test(e.type)) r[i] = Object.assign({}, e, { type: "RemovedLine" });
+          if (/^(SurveyedLine|UnsurveyedLine|MarinaLine|PlatformLine)$/.test(e.type)) r[i] = Object.assign({}, e, { type: "RemovedLine" });
           else if (e.type === "Stake") r[i] = Object.assign({}, e, { type: "RemovedStake" });
         }
         return;
@@ -557,7 +560,8 @@
 
    The Survey tab, one row per leg of line, in blocks: a blank row starts a new line.
      A From (A)   B To (B)   C Depth @ B   D Backcourse (heading B->A)   E Heading (A->B)   F Distance (ft)   G Distance (m)
-     H Kind: Surveyed (solid line; blank means the same), Unsurveyed (dashed line) or Jump (not drawn). Older maps can
+     H Kind: Surveyed (solid line; blank means the same), Unsurveyed (dashed line), Platform (a suspended wooden
+       platform: wide brown line, not counted as surveyed line) or Jump (not drawn). Older maps can
        also have Boat traffic and Arrow rows, which are still read but aren't offered in the dropdown.
      I Note    J Drawing (rarely used: icon, label text and side, always draw..., as "name = value; name = value")
      K Level: Green circle, Blue square, Black diamond or Double black diamond (who can see the line). On a title row
@@ -585,8 +589,8 @@
   "use strict";
 
   const PLAIN = { rock: "TieOff", "tie-off": "TieOff", tieoff: "TieOff", "tie off": "TieOff", stake: "Stake" };
-  const KINDS = { "": "SurveyedLine", surveyed: "SurveyedLine", unsurveyed: "UnsurveyedLine", jump: "Jump", "boat traffic": "MarinaLine", arrow: "Arrow" };
-  const KIND_NAME = { SurveyedLine: "Surveyed", UnsurveyedLine: "Unsurveyed", Jump: "Jump", MarinaLine: "Boat traffic", Arrow: "Arrow" };
+  const KINDS = { "": "SurveyedLine", surveyed: "SurveyedLine", unsurveyed: "UnsurveyedLine", jump: "Jump", platform: "PlatformLine", "boat traffic": "MarinaLine", arrow: "Arrow" };
+  const KIND_NAME = { SurveyedLine: "Surveyed", UnsurveyedLine: "Unsurveyed", Jump: "Jump", PlatformLine: "Platform", MarinaLine: "Boat traffic", Arrow: "Arrow" };
   const HEADER = ["From (A)", "To (B)", "Depth @ B", "Backcourse (Hdg B->A)", "Heading (A->B)", "Distance (ft)", "Distance (M)", "Kind", "Note", "Drawing", "Level"];
   const LEVEL_NAMES = { green: "Green circle", blue: "Blue square", black: "Black diamond", "double-black": "Double black diamond" };
   // Level words people type: "Black diamond", "black", "double", "double diamond", "◆◆"...
@@ -727,7 +731,7 @@
           }
         }
         const type = KINDS[kindName];
-        if (!type) { errors.push(`Row ${rowNo}: Kind "${str(r[7])}" isn't Surveyed, Unsurveyed or Jump.`); return; }
+        if (!type) { errors.push(`Row ${rowNo}: Kind "${str(r[7])}" isn't Surveyed, Unsurveyed, Platform or Jump.`); return; }
         let hdg = num(r[4]); const bc = num(r[3]);
         let ft = num(r[5]); const m = num(r[6]);
         if (ft == null && has(m) && m !== 0) ft = round(m / 0.3048, 3);
@@ -1093,7 +1097,7 @@ function getFromWebsite() {
       else if (typeof r[5] === "number" && r[7] !== "Arrow") sh.getRange(i + 1, 7).setFormula(`=F${i + 1}*0.3048`).setNumberFormat("0.00");
     });
     sh.setFrozenRows(1);
-    const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Surveyed", "Unsurveyed", "Jump"], true).setAllowInvalid(true).build();
+    const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Surveyed", "Unsurveyed", "Platform", "Jump"], true).setAllowInvalid(true).build();
     sh.getRange(2, 8, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(kinds);
     const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond"], true).setAllowInvalid(true).build();
     sh.getRange(2, 11, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(lvl);

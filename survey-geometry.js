@@ -20,7 +20,7 @@
   // base.py __degrees. Only ever used for differences between two angles, where it gives the right turn.
   const degrees = rad => (rad + PI / 2) / 2 / PI * 360;
 
-  const LINE_TYPES = { SurveyedLine: "surveyed", UnsurveyedLine: "unsurveyed", RemovedLine: "removed", MarinaLine: "marina" };
+  const LINE_TYPES = { SurveyedLine: "surveyed", UnsurveyedLine: "unsurveyed", RemovedLine: "removed", MarinaLine: "marina", PlatformLine: "platform" };
   const STAKE_TYPES = { Stake: "stake", SavedStake: "stake", RemovedStake: "removed-stake" };
   const feet = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
 
@@ -66,7 +66,7 @@
           if (lineType) {
             out.segments.push(Object.assign({ kind: lineType, x0: x, y0: y, x1, y1, lengthFt: L, heading: Number(e.angle) }, ref,
               e.alt_text ? { text: e.alt_text, flipText: !!e.flip_text_side } : null));
-            out.totalSurveyedFt += L;
+            if (lineType !== "platform") out.totalSurveyedFt += L;
           }
           x = x1; y = y1;
         } else if (e.type === "Arrow") {
