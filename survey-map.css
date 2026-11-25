@@ -170,3 +170,10 @@ body.pm-open { overflow: hidden; }
 .sm-move-pin { background: #e8590c; border: 3px solid #fff; border-radius: 50%; box-shadow: 0 1px 6px rgba(0, 0, 0, .5); cursor: grab; }
 .sm-move.on { border: 2px solid #e8590c; border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
 .sm-move .sm-align-row b { min-width: 4em; text-align: center; }
+/* Lining up a picture by matching points */
+.sm-pt-picking { cursor: crosshair !important; }
+.sm-pt-picking .leaflet-map-pane canvas, .sm-pt-picking .leaflet-marker-icon, .sm-pt-picking .leaflet-interactive { pointer-events: none !important; }
+.sm-align-pts { border-top: 1px solid var(--line, #d7e3e6); padding-top: 8px; margin-top: 4px; }
+.sm-pts { margin: 6px 0 0; padding-left: 1.4em; display: grid; gap: 4px; }
+.sm-pts li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sm-pt-tip { font-weight: 700; padding: 0 4px; }
