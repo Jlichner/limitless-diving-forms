@@ -121,7 +121,7 @@ function getFromWebsite() {
       else if (typeof r[5] === "number" && r[7] !== "Arrow") sh.getRange(i + 1, 7).setFormula(`=F${i + 1}*0.3048`).setNumberFormat("0.00");
     });
     sh.setFrozenRows(1);
-    const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Surveyed", "Unsurveyed", "Jump"], true).setAllowInvalid(true).build();
+    const kinds = SpreadsheetApp.newDataValidation().requireValueInList(["Surveyed", "Unsurveyed", "Platform", "Jump"], true).setAllowInvalid(true).build();
     sh.getRange(2, 8, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(kinds);
     const lvl = SpreadsheetApp.newDataValidation().requireValueInList(["Green circle", "Blue square", "Black diamond", "Double black diamond"], true).setAllowInvalid(true).build();
     sh.getRange(2, 11, Math.max(out.rows.length + 500, 1000), 1).setDataValidation(lvl);

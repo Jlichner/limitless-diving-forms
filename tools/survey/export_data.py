@@ -12,7 +12,7 @@ import sys
 import tokenize
 
 ENTRY_TYPES = {
-    'SurveyedLine', 'UnsurveyedLine', 'RemovedLine', 'MarinaLine', 'Jump',
+    'SurveyedLine', 'UnsurveyedLine', 'RemovedLine', 'MarinaLine', 'PlatformLine', 'Jump',
     'SaveLandmark', 'Stake', 'SavedStake', 'RemovedStake', 'TieOff', 'Arrow',
 }
 # Field order for SaveLandmark when given positionally, e.g. SaveLandmark(Landmark.X, ...)

@@ -136,9 +136,9 @@
       }
     }
     // Lines.
-    const LK = { surveyed: { w: 1.5 }, unsurveyed: { w: 1.2, dash: [6, 4] }, removed: { w: 1, dash: [2, 3], c: "#9aa0a3" }, marina: { w: 1.8, dash: [8, 3, 2, 3], c: "#c92a2a" } };
+    const LK = { surveyed: { w: 1.5 }, unsurveyed: { w: 1.2, dash: [6, 4] }, removed: { w: 1, dash: [2, 3], c: "#9aa0a3" }, marina: { w: 1.8, dash: [8, 3, 2, 3], c: "#c92a2a" }, platform: { w: 7, c: "#8b5a2b" } };
     const lines = [];
-    for (const sg of geo.segments) {
+    for (const sg of geo.segments.slice().sort((a, b) => (b.kind === "platform") - (a.kind === "platform"))) {
       const lk = LK[sg.kind]; if (!lk) continue;
       const [a, b] = P(sg.x0, sg.y0), [c3, d3] = P(sg.x1, sg.y1);
       const col = lk.c || (ratingOf[sg.run] && sg.kind !== "removed" ? RATING_COLOR[ratingOf[sg.run]] : ink);
@@ -241,6 +241,7 @@
     if (kinds.has("unsurveyed")) lineRow(LK.unsurveyed, "Unsurveyed line");
     if (kinds.has("removed")) lineRow(LK.removed, "Removed line");
     if (kinds.has("marina")) lineRow(LK.marina, "Boat traffic overhead");
+    if (kinds.has("platform")) lineRow(LK.platform, "Platform");
     if (set.points && geo.stakes.some(p => p.kind === "stake")) rows.push([(x, yy) => el("rect", { x: n(x + u(9)), y: n(yy - u(2)), width: n(u(4)), height: n(u(4)), fill: "#8b3a1f" }), "Stake"]);
     if (set.points && geo.tieoffs.length) rows.push([(x, yy) => el("circle", { cx: n(x + u(11)), cy: n(yy), r: n(u(2)), fill: "#c2255c" }), "Tie-off"]);
     if (set.moorings && geo.landmarks.some(l => l.icon === MOORING)) rows.push([(x, yy) => el("rect", { x: n(x + u(7)), y: n(yy - u(3)), width: n(u(8)), height: n(u(6)), fill: "#b9c3c7", stroke: "#5f6d73", "stroke-width": n(u(0.6)) }), "Mooring block"]);

@@ -19,7 +19,7 @@
   const KEY = "ld-survey-book-" + site;
   const LEVELS = ["Green circle", "Blue square", "Black diamond", "Double black diamond"];
   const LEVEL_DOT = { "green circle": "#2e7d32", "blue square": "#1565c0", "black diamond": "#111", "double black diamond": "#111" };
-  const KINDS = ["Surveyed", "Unsurveyed", "Jump"];
+  const KINDS = ["Surveyed", "Unsurveyed", "Platform", "Jump"];
   const str = v => (v == null ? "" : String(v)).trim();
   const blankRow = () => ["", "", "", "", "", "", "", "", "", "", ""];
   const isBlank = r => r.slice(0, 6).every(v => str(v) === "") && r.slice(7, 10).every(v => str(v) === "");
@@ -346,7 +346,7 @@
       const kind = r ? str(r[7]).toLowerCase() : "";
       const box = (on, label) => `<span class="sl-chk">${on ? "✓" : ""}</span>${label}`;
       return `<tr><td class="sl-n">${k + 1}</td><td>${r ? cell(r[0]) : ""}</td><td>${r ? cell(r[1]) : ""}</td><td>${r ? cell(r[2]) : ""}</td><td>${r ? cell(r[4]) : ""}</td><td>${r ? cell(r[3]) : ""}</td>
-        <td>${r ? esc(ft) : ""}</td><td>${r ? esc(inch) : ""}</td><td class="sl-kind">${box(r && (kind === "" || kind === "surveyed"), "Surv")} ${box(kind === "unsurveyed", "Unsurv")}</td><td>${r ? cell(r[8]) : ""}</td></tr>`;
+        <td>${r ? esc(ft) : ""}</td><td>${r ? esc(inch) : ""}</td><td class="sl-kind">${box(r && (kind === "" || kind === "surveyed"), "Surv")} ${box(kind === "unsurveyed", "Unsurv")} ${box(kind === "platform", "Plat")}</td><td>${r ? cell(r[8]) : ""}</td></tr>`;
     }).join("");
     const startAt = legs.length ? str(legs[0][0]) : "";
     printBox.innerHTML = `<div class="slate">
