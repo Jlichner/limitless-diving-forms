@@ -341,8 +341,75 @@
       <div class="sm-align-row"><span>Size</span>${nudge("size", 0.9, "Smaller")}${nudge("size", 0.99, "A little smaller")}${nudge("size", 1.01, "A little bigger")}${nudge("size", 1.1, "Bigger")}</div>
       <div class="sm-align-row"><span>Move</span>${nudge("move", "0,-1", "↑")}${nudge("move", "0,1", "↓")}${nudge("move", "-1,0", "←")}${nudge("move", "1,0", "→")}</div>
       <label class="sm-slider sm-align-row"><span>See-through</span><input type="range" min="10" max="100" step="5" value="${pct}" data-lo="${esc(l.id)}"><output>${pct}%</output></label>
+      ${pointsCard(a, g)}
       <div class="se-acts"><button type="button" class="btn primary" data-su="al-save">Save where it sits</button>
         <button type="button" class="btn" data-su="al-reset">Start again in the middle of the view</button></div></div>`;
+  }
+  // Match points: tap a spot on the satellite, then the same spot on the picture, two or more times; the picture is
+  // moved, turned and sized to fit them best (least squares), and each pair shows how far off it still is.
+  function pointsCard(a, g) {
+    const pts = a.pts || [], n = pts.length;
+    const unit = g ? "ft" : "ft on the survey";
+    return `<div class="sm-align-pts"><b>Match points</b>
+      <p class="hint">Pick a spot you can see on both, like a dock corner or a point of land. Tap it on the ${g ? "satellite" : "survey lines"} first, then on your picture.
+        After two pairs the picture lines itself up; four or more spread far apart is best.</p>
+      ${a.pick ? `<p class="se-pick">Point ${n + 1}: tap the spot on the ${a.pick === "sat" ? (g ? "satellite (the picture is faded)" : "survey lines") : "picture"}.</p>
+          <button type="button" class="btn small" data-su="al-pt-cancel">Cancel this point</button>`
+        : `<button type="button" class="btn small" data-su="al-pt-add">${n ? "Add another point" : "Match a point"}</button>`}
+      ${n ? `<ol class="sm-pts">${pts.map((q, i) => `<li>${q.off == null ? "" : `${q.off < 10 ? q.off.toFixed(1) : Math.round(q.off)} ${unit} off`}${q.off != null && n > 2 && q.off === Math.max(...pts.map(x => x.off || 0)) && q.off > 2 * (pts.reduce((t, x) => t + (x.off || 0), 0) / n) ? " <b>(check this one)</b>" : ""}
+          <button type="button" class="btn small" data-su="al-pt-del" data-i="${i}">Remove</button></li>`).join("")}</ol>` : ""}</div>`;
+  }
+  // Where a spot on the picture (pixels from its middle) sits on the map now, in projected points.
+  function picToMap(a, q) {
+    const k = 2 * a.hw / a.W, c = Math.cos(a.ang), s = Math.sin(a.ang);
+    return L.point(a.P.x + k * (q[0] * c - q[1] * s), a.P.y + k * (q[0] * s + q[1] * c));
+  }
+  function mapToPic(a, p) {
+    const k = a.W / (2 * a.hw), c = Math.cos(a.ang), s = Math.sin(a.ang), dx = p.x - a.P.x, dy = p.y - a.P.y;
+    return [k * (dx * c + dy * s), k * (-dx * s + dy * c)];
+  }
+  // Best fit of move + turn + size (complex least squares: z = A·w + B).
+  function fitPoints(a) {
+    const pts = a.pts; if (pts.length < 2) return;
+    const n = pts.length, wx = pts.reduce((t, q) => t + q.pic[0], 0) / n, wy = pts.reduce((t, q) => t + q.pic[1], 0) / n;
+    const zx = pts.reduce((t, q) => t + q.sat.x, 0) / n, zy = pts.reduce((t, q) => t + q.sat.y, 0) / n;
+    let nr = 0, ni = 0, d = 0;
+    for (const q of pts) {
+      const ux = q.pic[0] - wx, uy = q.pic[1] - wy, vx = q.sat.x - zx, vy = q.sat.y - zy;
+      nr += vx * ux + vy * uy; ni += vy * ux - vx * uy; d += ux * ux + uy * uy;
+    }
+    if (d < 1e-9) return;
+    const ar = nr / d, ai = ni / d;
+    a.ang = Math.atan2(ai, ar); a.hw = Math.hypot(ar, ai) * a.W / 2;
+    a.P = L.point(zx - (ar * wx - ai * wy), zy - (ar * wy + ai * wx));
+  }
+  function pointOffsets(a) {
+    const ft = (p1, p2) => S.map.distance(U(p1), U(p2)) * (S.geoRef() ? 3.28084 : 1);
+    (a.pts || []).forEach(q => { q.off = a.pts.length >= 2 ? ft(q.sat, picToMap(a, q.pic)) : null; });
+  }
+  function drawPoints(a) {
+    (a.ptMarks || []).forEach(m => m.remove()); a.ptMarks = [];
+    const mark = (p, color, i) => L.circleMarker(U(p), { pane: "sm-align-pane", radius: 7, color: "#fff", weight: 2, fillColor: color, fillOpacity: 1, interactive: false })
+      .bindTooltip(String(i + 1), { permanent: true, direction: "right", className: "sm-pt-tip" }).addTo(S.map);
+    (a.pts || []).forEach((q, i) => { a.ptMarks.push(mark(q.sat, "#1c7ed6", i), mark(picToMap(a, q.pic), "#e8590c", i)); });
+    if (a.pend) a.ptMarks.push(mark(a.pend, "#1c7ed6", (a.pts || []).length));
+  }
+  function setPointPick(a, pick) {
+    a.pick = pick;
+    S.map.getContainer().classList.toggle("sm-pt-picking", !!pick);
+    if (pick === "sat") { a.keepOpacity = (S.view[a.id] || {}).opacity; S.setLayerView(a.id, { opacity: 0.2 }); }
+    if (pick === "pic") S.setLayerView(a.id, { opacity: 0.9 });
+    if (!pick && a.keepOpacity != null) { S.setLayerView(a.id, { opacity: a.keepOpacity }); a.keepOpacity = null; }
+  }
+  function onPointTap(e) {
+    const a = st.align; if (!a || !a.pick) return;
+    const p = P(e.latlng);
+    if (a.pick === "sat") { a.pend = p; setPointPick(a, "pic"); }
+    else {
+      (a.pts = a.pts || []).push({ sat: a.pend, pic: mapToPic(a, p) }); a.pend = null; setPointPick(a, null);
+      fitPoints(a); placeAlign();
+    }
+    drawPoints(a); renderSetup();
   }
   const P = ll => S.map.project(ll, Z), U = p => S.map.unproject(p, Z);
   function alignCorners(a) {
@@ -365,6 +432,7 @@
     if (a.overlay) a.overlay.setCorners([k.tl, k.tr, k.bl]);
     const m = a.handles;
     if (m) { if (a.dragging !== "move") m.move.setLatLng(k.mid); if (a.dragging !== "turn") m.turn.setLatLng(k.top); if (a.dragging !== "size") m.size.setLatLng(k.br); m.frame.setLatLngs([k.tl, k.tr, k.br, k.bl]); }
+    if (a.pts && a.pts.length) { pointOffsets(a); if (a.ptMarks) a.ptMarks.forEach((m, i) => { if (i % 2 === 1 && a.pts[(i - 1) / 2]) m.setLatLng(U(picToMap(a, a.pts[(i - 1) / 2].pic))); }); }
     const out = setupBox.querySelector(".sm-align output");
     if (out) { const d = Math.round(a.ang * 1800 / Math.PI) / 10; out.textContent = (d > 0 ? "+" : "") + d + "°"; }
   }
@@ -396,6 +464,7 @@
     a.handles = { frame: L.polygon([[0, 0], [0, 0], [0, 0]], { pane: "sm-align-pane", color: "#e8590c", weight: 2, dashArray: "6 4", fill: false, interactive: false }),
       move: handle("move", "✥"), turn: handle("turn", "⟳"), size: handle("size", "⤡") };
     Object.values(a.handles).forEach(h => h.addTo(S.map));
+    a.pts = []; a.map = S.map; S.map.on("click", onPointTap);
     S.setLayerView(l.id, { visible: true, opacity: Math.min((S.view[l.id] || {}).opacity || 0.6, 0.6) });
     if (S.geoRef()) S.setLayerView("satellite", { visible: true });
     alignSaved(a);
@@ -405,6 +474,9 @@
   function stopAlign() {
     if (!st.align) return;
     Object.values(st.align.handles || {}).forEach(h => h.remove());
+    (st.align.ptMarks || []).forEach(m => m.remove());
+    if (st.align.pick) setPointPick(st.align, null);
+    if (st.align.map) st.align.map.off("click", onPointTap);
     st.align = null;
     pushLayers();
   }
@@ -676,6 +748,9 @@
       const [dx, dy] = b.dataset.d.split(",").map(Number), f = Math.pow(2, Z - S.map.getZoom()) * 4;
       st.align.P = st.align.P.add(L.point(dx * f, dy * f)); return placeAlign();
     }
+    if (act === "al-pt-add" && st.align) { setPointPick(st.align, "sat"); return renderSetup(); }
+    if (act === "al-pt-cancel" && st.align) { st.align.pend = null; setPointPick(st.align, null); drawPoints(st.align); return renderSetup(); }
+    if (act === "al-pt-del" && st.align) { st.align.pts.splice(Number(b.dataset.i), 1); fitPoints(st.align); placeAlign(); drawPoints(st.align); return renderSetup(); }
     if (act === "al-reset" && st.align) { alignFromView(st.align); return placeAlign(); }
     if (act === "al-save") return run(async () => {
       const { error } = await C.client.from("site_map_layers").update({ bounds: st.align.bounds }).eq("id", st.align.id);
