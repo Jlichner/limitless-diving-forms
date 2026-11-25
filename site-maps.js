@@ -46,8 +46,10 @@
   function thumbnail(geo, d) {
     const drawn = geo.segments.filter(s => s.kind !== "removed");
     const box = drawn.length ? lineBox(drawn) : geo.bounds;
-    const [[x0, y0], [x1, y1]] = box, pad = Math.max(20, (x1 - x0 + y1 - y0) * 0.04), w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
-    const X = x => x - x0 + pad, Y = y => y1 - y + pad;
+    // ZOOM_OUT 1.3 shows 30% more around the lines, for satellite context (Jamie 2026-11-25).
+    const ZOOM_OUT = 1.3, [[x0, y0], [x1, y1]] = box, pad0 = Math.max(20, (x1 - x0 + y1 - y0) * 0.04);
+    const fw = x1 - x0 + 2 * pad0, fh = y1 - y0 + 2 * pad0, w = fw * ZOOM_OUT, h = fh * ZOOM_OUT;
+    const X = x => x - x0 + (w - (x1 - x0)) / 2, Y = y => y1 - y + (h - (y1 - y0)) / 2;
     const lines = drawn
       .map(s => `M${X(s.x0).toFixed(1)} ${Y(s.y0).toFixed(1)}L${X(s.x1).toFixed(1)} ${Y(s.y1).toFixed(1)}`).join("");
     let gr = null;
@@ -55,7 +57,7 @@
     const sat = gr ? satTiles(gr, box, X, Y) : "";
     return `<svg class="sm-thumb${sat ? " sat" : ""}" viewBox="0 0 ${w.toFixed(0)} ${h.toFixed(0)}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
       ${sat ? `<g class="sm-thumb-sat">${sat}</g>` : ""}
-      <path d="${lines}" fill="none" stroke="currentColor" stroke-width="${(w / (sat ? 180 : 260)).toFixed(2)}" stroke-linecap="round"/></svg>`;
+      <path d="${lines}" fill="none" stroke="currentColor" stroke-width="${(fw / (sat ? 180 : 260)).toFixed(2)}" stroke-linecap="round"/></svg>`;
   }
 
   function card(d) {
