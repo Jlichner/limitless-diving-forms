@@ -79,7 +79,7 @@
     if (S.geoRef()) out.push({ id: "satellite", name: "Satellite pictures", hint: "Esri World Imagery" });
     for (const l of st.layers.filter(l => l.kind === "image")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note,
       hint: !l.imageUrl ? "Picture not added yet" : !l.bounds ? "Not lined up yet" : l.bounds.north != null && !S.geoRef() ? "Shows once the map is placed on the earth" : "" });
-    out.push({ id: "survey", name: "Survey lines", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
+    out.push({ id: "survey", name: "Open water", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
     for (const l of st.layers.filter(l => l.kind === "survey")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note, rating: l.rating,
       hint: l.survey && Object.keys(l.survey.runs || {}).length ? `${Object.keys(l.survey.runs).length} runs of line` : "No lines yet" });
     return out;
