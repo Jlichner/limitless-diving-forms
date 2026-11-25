@@ -329,7 +329,7 @@
         check(!c.end || landmarkOnMap(c.end), "The point the line ends at isn't on the map.");
         check(Array.isArray(c.entries) && c.entries.length > 0 && c.entries.length <= 300, "Add at least one line.");
         const entries = c.entries.map(cleanEntry);
-        check(entries.some(e => LINE.test(e.type)), "Add at least one line.");
+        check(entries.some(e => LINE.test(e.type) || e.type === "Jump"), "Add at least one line.");
         for (const [k, v] of Object.entries(c.landmarks || {})) { check(KEY.test(k) && !landmarkOnMap(k), "A new landmark needs a new id."); d.landmarks[k] = String(v || "Landmark").slice(0, 120); }
         d.runs[c.run] = entries;
         d.runNames[c.run] = String(c.name || "New line").slice(0, 120);

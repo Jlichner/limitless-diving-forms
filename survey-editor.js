@@ -334,7 +334,8 @@
       return `<fieldset class="se-row" data-row="${i}"><legend>Line ${i + 1}</legend>
         <label>Type <select data-f="type"><option value="SurveyedLine"${r.type === "SurveyedLine" ? " selected" : ""}>Surveyed</option>
           <option value="UnsurveyedLine"${r.type === "UnsurveyedLine" ? " selected" : ""}>Unsurveyed</option>
-          <option value="PlatformLine"${r.type === "PlatformLine" ? " selected" : ""}>Platform</option></select></label>
+          <option value="PlatformLine"${r.type === "PlatformLine" ? " selected" : ""}>Platform</option>
+          <option value="Jump"${r.type === "Jump" ? " selected" : ""}>Jump (not drawn)</option></select></label>
         <label>Feet <input data-f="ft" inputmode="decimal" value="${esc(r.ft)}" size="5"></label>
         <label>Inches <input data-f="inch" inputmode="decimal" value="${esc(r.inch)}" size="3"></label>
         <label>Heading ° <input data-f="angle" inputmode="decimal" value="${esc(r.angle)}" size="4"></label>
