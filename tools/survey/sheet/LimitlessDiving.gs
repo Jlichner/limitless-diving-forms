@@ -795,10 +795,20 @@
     const runName = r => data.runNames[r] || ["blue", "black", "double-black"].map(k => src[k].runNames[r]).find(Boolean) || r;
     // Last change along each line first, so earlier changes still find their place in the line.
     const picks = levels.slice().sort((a, b) => a.run === b.run ? b.index - a.index : 0);
-    for (const p of picks) {
-      try { R.rate(src, [{ run: p.run, index: p.index, whole: false }], p.level, { runName, origin: data.origin || "BAR" }); }
-      catch (e) { errors.push(`Row ${p.row}: ${e.message.replace(/ Refresh the page\.| Tick "Whole run"\./, "").replace(/so it can only be rated as a whole run\./, "so its level can only be set on its title row (the whole line).")}`); }
+    // A line that another line still needs (it starts or ends there) can't go up first, so anything that fails
+    // is tried again after the rest, until nothing more moves (Jamie's sheet 2026-11-25: Main Line (inside)
+    // before Main line, which ends on it).
+    let todo = picks, failed = new Map();
+    while (todo.length) {
+      const next = [];
+      for (const p of todo) {
+        try { R.rate(src, [{ run: p.run, index: p.index, whole: false }], p.level, { runName, origin: data.origin || "BAR" }); failed.delete(p); }
+        catch (e) { failed.set(p, e); next.push(p); }
+      }
+      if (next.length === todo.length) break;
+      todo = next;
     }
+    for (const [p, e] of failed) errors.push(`Row ${p.row}: ${e.message.replace(/ Refresh the page\.| Tick "Whole run"\./, "").replace(/so it can only be rated as a whole run\./, "so its level can only be set on its title row (the whole line).")}`);
     // A patch placed by GPS: its hidden jump goes with its lines, so lower levels don't see its starting point.
     for (const gid of Object.keys(src.green.runs).filter(r => /^Gps/.test(r) && (src.green.runs[r][0] || {}).gps_lat != null)) {
       const at = src.green.runs[gid][1] && src.green.runs[gid][1].landmark;

@@ -77,6 +77,14 @@ ok("bad level word", SS.toSurvey([["", "Log"], ["X"], ["Log", "Rock", 1, "", 0, 
     ["", "", "", "", "", "", "", "", "", "", D], ["B", "", "", "", "", "", "", "", "", "", D], ["Log", "Rock", 1, "", 0, 5, "", "Surveyed", "", "", D]], []);
   ok("level in the blank row between lines", !r.errors.length && Object.keys(r.data.runs).length === 2, r.errors);
 }
+// A rated line that a later rated line ends on: the order in the sheet doesn't matter (Jamie's sheet, 2026-11-25).
+{
+  const D = "Double black diamond", S = "Surveyed";
+  const r = SS.toSurvey([["", "Log"], ["Inner"], ["Log", "X", 1, "", 90, 10, "", S, "", "", D], ["X", "Y", 1, "", 0, 10, "", S, "", "", D], [],
+    ["Outer"], ["Log", "Z", 1, "", 0, 10, "", S, "", "", D], ["Z", "Y", 1, "", 90, 10, "", S, "", "", D]], []);
+  const sp = SS.splitLevels(r.data, r.levels, r.stated);
+  ok("rated line ended on by a later rated line", !r.errors.length && !sp.errors.length && Object.keys(sp.src["double-black"].runs).length === 2, r.errors.concat(sp.errors));
+}
 // The real Bonnie Castle survey, when it's on this computer (it's private, so not in the repository).
 let full = null; try { full = require("./local/bonnie-castle-data.js"); } catch (e) { }
 if (full && full.runs && Object.keys(full.runs).length) {
