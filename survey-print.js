@@ -54,6 +54,64 @@
   }
   function imageLayers() { return (S.layers || []).filter(l => l.kind === "image" && l.imageUrl && l.bounds); }
 
+  // ----- the satellite pictures as a background (Jamie 2026-11-25) -----
+  // Esri World Imagery tiles for the printed area, stitched into one picture. Needs the map placed on the earth.
+  const SAT = "satellite", SAT_NAME = "Satellite pictures", SAT_CREDIT = "Satellite: Esri, Maxar, Earthstar Geographics";
+  const SAT_TILE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  const satOk = () => !!S.geoRef();
+  const sat = { key: null, href: null, corners: null, loading: null, failed: null };
+  const mercX = (lng, z) => (lng + 180) / 360 * 256 * 2 ** z;
+  const mercY = (lat, z) => { const s = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 256 * 2 ** z; };
+  const unMercX = (x, z) => x / (256 * 2 ** z) * 360 - 180;
+  const unMercY = (y, z) => { const t = Math.PI * (1 - 2 * y / (256 * 2 ** z)); return Math.atan(Math.sinh(t)) * 180 / Math.PI; };
+  // Which tiles cover the four corners of the printed map, at a zoom that gives about maxPx across.
+  function satPlan(lls, maxPx) {
+    const lats = lls.map(p => p[0]), lngs = lls.map(p => p[1]);
+    const s = Math.min(...lats), nN = Math.max(...lats), w = Math.min(...lngs), e = Math.max(...lngs);
+    let z = 19;
+    while (z > 3 && Math.max(mercX(e, z) - mercX(w, z), mercY(s, z) - mercY(nN, z)) > maxPx) z--;
+    const px0 = Math.floor(mercX(w, z)), px1 = Math.ceil(mercX(e, z)), py0 = Math.floor(mercY(nN, z)), py1 = Math.ceil(mercY(s, z));
+    return { z, px0, px1, py0, py1, key: [z, px0, px1, py0, py1].join(",") };
+  }
+  async function satBuild(plan) {
+    const { z, px0, px1, py0, py1 } = plan;
+    const cv = document.createElement("canvas"); cv.width = Math.max(1, px1 - px0); cv.height = Math.max(1, py1 - py0);
+    const g = cv.getContext("2d"); g.fillStyle = "#fbfaf6"; g.fillRect(0, 0, cv.width, cv.height);
+    const jobs = [];
+    for (let ty = Math.floor(py0 / 256); ty <= Math.floor((py1 - 1) / 256); ty++)
+      for (let tx = Math.floor(px0 / 256); tx <= Math.floor((px1 - 1) / 256); tx++) jobs.push([tx, ty]);
+    if (jobs.length > 400) throw new Error("The printed area is too big for satellite pictures.");
+    let bad = 0;
+    await Promise.all(jobs.map(([tx, ty]) => new Promise(ok => {
+      const i = new Image(); i.crossOrigin = "anonymous";
+      i.onload = () => { g.drawImage(i, tx * 256 - px0, ty * 256 - py0); ok(); };
+      i.onerror = () => { bad++; ok(); };
+      i.src = SAT_TILE.replace("{z}", z).replace("{y}", ty).replace("{x}", tx);
+    })));
+    if (bad === jobs.length) throw new Error("The satellite pictures couldn't be loaded.");
+    const corner = (x, y) => { const p = [unMercY(y, z), unMercX(x, z)]; return S.toXY(p[0], p[1]); };
+    let href;
+    try { href = cv.toDataURL("image/jpeg", 0.85); } catch (e) { throw new Error("The satellite server didn't allow its pictures to be copied into the print. Try again later."); }
+    return { href, corners: [corner(px0, py0), corner(px1, py0), corner(px0, py1)] };
+  }
+  // The printed map's four corners on the earth, for a sheet frame.
+  function frameLatLngs(fr) {
+    const m = fr.map, g = S.geoRef(); if (!g) return null;
+    return [[m.x, m.y], [m.x + m.w, m.y], [m.x, m.y + m.h], [m.x + m.w, m.y + m.h]].map(([px, py]) => { const q = fr.unP(px, py), l = g.toLatLng(q[0], q[1]); return [l[0] != null ? l[0] : l.lat, l[1] != null ? l[1] : l.lng]; });
+  }
+  // Makes sure the satellite picture for this frame is ready (or loading). Returns true when it changed.
+  async function satEnsure(fr, maxPx) {
+    const lls = frameLatLngs(fr); if (!lls) return false;
+    const plan = satPlan(lls, maxPx);
+    if (sat.key === plan.key && (sat.href || sat.loading)) { if (sat.loading) await sat.loading; return false; }
+    sat.key = plan.key; sat.href = null; sat.failed = null;
+    sat.loading = satBuild(plan).then(r => { if (sat.key === plan.key) { sat.href = r.href; sat.corners = r.corners; } })
+      .catch(err => { if (sat.key === plan.key) sat.failed = err.message || String(err); })
+      .finally(() => { if (sat.key === plan.key) sat.loading = null; });
+    await sat.loading;
+    return true;
+  }
+
   // The survey with the rated layers up to the chosen level added on, and which layer each run came from.
   function surveyFor(levels) {
     const max = RANK[levels] || 4, d0 = S.data;
@@ -127,8 +185,13 @@
     o.push(`<defs><clipPath id="pm-clip"><rect x="${n(map.x)}" y="${n(map.y)}" width="${n(map.w)}" height="${n(map.h)}"/></clipPath></defs>`);
     o.push(el("rect", { x: n(map.x), y: n(map.y), width: n(map.w), height: n(map.h), fill: "#fbfaf6" }));
     // Background picture layer, drawn between its three corners.
-    const bg = imageLayers().find(l => l.id === set.background);
-    if (bg) {
+    const bg = set.background === SAT && satOk() ? { id: SAT, name: SAT_NAME, credit: SAT_CREDIT.replace(/^Satellite: /, "") } : imageLayers().find(l => l.id === set.background);
+    if (bg && bg.id === SAT) {
+      if (sat.href && sat.corners) {
+        const [tl, tr, bl] = sat.corners.map(c => P(c[0], c[1]));
+        o.push(`<g clip-path="url(#pm-clip)"><image href="${sat.href}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" opacity="${n(set.bgOpacity, 2)}" transform="matrix(${n(tr[0] - tl[0], 3)} ${n(tr[1] - tl[1], 3)} ${n(bl[0] - tl[0], 3)} ${n(bl[1] - tl[1], 3)} ${n(tl[0], 3)} ${n(tl[1], 3)})"/></g>`);
+      }
+    } else if (bg) {
       const cs = S.imageCorners(bg.bounds);
       if (cs) {
         const [tl, tr, bl] = cs.map(c => P(...S.toXY(c.lat, c.lng)));
@@ -211,7 +274,7 @@
     for (let i = 0; i < 4; i++) o.push(el("rect", { x: n(sb.x + i * px), y: n(sb.y), width: n(px), height: n(u(5)), fill: i % 2 ? "#ffffff" : ink, stroke: ink, "stroke-width": n(u(0.7)) }));
     for (let i = 0; i <= 4; i++) o.push(text(sb.x + i * px, sb.y - u(3), String(+(i * seg).toFixed(1)), u(7.5), { "text-anchor": "middle" }));
     o.push(text(sb.x + 4 * px + u(5), sb.y + u(5), "feet", u(7.5)));
-    if (bg) o.push(text(map.x + u(8), map.y + map.h - u(8), `Background: ${bg.name}`, u(7), { fill: "#555555" }));
+    if (bg) o.push(text(map.x + u(8), map.y + map.h - u(8), `Background: ${bg.name}${bg.credit ? " · " + bg.credit : ""}`, u(7), { fill: "#555555" }));
 
     // Bottom strip: notes and credits | legend | title block (bottom right, as on a chart).
     const colW = (strip.w - 2 * gap) / 3, sy = strip.y, sh = strip.h;
@@ -286,14 +349,16 @@
     box.hidden = false; document.body.classList.add("pm-open");
     const set = st.set, pics = imageLayers();
     const sh = sheet(set); frame = sh;
+    if (set.background === SAT && satOk() && !st.busy) satEnsure(sh, 1800).then(changed => { if (changed && st.open) render(); });
     box.innerHTML = `<div class="pm-page" role="dialog" aria-modal="true" aria-labelledby="pm-h">
       <aside class="pm-side">
         <div class="se-head"><h2 class="sec" id="pm-h">Print map</h2><button type="button" class="btn" data-pm="close">Close</button></div>
         ${st.msg ? `<p class="${st.msg.kind === "bad" ? "se-err" : "se-ok"}">${esc(st.msg.t)}</p>` : ""}
         <label class="pm-f">Lines to show <select data-k="levels">${LEVEL_SETS.map(l => `<option value="${l.id}"${l.id === set.levels ? " selected" : ""}>${esc(l.label)}</option>`).join("")}</select></label>
-        <label class="pm-f">Background <select data-k="background"><option value="">Plain paper</option>${pics.map(l => `<option value="${esc(l.id)}"${l.id === set.background ? " selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label>
+        <label class="pm-f">Background <select data-k="background"><option value="">Plain paper</option>${satOk() ? `<option value="${SAT}"${set.background === SAT ? " selected" : ""}>${SAT_NAME}</option>` : ""}${pics.map(l => `<option value="${esc(l.id)}"${l.id === set.background ? " selected" : ""}>${esc(l.name)}</option>`).join("")}</select></label>
         ${set.background ? `<label class="pm-f">Background strength <input type="range" min="15" max="100" step="5" data-k="bgOpacity" value="${Math.round(set.bgOpacity * 100)}"> <output>${Math.round(set.bgOpacity * 100)}%</output></label>` : ""}
-        ${!pics.length ? `<p class="hint">Add your USGS map as a picture layer (Map setup → Layers) to print it as the background.</p>` : ""}
+        ${set.background === SAT ? `<p class="hint">${sat.failed ? `<span class="se-err">${esc(sat.failed)}</span>` : sat.href ? esc(SAT_CREDIT) + "." : "Loading the satellite pictures…"}</p>` : ""}
+        ${!pics.length && !satOk() ? `<p class="hint">Add your USGS map as a picture layer (Map setup → Layers) to print it as the background.</p>` : ""}
         <label class="pm-f">Paper <select data-k="paper">${Object.entries(PAPER).map(([id, p]) => `<option value="${id}"${id === set.paper ? " selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
         <fieldset class="pm-fs"><legend>Map bottom (the shoreline)</legend>
           ${st.picking ? `<p class="se-pick">Tap ${st.picking.length ? "a second point" : "a point"} along the shore on the sheet.</p><button type="button" class="btn" data-pm="pick-cancel">Cancel</button>`
@@ -350,6 +415,11 @@
       const bg = pics.find(l => l.id === set.background);
       const maxPx = Math.min(5000, Math.round(Math.max(PAPER[set.paper].w, PAPER[set.paper].h) / 72 * 200));   // about 200 dots per inch
       if (bg && bg.printPx !== maxPx) { bg.printHref = await dataUrl(bg.imageUrl, maxPx); bg.printPx = maxPx; }
+      if (set.background === SAT && satOk()) {
+        say("Getting the satellite pictures…"); render();
+        await satEnsure(sheet(set), maxPx);
+        if (!sat.href) throw new Error(sat.failed || "The satellite pictures couldn't be loaded.");
+      }
       st.forPrint = true;
       let sh; try { sh = sheet(set); } finally { st.forPrint = false; }
       const holder = document.createElement("div"); holder.style.cssText = "position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden";
