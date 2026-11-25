@@ -37,11 +37,47 @@
       const paths = data.filter(l => l.kind === "image" && l.image_path).map(l => l.image_path);
       const urls = await signed("site-map-layers", paths);
       st.layers = data.map(l => Object.assign({}, l, { imageUrl: urls[l.image_path] || null }));
+      if (isAdmin()) await pictureSizes();
     }
     pushLayers();
   }
+  // Admins see how big each stored picture is (big pictures use up the Supabase bandwidth allowance fast).
+  async function pictureSizes() {
+    for (const l of st.layers) {
+      if (l.kind !== "image" || !l.image_path) continue;
+      const i = l.image_path.lastIndexOf("/");
+      try {
+        const { data } = await C.client.storage.from("site-map-layers").list(l.image_path.slice(0, i), { search: l.image_path.slice(i + 1) });
+        const f = (data || []).find(x => x.name === l.image_path.slice(i + 1));
+        if (f && f.metadata && f.metadata.size) l.bytes = f.metadata.size;
+      } catch (e) { /* size is only a hint */ }
+    }
+  }
+  const mb = n => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
+  const BIG = 3 * 1048576, MAX_PX = 5000;
+  // Picture layers: at most 5000 px on the long side (enough for a 200 dpi Tabloid print), as a JPEG (or WebP for
+  // PNG/WebP pictures, which may have see-through parts). Returns the original file if that is already smaller.
+  function shrinkPicture(file) {
+    return new Promise(resolve => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const k = Math.min(1, MAX_PX / Math.max(img.naturalWidth, img.naturalHeight));
+        if (k === 1 && file.size <= BIG) return resolve(file);
+        const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+        const ctx = c.getContext("2d");
+        if (!ctx) return resolve(file);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        const alpha = /png|webp/i.test(file.type);
+        c.toBlob(b => resolve(b && b.size < file.size && (!alpha || /webp/.test(b.type)) ? b : file), alpha ? "image/webp" : "image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
   async function signed(bucket, paths) {
     if (!paths.length) return {};
+    if (C.signedUrls) return C.signedUrls(bucket, paths);
     const { data, error } = await C.client.storage.from(bucket).createSignedUrls(paths, 6 * 3600);
     if (error || !data) return {};
     const out = {};
@@ -167,7 +203,7 @@
   async function addPhoto(lm, file, caption) {
     const blob = await shrink(file);
     const path = `${site}/${C.user.id}/${lm.toLowerCase()}-${Date.now().toString(36)}.jpg`;
-    const up = await C.client.storage.from("site-map-photos").upload(path, blob, { contentType: "image/jpeg", upsert: false });
+    const up = await C.client.storage.from("site-map-photos").upload(path, blob, { contentType: "image/jpeg", upsert: false, cacheControl: C.CACHE_SECONDS || "3600" });
     if (up.error) throw up.error;
     const { error } = await C.client.from("site_map_photos").insert({ site_id: site, landmark: lm, path, caption: (caption || "").slice(0, 300), approved: isAdmin() });
     if (error) { await C.client.storage.from("site-map-photos").remove([path]); throw error; }
@@ -318,10 +354,11 @@
         <label>Name <input data-ly="${esc(l.id)}" data-k="name" value="${esc(l.name)}" maxlength="120"></label>
         <label>Note <input data-ly="${esc(l.id)}" data-k="note" value="${esc(l.note)}" maxlength="500"></label>
         <label class="sm-check"><input type="checkbox" data-ly="${esc(l.id)}" data-k="restricted"${l.restricted ? " checked" : ""}> Restricted</label></div>
-      <span class="hint">${l.kind === "image" ? "Picture" : `Survey lines: ${Object.keys((l.survey && l.survey.runs) || {}).length} runs`}${l.kind === "image" && !l.bounds ? " · not lined up yet" : ""}</span>
+      <span class="hint">${l.kind === "image" ? "Picture" + (l.bytes ? ` · ${mb(l.bytes)}` : "") : `Survey lines: ${Object.keys((l.survey && l.survey.runs) || {}).length} runs`}${l.kind === "image" && !l.bounds ? " · not lined up yet" : ""}${l.bytes > BIG ? " · big: every member who turns it on downloads it, so make it smaller" : ""}</span>
       <div class="se-acts"><button type="button" class="btn" data-su="ly-save" data-id="${esc(l.id)}">Save</button>
         ${i > 0 ? `<button type="button" class="btn" data-su="ly-up" data-id="${esc(l.id)}" aria-label="Move ${esc(l.name)} up">↑</button>` : ""}
         ${l.kind === "image" && l.imageUrl ? `<button type="button" class="btn" data-su="align" data-id="${esc(l.id)}">${al ? "Stop lining up" : "Line it up"}</button>` : ""}
+        ${l.kind === "image" && l.imageUrl && l.bytes > BIG ? `<button type="button" class="btn" data-su="ly-shrink" data-id="${esc(l.id)}">Make it smaller</button>` : ""}
         <button type="button" class="btn danger" data-su="ly-del" data-id="${esc(l.id)}">Delete</button></div>
       ${al ? alignCard(l) : ""}</li>`;
   }
@@ -728,9 +765,11 @@
       const ins = await addLayerRow({ site_id: site, name, kind: "image", restricted: setupBox.querySelector("#su-img-restricted").checked,
         sort: st.layers.length, opacity: 0.7 });
       if (ins.error) throw ins.error;
-      const ext = (file.name.match(/\.(jpe?g|png|webp)$/i) || [".jpg"])[0].toLowerCase();
+      say("Making the picture smaller for the web…"); renderSetup();
+      const pic = await shrinkPicture(file);
+      const ext = pic === file ? (file.name.match(/\.(jpe?g|png|webp)$/i) || [".jpg"])[0].toLowerCase() : /webp/.test(pic.type) ? ".webp" : ".jpg";
       const path = `${site}/${ins.data.id}/picture${ext}`;
-      const up = await C.client.storage.from("site-map-layers").upload(path, file, { contentType: file.type || "image/jpeg", upsert: true });
+      const up = await C.client.storage.from("site-map-layers").upload(path, pic, { contentType: pic.type || "image/jpeg", upsert: true, cacheControl: C.CACHE_SECONDS || "3600" });
       if (up.error) { await C.client.from("site_map_layers").delete().eq("id", ins.data.id); throw up.error; }
       const u = await C.client.from("site_map_layers").update({ image_path: path }).eq("id", ins.data.id);
       if (u.error) throw u.error;
@@ -753,6 +792,19 @@
       await C.client.from("site_map_layers").update({ sort: i - 1 }).eq("id", layer.id);
       await C.client.from("site_map_layers").update({ sort: i }).eq("id", other.id);
       await loadLayers();
+    });
+    if (act === "ly-shrink" && layer) return run(async () => {
+      say("Making the picture smaller…"); renderSetup();
+      const res = await fetch(layer.imageUrl, { mode: "cors", cache: "no-store" });
+      if (!res.ok) throw new Error("The picture couldn't be loaded.");
+      const file = await res.blob(), pic = await shrinkPicture(file);
+      if (pic === file) { say("That picture can't be made any smaller here.", "bad"); return; }
+      // Same file name, so the layer keeps its place on the map; the old big copy is replaced.
+      const up = await C.client.storage.from("site-map-layers").upload(layer.image_path, pic, { contentType: pic.type || "image/jpeg", upsert: true, cacheControl: C.CACHE_SECONDS || "3600" });
+      if (up.error) throw up.error;
+      if (C.forgetSignedUrls) C.forgetSignedUrls("site-map-layers", [layer.image_path]);
+      await loadLayers();
+      say(`Done: ${mb(file.size)} → ${mb(pic.size)}. It stays lined up where it was.`, "ok");
     });
     if (act === "ly-del" && layer) {
       if (layer.kind === "survey" && layer.survey && Object.keys(layer.survey.runs || {}).length) { say("Move its lines back to the main survey first, so they aren't lost.", "bad"); return renderSetup(); }

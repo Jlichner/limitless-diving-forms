@@ -353,6 +353,7 @@
     for (const l of S.layers) {
       const pane = S.map.getPane("sm-p-" + l.id);
       if (pane) { pane.style.opacity = v(l.id).opacity; pane.style.display = v(l.id).visible ? "" : "none"; }
+      if (!images[l.id] && v(l.id).visible) addImage(l);
       if (images[l.id]) images[l.id].setOpacity(v(l.id).visible ? v(l.id).opacity : 0);
     }
   }
@@ -397,16 +398,19 @@
   function drawImages() {
     if (!S.map) return;
     Object.values(images).forEach(o => o.remove()); images = {};
-    for (const l of S.layers) {
-      if (l.kind !== "image" || !l.imageUrl) continue;
-      const cs = imageCorners(l.bounds);
-      if (!cs) continue;
-      const pane = "sm-i-" + l.id;
-      if (!S.map.getPane(pane)) S.map.createPane(pane).style.zIndex = 300 + S.layers.indexOf(l);
-      images[l.id] = new TurnedImage(l.imageUrl, cs, { pane, interactive: !!l.interactive }).addTo(S.map);
-      if (l.onImage) l.onImage(images[l.id]);
-    }
+    // A picture is only downloaded once its layer is turned on (or it is being lined up): pictures can be many MB
+    // and every download counts against the Supabase bandwidth allowance. applyViews adds the rest when turned on.
+    for (const l of S.layers) if (l.onImage) addImage(l);
     applyViews();
+  }
+  function addImage(l) {
+    if (!S.map || !TurnedImage || images[l.id] || l.kind !== "image" || !l.imageUrl) return;
+    const cs = imageCorners(l.bounds);
+    if (!cs) return;
+    const pane = "sm-i-" + l.id;
+    if (!S.map.getPane(pane)) S.map.createPane(pane).style.zIndex = 300 + S.layers.indexOf(l);
+    images[l.id] = new TurnedImage(l.imageUrl, cs, { pane, interactive: !!l.interactive }).addTo(S.map);
+    if (l.onImage) l.onImage(images[l.id]);
   }
   S.imageCorners = imageCorners;
   // Map setup's drag-and-turn: place the map with a trial georef (or the published one, with null), keeping the view.

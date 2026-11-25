@@ -198,8 +198,7 @@
     v.photos = {};
     const paths = [...new Set((v.accounts || []).concat(v.members || []).map(x => x.photo_path).filter(Boolean))];
     if (paths.length) {
-      const { data } = await C().client.storage.from("avatars").createSignedUrls(paths, 3600);
-      (data || []).forEach(r => { if (r.signedUrl) v.photos[r.path] = r.signedUrl; });
+      v.photos = await C().signedUrls("avatars", paths);
     }
     v.staff = st.error ? [] : st.data;
     rerender();

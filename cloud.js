@@ -41,6 +41,46 @@
       return C.role;
     },
     signOut() { return C.client ? C.client.auth.signOut() : Promise.resolve(); },
+    // Links to private Storage files, { path: url }. Each link is kept in this browser for a few days and reused, so
+    // the browser can serve the picture from its own cache instead of downloading it again from Supabase on every
+    // page load (a fresh link each time looks like a new file to the browser, and every download counts against the
+    // Supabase bandwidth allowance). Kept per signed-in account, so nobody reuses another person's links.
+    async signedUrls(bucket, paths) {
+      const out = {};
+      paths = [...new Set((paths || []).filter(Boolean))];
+      if (!paths.length || !C.client) return out;
+      const KEY = "ld-signed-urls", now = Date.now(), DAYS = 7, owner = (C.user && C.user.id) || "";
+      let cache = {};
+      try { cache = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { cache = {}; }
+      if (cache.owner !== owner) cache = { owner, urls: {} };
+      cache.urls = cache.urls || {};
+      for (const k of Object.keys(cache.urls)) if (!(cache.urls[k].exp > now)) delete cache.urls[k];
+      const need = [];
+      for (const p of paths) {
+        const hit = cache.urls[bucket + "/" + p];
+        if (hit && hit.exp - now > 86400000) out[p] = hit.url; else need.push(p); // keep a day's margin before it expires
+      }
+      if (need.length) {
+        const { data, error } = await C.client.storage.from(bucket).createSignedUrls(need, DAYS * 86400);
+        if (!error && data) data.forEach(r => {
+          if (!r.signedUrl) return;
+          out[r.path] = r.signedUrl;
+          cache.urls[bucket + "/" + r.path] = { url: r.signedUrl, exp: now + DAYS * 86400000 };
+        });
+        try { localStorage.setItem(KEY, JSON.stringify(cache)); } catch (e) { /* private window: just don't keep them */ }
+      }
+      return out;
+    },
+    // Forget kept links for these files (after replacing or deleting one).
+    forgetSignedUrls(bucket, paths) {
+      try {
+        const cache = JSON.parse(localStorage.getItem("ld-signed-urls") || "{}") || {};
+        (paths || []).forEach(p => { if (cache.urls) delete cache.urls[bucket + "/" + p]; });
+        localStorage.setItem("ld-signed-urls", JSON.stringify(cache));
+      } catch (e) { /* nothing kept */ }
+    },
+    // Uploads: tell browsers (and Supabase's CDN) they may keep the file for a week.
+    CACHE_SECONDS: "604800",
     // A plain-language message for a Supabase error.
     explain(err) {
       const m = String((err && (err.message || err.error_description)) || err || "");
