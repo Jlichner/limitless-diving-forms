@@ -11,13 +11,43 @@
   const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   let sites = Object.values(window.SITE_MAPS || {}), access = null;
 
-  // A small north-up drawing of the site's lines for its card.
-  function thumbnail(geo) {
+  // A small drawing of the site's lines for its card. On a map placed on the earth, the satellite pictures go
+  // underneath for context (Jamie 2026-11-25); the map page itself still starts with them off.
+  const SAT_TILE = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  const tileLng = (x, z) => x / 2 ** z * 360 - 180;
+  const tileLat = (y, z) => { const t = Math.PI * (1 - 2 * y / 2 ** z); return Math.atan(Math.sinh(t)) * 180 / Math.PI; };
+  const lngTile = (lng, z) => (lng + 180) / 360 * 2 ** z;
+  const latTile = (lat, z) => { const s = Math.sin(lat * Math.PI / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 2 ** z; };
+  function satTiles(gr, box, X, Y) {
+    // The area to cover: the drawing plus a wide margin, as the card is often wider than the drawing.
+    const [[x0, y0], [x1, y1]] = box, mx = (x1 - x0) * 0.9 + 200, my = (y1 - y0) * 0.9 + 200;
+    const lls = [[x0 - mx, y0 - my], [x1 + mx, y0 - my], [x0 - mx, y1 + my], [x1 + mx, y1 + my]].map(([x, y]) => gr.toLatLng(x, y));
+    const lats = lls.map(p => p[0]), lngs = lls.map(p => p[1]);
+    let z = 18;
+    while (z > 3 && (lngTile(Math.max(...lngs), z) - lngTile(Math.min(...lngs), z)) > 4) z--;
+    const tx0 = Math.floor(lngTile(Math.min(...lngs), z)), tx1 = Math.floor(lngTile(Math.max(...lngs), z));
+    const ty0 = Math.floor(latTile(Math.max(...lats), z)), ty1 = Math.floor(latTile(Math.min(...lats), z));
+    if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 40) return "";
+    const out = [], P = (lat, lng) => { const [x, y] = gr.toXY(lat, lng); return [X(x), Y(y)]; };
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const tl = P(tileLat(ty, z), tileLng(tx, z)), tr = P(tileLat(ty, z), tileLng(tx + 1, z)), bl = P(tileLat(ty + 1, z), tileLng(tx, z));
+      // A hair bigger than the tile, so no seams show between them.
+      const k = 1.004, a = (tr[0] - tl[0]) * k, b = (tr[1] - tl[1]) * k, c = (bl[0] - tl[0]) * k, d = (bl[1] - tl[1]) * k;
+      out.push(`<image href="${SAT_TILE.replace("{z}", z).replace("{y}", ty).replace("{x}", tx)}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" transform="matrix(${[a, b, c, d, tl[0], tl[1]].map(v => v.toFixed(3)).join(" ")})"/>`);
+    }
+    return out.join("");
+  }
+  function thumbnail(geo, d) {
     const [[x0, y0], [x1, y1]] = geo.bounds, pad = 20, w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+    const X = x => x - x0 + pad, Y = y => y1 - y + pad;
     const lines = geo.segments.filter(s => s.kind !== "removed")
-      .map(s => `M${(s.x0 - x0 + pad).toFixed(1)} ${(y1 - s.y0 + pad).toFixed(1)}L${(s.x1 - x0 + pad).toFixed(1)} ${(y1 - s.y1 + pad).toFixed(1)}`).join("");
-    return `<svg class="sm-thumb" viewBox="0 0 ${w.toFixed(0)} ${h.toFixed(0)}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-      <path d="${lines}" fill="none" stroke="currentColor" stroke-width="${(w / 260).toFixed(2)}" stroke-linecap="round"/></svg>`;
+      .map(s => `M${X(s.x0).toFixed(1)} ${Y(s.y0).toFixed(1)}L${X(s.x1).toFixed(1)} ${Y(s.y1).toFixed(1)}`).join("");
+    let gr = null;
+    try { gr = d.georef && G.georef ? G.georef(d.georef, geo.at) : null; } catch (e) { gr = null; }
+    const sat = gr ? satTiles(gr, geo.bounds, X, Y) : "";
+    return `<svg class="sm-thumb${sat ? " sat" : ""}" viewBox="0 0 ${w.toFixed(0)} ${h.toFixed(0)}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      ${sat ? `<g class="sm-thumb-sat">${sat}</g>` : ""}
+      <path d="${lines}" fill="none" stroke="currentColor" stroke-width="${(w / (sat ? 180 : 260)).toFixed(2)}" stroke-linecap="round"/></svg>`;
   }
 
   function card(d) {
@@ -32,7 +62,7 @@
     if (!geo.segments.length) return `<a class="sm-card" href="${esc(d.id)}-map.html"><span class="sm-thumb sm-thumb-empty" aria-hidden="true">Survey coming soon</span>
       <span class="sm-card-body"><b>${esc(d.title)}</b><span>${esc(d.place || "")}</span>
       <em>Not surveyed yet. Our survey team adds the lines as they map it.</em></span></a>`;
-    return `<a class="sm-card" href="${esc(d.id)}-map.html">${thumbnail(geo)}
+    return `<a class="sm-card" href="${esc(d.id)}-map.html">${thumbnail(geo, d)}
       <span class="sm-card-body"><b>${esc(d.title)}</b><span>${esc(d.place || "")}</span>
       <em>${Math.round(ft).toLocaleString()} ft of line surveyed · ${named} landmarks · ${geo.stakes.length} stakes</em>
       <span class="sm-card-by">${esc(d.credit)}</span></span></a>`;

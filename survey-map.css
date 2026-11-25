@@ -296,3 +296,6 @@ div.sb-err ul, div.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
 .leaflet-tooltip.sm-lm-label::before { display: none; }
 .leaflet-tooltip.sm-lm-label.new { border-color: #e8590c; color: #b4430a; }
 .sm-map.placing, .sm-map.placing .leaflet-interactive { cursor: crosshair; }
+
+/* Site maps cards: the drawing over the satellite pictures (maps placed on the earth). */
+.sm-thumb.sat { padding: 0; background: #1d2a22; color: #ffe066; }
