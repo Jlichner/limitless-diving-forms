@@ -38,7 +38,7 @@
     panel.innerHTML = `<h2 id="sm-issues-h" class="sec">Line problems${open.length ? ` <span class="sm-issue-count">${open.length} open</span>` : ""}</h2>
       ${st.err ? `<p class="se-err">${esc(st.err)}</p>` : ""}
       ${open.length ? open.map(i => issueHtml(i, false)).join("") : `<p class="hint">No open problems reported.</p>`}
-      <p class="hint">Found a broken line or one that needs work? Tap the line on the map, then <b>Report a problem</b>. Jamie gets a message right away.</p>
+      <p class="hint">Found a broken line or one that needs work? Tap the line on the map, then <b>Report a problem</b>. The authorities are notified right away.</p>
       <p class="sm-issue-msg" role="status"></p>`;
   }
 
@@ -100,7 +100,7 @@
         x: xy[0], y: xy[1], status, note: form.querySelector("textarea").value.trim(), reporter: C.user.id });
       if (error) { btn.disabled = false; msg.textContent = /site_map_issues/.test(error.message || "") ? "Reports aren't turned on yet. Please tell Jamie." : C.explain(error); return; }
       if (C.client.functions) Promise.resolve(C.client.functions.invoke("notify-signup", { body: { mapIssue: id } })).catch(() => {});
-      slot.innerHTML = `<p class="se-msg ok">Thanks! Jamie has been told${status === "broken" ? ". Please take care on this line" : ""}.</p>`;
+      slot.innerHTML = `<p class="se-msg ok">Thanks! The authorities have been notified.${status === "broken" ? " Please take care on this line." : ""}</p>`;
       pop.update();
       load();
     });
