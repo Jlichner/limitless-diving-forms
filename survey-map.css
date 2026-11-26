@@ -64,6 +64,9 @@
 .se-card p, .se-card ul, .se-card ol { margin: 0; }
 .se-acts { display: flex; flex-wrap: wrap; gap: 8px; }
 .se-acts .btn { min-height: 36px; }
+/* Long line names: buttons and the title wrap inside the editor panel instead of running off its edge. */
+.se-card { min-width: 0; overflow-wrap: anywhere; }
+.se-acts .btn { white-space: normal; text-align: left; max-width: 100%; height: auto; line-height: 1.25; padding-block: 6px; }
 .se-row { display: flex; flex-wrap: wrap; align-items: end; gap: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px 10px; margin: 0; position: relative; }
 .se-row legend { font-weight: 700; padding: 0 4px; }
 .se-row label, .se-wide { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
