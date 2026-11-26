@@ -16,6 +16,10 @@
                                                          run to <frac> (0–1) of the way along line entry <seg>.
                                                          The line is split there, so nothing else moves; the two
                                                          lines it sat between join up again when they're straight
+     bend_point    { run, index, before: { i, length_ft, angle }, after?: { i, length_ft, angle } }
+                                                         move the stake or tie-off at entry <index> anywhere: the
+                                                         line entries <before.i> and <after.i> on either side of
+                                                         it get the new length and heading, so the line bends there
 
    Indexes refer to the data as it is when that change is applied (after the changes before it).
    Works in the browser (window.SurveyEdits) and in Node (module.exports), for testing. */
@@ -147,6 +151,23 @@
         d.runs[c.run] = out;
         return;
       }
+      case "bend_point": {
+        const r = runOf(d, c.run), p = r[c.index];
+        check(p && MOVABLE.test(p.type), "That stake or tie-off isn't there any more.");
+        const legs = [c.before, c.after].filter(Boolean);
+        check(c.before && c.before.i < c.index && (!c.after || c.after.i > c.index), "Those aren't the lines either side of it.");
+        for (const g of legs) {
+          check(Number.isInteger(g.i) && r[g.i] && LINE.test(r[g.i].type), "Those aren't the lines either side of it.");
+          const ft = Number(g.length_ft), ang = Number(g.angle);
+          check(isFinite(ft) && ft > 0 && ft <= 2000 && isFinite(ang) && ang >= 0 && ang <= 360, "Lengths must be 0–2000 ft and headings 0–360°.");
+        }
+        // Only stakes, tie-offs and arrows between the two lines: a named point there would take other lines with it.
+        const lo = c.before.i, hi = c.after ? c.after.i : r.length;
+        check(r.slice(lo + 1, hi).every(e => /^(Stake|TieOff|RemovedStake|Arrow)$/.test(e.type)), "Other lines start from this point, so it can only slide along its line.");
+        for (const g of legs) r[g.i] = withLen(r[g.i], Math.round(Number(g.length_ft) * 100) / 100), r[g.i].angle = Math.round(Number(g.angle) * 100) / 100;
+        r[c.index] = Object.assign({}, p);   // a copy, so the map shows it as changed
+        return;
+      }
       case "drop_segment": {
         const r = runOf(d, c.run);
         check(Number.isInteger(c.index) && r[c.index] && LINE.test(r[c.index].type), "That line isn't there any more.");
@@ -215,6 +236,10 @@
       case "cut_run": return `Delete ${runName(c.run)} from line ${nth(c.run, c.from - 1) + 1} to the end`;
       case "mark_removed": return `Mark ${runName(c.run)} as removed line from line ${nth(c.run, c.from - 1) + 1}${c.to == null ? " to the end" : ""}`;
       case "move_point": { const e = (data.runs[c.run] || [])[c.index] || {}; return `Move the ${e.type === "TieOff" ? "tie-off" : "stake"} on ${runName(c.run)} along the line`; }
+      case "bend_point": {
+        const e = (data.runs[c.run] || [])[c.index] || {}, leg = g => `${Math.round(g.length_ft * 10) / 10} ft at ${Math.round(g.angle)}°`;
+        return `Move the ${e.type === "TieOff" ? "tie-off" : "stake"} on ${runName(c.run)}: line before it now ${leg(c.before)}${c.after ? `, line after it ${leg(c.after)}` : ""}`;
+      }
       case "drop_segment": { const e = (data.runs[c.run] || [])[c.index] || {}; return `Take out line ${nth(c.run, c.index)} of ${runName(c.run)} (${feet(e)} at ${e.angle}°)`; }
       default: return "Unknown change";
     }

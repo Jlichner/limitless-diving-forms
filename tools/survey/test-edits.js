@@ -152,4 +152,26 @@ t("move a real stake: every line of the survey stays where it was", () => {
   assert.fail("no run with a stake to test");
 });
 
+t("move a stake anywhere: the lines either side bend, the rest stays put", () => {
+  const d = { origin: "O", landmarks: { END: "End" }, runNames: { R: "Test" }, plan: [{ mode: "draw", start: "O", run: "R" }],
+    runs: { R: [{ type: "SurveyedLine", length_ft: 30, angle: 90 }, { type: "Stake" }, { type: "SurveyedLine", length_ft: 30, angle: 90 },
+      { type: "SurveyedLine", length_ft: 40, angle: 0 }, { type: "SaveLandmark", landmark: "END" }] } };
+  const g0 = G.compute(d);
+  const st = g0.stakes[0];
+  // Lines either side, worked out the way the editor does: from the stake's new spot to the ends of those lines.
+  const a = g0.segments.find(s => s.index === 0), b = g0.segments.find(s => s.index === 2), compass = (dx, dy) => 90 - Math.atan2(dy, dx) * 180 / Math.PI, turn = compass(a.x1 - a.x0, a.y1 - a.y0) - 90;
+  const P = [st.x + 5, st.y + 10];
+  const leg = (x0, y0, x1, y1) => ({ length_ft: Math.hypot(x1 - x0, y1 - y0), angle: ((compass(x1 - x0, y1 - y0) - turn) % 360 + 360) % 360 });
+  const c = { op: "bend_point", run: "R", index: 1, before: Object.assign({ i: 0 }, leg(a.x0, a.y0, P[0], P[1])), after: Object.assign({ i: 2 }, leg(P[0], P[1], b.x1, b.y1)) };
+  const r = E.apply(d, [c]);
+  assert.strictEqual(r.error, null);
+  const g1 = G.compute(r.data);
+  assert.ok(Math.hypot(g1.stakes[0].x - P[0], g1.stakes[0].y - P[1]) < 0.02, "the stake is where it was put");
+  assert.ok(Math.hypot(g1.at.END[0] - g0.at.END[0], g1.at.END[1] - g0.at.END[1]) < 0.02, "the end of the run stays put");
+  assert.ok(/line before it now/.test(E.describe(c, d)));
+  // A named point between the two lines can't move this way.
+  const d2 = JSON.parse(JSON.stringify(d)); d2.runs.R.splice(2, 0, { type: "SaveLandmark", landmark: "MID" });
+  assert.ok(E.apply(d2, [Object.assign({}, c, { after: Object.assign({}, c.after, { i: 3 }) })]).error);
+});
+
 console.log(`${n} tests passed`);

@@ -206,17 +206,63 @@
   // ----- sliding a stake or tie-off along its line (Jamie 2026-11-25) -----
   // The stake stays on its own run: tapping the line splits that line where it goes, so no line moves.
   function startMove(f) {
-    st.mode = "move"; st.mv = { run: f.run, index: f.index, kind: f.kind, seg: null, frac: null };
+    st.mode = "move"; st.mv = { run: f.run, index: f.index, kind: f.kind, seg: null, frac: null, free: bendable(f) ? true : false, bend: null };
     say(null); setPlacing(true);
   }
   function moveChanges() {
-    const m = st.mv; if (!m || m.seg == null) return [];
-    return [{ op: "move_point", run: m.run, index: m.index, seg: m.seg, frac: m.frac }];
+    const m = st.mv; if (!m) return [];
+    if (m.free) return m.bend ? [Object.assign({ op: "bend_point", run: m.run, index: m.index }, m.bend)] : [];
+    return m.seg == null ? [] : [{ op: "move_point", run: m.run, index: m.index, seg: m.seg, frac: m.frac }];
+  }
+  // Moving it anywhere bends the line there: the lines either side of it (the one coming in and the one going on)
+  // get a new length and heading. Only when nothing else is pinned to that point, and the run ends up where it did.
+  function legsAround(d, run, index) {
+    const r = d.runs[run] || [], free = e => /^(Stake|TieOff|RemovedStake|Arrow)$/.test(e.type);
+    let b = index - 1; while (b >= 0 && free(r[b])) b--;
+    let a = index + 1; while (a < r.length && free(r[a])) a++;
+    const before = b >= 0 && E.LINE.test(r[b].type) ? b : null;
+    const after = a < r.length ? (E.LINE.test(r[a].type) ? a : -1) : null;   // -1: something else is there
+    return { before, after };
+  }
+  function bendable(f) {
+    const d = current().data, L = legsAround(d, f.run, f.index);
+    if (L.before == null || L.after === -1) return false;
+    // The last point of a run that's stretched to meet another point can't move on its own.
+    if (L.after == null) { const step = d.plan.find(p => p.run === f.run || p.run2 === f.run); return !!step && step.mode === "draw"; }
+    return true;
+  }
+  function bendTo(latlng) {
+    const m = st.mv, d = current().data, G = window.SurveyGeometry, g = G.compute(d), L = legsAround(d, m.run, m.index);
+    const segA = g.segments.find(x => x.run === m.run && x.index === L.before);
+    const segB = L.after != null ? g.segments.find(x => x.run === m.run && x.index === L.after) : null;
+    if (!segA || (L.after != null && !segB)) return null;
+    const eA = d.runs[m.run][L.before], ftA = lineFeet(eA);
+    const dxA = segA.x1 - segA.x0, dyA = segA.y1 - segA.y0, drawnA = Math.hypot(dxA, dyA);
+    if (!(ftA > 0) || !(drawnA > 0)) return null;
+    // How this run is stretched and turned on the map, from the line before it: the same for the whole run.
+    // Headings are compass degrees (0 = north, clockwise), so 90 minus the math angle.
+    const compass = (dx, dy) => 90 - Math.atan2(dy, dx) * 180 / Math.PI;
+    const stretch = drawnA / ftA, turn = compass(dxA, dyA) - Number(eA.angle);
+    const [px, py] = S.toXY(latlng.lat, latlng.lng);
+    const leg = (x0, y0, x1, y1) => {
+      const len = Math.hypot(x1 - x0, y1 - y0) / stretch;
+      const ang = (((compass(x1 - x0, y1 - y0) - turn) % 360) + 360) % 360;
+      return { length_ft: Math.round(len * 100) / 100, angle: Math.round(ang * 100) / 100 };
+    };
+    const before = Object.assign({ i: L.before }, leg(segA.x0, segA.y0, px, py));
+    const after = segB ? Object.assign({ i: L.after }, leg(px, py, segB.x1, segB.y1)) : null;
+    if (before.length_ft < 0.1 || (after && after.length_ft < 0.1)) return null;
+    return after ? { before, after } : { before };
   }
   // The nearest spot on the stake's own run to where the map was tapped, within a finger's width.
   function moveAt(latlng) {
     if (st.mode !== "move" || !st.open || !latlng) return;
     const m = st.mv, d = current().data, map = S.map, G = window.SurveyGeometry;
+    if (m.free) {
+      const b = bendTo(latlng);
+      if (!b) { say("That's right on the next point. Tap a little way off it.", "bad"); return render(); }
+      m.bend = b; say(null); return render();
+    }
     const px = map.latLngToContainerPoint(latlng);
     let best = null;
     for (const sg of G.compute(d).segments.filter(x => x.run === m.run)) {
@@ -232,7 +278,7 @@
   }
   function saveMove() {
     const ch = moveChanges();
-    if (!ch.length) { say("Tap the line where it should go.", "bad"); return render(); }
+    if (!ch.length) { say(st.mv.free ? "Tap the map where it should go." : "Tap the line where it should go.", "bad"); return render(); }
     const r = E.apply(base().data, st.draft.concat(ch));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ch);
@@ -242,10 +288,16 @@
     render();
   }
   function moveForm() {
-    const m = st.mv, what = m.kind === "tieoff" ? "tie-off" : "stake";
+    const m = st.mv, what = m.kind === "tieoff" ? "tie-off" : "stake", can = bendable({ run: m.run, index: m.index });
+    const placed = m.free ? !!m.bend : m.seg != null, leg = g => `${Math.round(g.length_ft * 10) / 10} ft at ${Math.round(g.angle)}°`;
     return `<section class="se-sec"><h3>Move the ${what}</h3>
-      <p class="hint">${m.seg == null ? `Tap ${esc(S.runName(m.run))} where the ${what} should be. It slides along its own line; the line doesn't move.` : `The new spot is in orange. Tap again to change it.`}</p>
-      <div class="se-acts"><button type="button" class="btn primary" data-act="mv-save"${m.seg == null ? " disabled" : ""}>Add to my changes</button>
+      <fieldset class="se-choice"><legend class="sr-only">How it moves</legend>
+        <label class="se-check"><input type="radio" name="se-mv" value="free"${m.free ? " checked" : ""}${can ? "" : " disabled"}> Anywhere: the line bends to follow it</label>
+        <label class="se-check"><input type="radio" name="se-mv" value="slide"${m.free ? "" : " checked"}> Along its line: the line stays put</label></fieldset>
+      ${can ? "" : `<p class="hint">Other lines start from this ${what}, or its line is fitted to end at another point, so it can only slide along its line.</p>`}
+      <p class="hint">${!placed ? (m.free ? `Tap the map where the ${what} should be.` : `Tap ${esc(S.runName(m.run))} where the ${what} should be.`) : `The new spot is in orange. Tap again to change it.`}</p>
+      ${m.free && m.bend ? `<p class="hint">New numbers: line before it <b>${leg(m.bend.before)}</b>${m.bend.after ? `, line after it <b>${leg(m.bend.after)}</b>` : ""}.</p>` : ""}
+      <div class="se-acts"><button type="button" class="btn primary" data-act="mv-save"${placed ? "" : " disabled"}>Add to my changes</button>
         <button type="button" class="btn" data-act="mv-cancel">Cancel</button></div></section>`;
   }
 
@@ -425,7 +477,7 @@
         ${onRun && hasAfter ? `<button type="button" class="btn" data-act="cut">${f.kind === "segment" ? "Delete this line and the rest of the run" : "Delete the rest of this run from here"}</button>
           <button type="button" class="btn" data-act="mark">${f.kind === "segment" ? "Mark as removed line from here" : "Mark the rest as removed line"}</button>` : ""}
         ${f.kind === "segment" ? `<button type="button" class="btn" data-act="drop">Take out just this line</button>` : ""}
-        ${(f.kind === "stake" || f.kind === "tieoff") && r && r[f.index] && E.MOVABLE.test(r[f.index].type) ? `<button type="button" class="btn" data-act="move">Move it along the line</button>` : ""}
+        ${(f.kind === "stake" || f.kind === "tieoff") && r && r[f.index] && E.MOVABLE.test(r[f.index].type) ? `<button type="button" class="btn" data-act="move">Move it</button>` : ""}
         ${onRun ? `<button type="button" class="btn danger" data-act="run">Delete the whole run: ${esc(S.runName(f.run))}</button>` : ""}
         <button type="button" class="btn" data-act="unselect">Cancel</button></div>
       ${f.kind === "segment" ? `<p class="hint">"Take out just this line" keeps everything after it where it is. "Mark as removed line" keeps it on the map in grey, for line that was pulled.</p>` : ""}</div>`;
@@ -594,6 +646,7 @@
   function onField(e) {
     const el = e.target;
     if (el.id === "se-summary") { st.summary = el.value; saveDraft(); return; }
+    if (el.name === "se-mv" && st.mv) { st.mv.free = el.value === "free"; st.mv.bend = null; st.mv.seg = null; say(null); return render(); }
     if (el.dataset.p && st.pt) {
       const p = el.dataset.p;
       st.pt[p] = p === "label" ? el.checked : el.value;
