@@ -206,6 +206,7 @@ body.pm-open { overflow: hidden; }
 .sb-open.sb-map-off #sm-map { display: none; }
 .sb-check select { font: inherit; padding: 2px 4px; border: 1px solid #cfdcdf; border-radius: 4px; }
 details.sb-warn summary { cursor: pointer; }
+.sb-dbl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
 .sb-glow-line { animation: sb-pulse 1.2s ease-in-out 4; }
 @keyframes sb-pulse { 50% { stroke-opacity: .25; } }
 @media (prefers-reduced-motion: reduce) { .sb-glow-line { animation: none; } }
