@@ -29,7 +29,16 @@
   // A new leg not filled in yet is a blank row that belongs to its line: marked in a 12th cell the sheet never reads.
   const held = r => r[11] === 1 && isBlank(r);
   const isTitle = r => str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^(loop with |gps\b)/i.test(str(r[1])));
-  const st = { open: false, rows: null, lm: [], base: 0, savedAt: null, check: null, msg: null, busy: false, summary: "", confirm: false, drawing: false, timer: null };
+  const st = { open: false, rows: null, lm: [], base: 0, savedAt: null, check: null, msg: null, busy: false, summary: "", confirm: false, drawing: false, timer: null, warnOpen: false };
+  // How much room the map above the book takes: each person's choice, kept in this browser.
+  let mapSize = "small";
+  try { mapSize = localStorage.getItem("sb-map-size") || "small"; } catch (e) { /* private window */ }
+  if (!/^(large|small|off)$/.test(mapSize)) mapSize = "small";
+  function applyMapSize() {
+    host.classList.toggle("sb-map-small", mapSize === "small");
+    host.classList.toggle("sb-map-off", mapSize === "off");
+    setTimeout(() => S.map.invalidateSize(), 50);
+  }
 
   // ----- the panel, under the map in the same box (so the map stays in view while you scroll the book) -----
   const work = document.getElementById("sm-work"), host = work.parentNode;
@@ -188,7 +197,8 @@
         <button type="button" class="btn" data-sb="csv">Download spreadsheet</button>
         <label class="btn sb-file">Load spreadsheet (CSV)<input type="file" accept=".csv,text/csv" data-sb="csv-in" hidden></label>
         <button type="button" class="btn" data-sb="reload">Start from the website</button>
-        <label class="sb-check"><input type="checkbox" data-sb="drawing"${st.drawing ? " checked" : ""}> Drawing column</label></div>
+        <label class="sb-check"><input type="checkbox" data-sb="drawing"${st.drawing ? " checked" : ""}> Drawing column</label>
+        <label class="sb-check">Map <select data-sb="mapsize">${[["large", "Large"], ["small", "Small"], ["off", "Hidden"]].map(([v, t]) => `<option value="${v}"${mapSize === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div>
       <div class="sb-origin"><b>Starting point</b> (every line is measured from here):
         ${o ? `<label><span>Station</span><input data-r="${bl.origin}" data-c="1" value="${esc(str(o[1]))}"></label><label><span>Depth ft</span><input data-r="${bl.origin}" data-c="2" inputmode="decimal" value="${esc(str(o[2]))}"></label>` : "<i>none yet</i>"}</div>
       <div class="sb-lines">${bl.list.map(blockHtml).join("")}</div>
@@ -206,7 +216,7 @@
     const pub = box.querySelector("#sb-pub"); if (!pub) return;
     const nErr = c.errors.length, nWarn = c.warnings.length;
     pub.innerHTML = `${c.other.errors.length ? `<div class="sb-err"><b>Fix these to publish:</b><ul>${c.other.errors.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
-      ${c.other.warnings.length || c.notes.length ? `<div class="sb-warn"><b>Worth a look:</b><ul>${c.other.warnings.concat(c.notes).map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
+      ${c.other.warnings.length || c.notes.length ? `<details class="sb-warn" data-sb="warn"${st.warnOpen ? " open" : ""}><summary><b>Worth a look (${c.other.warnings.length + c.notes.length})</b></summary><ul>${c.other.warnings.concat(c.notes).map(t => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
       <div class="sb-pubrow"><label class="sb-what"><span>What changed? (for the map's history)</span><input id="sb-summary" maxlength="300" value="${esc(st.summary)}" placeholder="e.g. Added the Saddle spur from Sunday's dive"></label>
         <button type="button" class="btn primary" data-sb="publish"${st.busy || nErr ? " disabled" : ""}>${st.busy ? "Publishing…" : nErr ? `Fix ${nErr} problem${nErr === 1 ? "" : "s"} to publish` : st.confirm ? "Publish anyway" : "Publish to the map"}</button></div>
@@ -228,9 +238,11 @@
     st.confirm = false; st.msg = null;
     save(); later();
   });
+  box.addEventListener("toggle", e => { if (e.target.dataset && e.target.dataset.sb === "warn") st.warnOpen = e.target.open; }, true);
   box.addEventListener("change", async e => {
     const el = e.target;
     if (el.dataset.sb === "drawing") { st.drawing = el.checked; return render(); }
+    if (el.dataset.sb === "mapsize") { mapSize = el.value; try { localStorage.setItem("sb-map-size", mapSize); } catch (x) { /* ignore */ } return applyMapSize(); }
     if (el.dataset.sb === "csv-in" && el.files[0]) {
       const text = await el.files[0].text(), rows = parseCsv(text).map(r => Array.from({ length: 11 }, (_, k) => r[k] == null ? "" : r[k]));
       if (!rows.length) { st.msg = { kind: "bad", text: "That file has no rows." }; return render(); }
@@ -241,7 +253,7 @@
     if (el.tagName === "SELECT" && el.dataset.r != null) { st.rows[+el.dataset.r][+el.dataset.c] = el.value; save(); check(); render(); }
   });
   box.addEventListener("click", async e => {
-    const b = e.target.closest("[data-sb]"); if (!b || b.tagName === "INPUT") return;
+    const b = e.target.closest("[data-sb]"); if (!b || b.tagName === "INPUT" || b.tagName === "SELECT" || b.tagName === "DETAILS") return;
     const act = b.dataset.sb, bl = blocks();
     const blk = b.dataset.k != null ? bl.list[+b.dataset.k] : null;
     const lastOf = x => Math.max(x.title != null ? x.title : -1, ...x.legs);
@@ -387,13 +399,13 @@
     if (S.editing) { const w = document.getElementById("sm-warn"); if (w) { w.hidden = false; w.textContent = "Close Edit map (Done) before opening the Survey book."; } return; }
     st.open = true; S.editing = true;
     host.classList.add("sb-open"); btn.classList.add("on"); btn.setAttribute("aria-pressed", "true");
-    setTimeout(() => S.map.invalidateSize(), 50);
+    applyMapSize();
     start(false);
     if (!PAGE) box.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function close() {
     st.open = false; S.editing = false;
-    host.classList.remove("sb-open"); btn.classList.remove("on"); btn.setAttribute("aria-pressed", "false");
+    host.classList.remove("sb-open", "sb-map-small", "sb-map-off"); btn.classList.remove("on"); btn.setAttribute("aria-pressed", "false");
     render();
     setTimeout(() => S.map.invalidateSize(), 50);
     try { S.reset(); } catch (e) { console.error(e); }
