@@ -2063,3 +2063,54 @@ begin
 end $$;
 revoke all on function public.publish_site_map_book(text, jsonb, integer, text, jsonb, uuid[]) from public, anon;
 grant execute on function public.publish_site_map_book(text, jsonb, integer, text, jsonb, uuid[]) to authenticated;
+
+-- ---------- Survey book: a line is locked while someone edits it (added 2026-11-26) ----------
+-- When an Admin or Dive site admin starts changing a line in the Survey book, they hold it until they publish or let
+-- it go; the others see who's on it and can't change it. A hold more than 12 hours old has lapsed, and anyone can
+-- take one over (the book asks first). line_key is the line's name in lower case.
+create table if not exists public.site_map_line_claims (
+  site_id    text not null check (site_id ~ '^[a-z0-9-]{1,60}$'),
+  line_key   text not null check (char_length(line_key) between 1 and 300),
+  line_name  text not null default '' check (char_length(line_name) <= 300),
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  user_name  text not null default '',
+  claimed_at timestamptz not null default now(),
+  primary key (site_id, line_key)
+);
+alter table public.site_map_line_claims enable row level security;
+drop policy if exists "site map admins see line holds" on public.site_map_line_claims;
+create policy "site map admins see line holds" on public.site_map_line_claims for select to authenticated
+  using ((select public.is_site_map_admin()));
+revoke insert, update, delete on public.site_map_line_claims from anon, authenticated;
+grant select on public.site_map_line_claims to authenticated;
+
+-- Hold lines (keys + names). Lines someone else holds (not lapsed) are left with them unless take_over. Returns every
+-- hold on the site afterwards, so the book can show who's on what.
+create or replace function public.claim_site_map_lines(site text, keys text[], names text[] default null, take_over boolean default false)
+returns setof public.site_map_line_claims language plpgsql security definer set search_path = '' as $$
+declare who text; i integer;
+begin
+  if not public.is_site_map_admin() then
+    raise exception 'Only Admins and Dive site admins can edit site maps' using errcode = '42501';
+  end if;
+  select coalesce(nullif(p.full_name, ''), u.email::text, '') into who
+    from auth.users u left join public.student_profiles p on p.id = u.id where u.id = (select auth.uid());
+  for i in 1 .. coalesce(array_length(keys, 1), 0) loop
+    insert into public.site_map_line_claims as c (site_id, line_key, line_name, user_id, user_name, claimed_at)
+      values (site, left(lower(keys[i]), 300), left(coalesce(names[i], keys[i]), 300), (select auth.uid()), coalesce(who, ''), now())
+      on conflict (site_id, line_key) do update set user_id = excluded.user_id, user_name = excluded.user_name, claimed_at = now(), line_name = excluded.line_name
+      where c.user_id = excluded.user_id or take_over or c.claimed_at < now() - interval '12 hours';
+  end loop;
+  return query select * from public.site_map_line_claims c where c.site_id = site;
+end $$;
+revoke all on function public.claim_site_map_lines(text, text[], text[], boolean) from public, anon;
+grant execute on function public.claim_site_map_lines(text, text[], text[], boolean) to authenticated;
+
+-- Let go of your holds on a site (all of them, or just these lines).
+create or replace function public.release_site_map_lines(site text, keys text[] default null)
+returns void language sql security definer set search_path = '' as $$
+  delete from public.site_map_line_claims c
+   where c.site_id = site and c.user_id = (select auth.uid()) and (keys is null or c.line_key = any(select lower(k) from unnest(keys) k));
+$$;
+revoke all on function public.release_site_map_lines(text, text[]) from public, anon;
+grant execute on function public.release_site_map_lines(text, text[]) to authenticated;

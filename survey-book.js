@@ -30,7 +30,7 @@
   const held = r => r[11] === 1 && isBlank(r);
   const isTitle = r => str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^(loop with |gps\b)/i.test(str(r[1])));
   const st = { open: false, rows: null, lm: [], base: 0, savedAt: null, check: null, msg: null, busy: false, summary: "", confirm: false, drawing: false, timer: null, warnOpen: false,
-    undo: [], edits: [], orig: null };   // orig: the website's book when this one was started (to see what you changed)   // undo: the book before each change made with the map tools; edits: suggestions added in
+    undo: [], edits: [], orig: null, claims: {}, claimsOff: false };   // orig: the website's book when this one was started (to see what you changed)   // undo: the book before each change made with the map tools; edits: suggestions added in
   // How much room the map above the book takes: each person's choice, kept in this browser.
   // "side" puts the map on the left and the book on the right, for wide screens (Jamie 2026-11-26, 1920 × 1080);
   // it's the first choice on a screen at least 1300 px wide.
@@ -166,6 +166,60 @@
   };
   function inchError(r) { return r.inch != null && r.inch !== "" && !(Number(r.inch) >= 0 && Number(r.inch) < 12) ? "Inches must be 0 to 11." : null; }
 
+  // ----- a line is locked while someone edits it (Jamie 2026-11-26) -----
+  // Starting to change a line holds it (site_map_line_claims): the others see who's on it and can't change it until
+  // that person publishes or starts again from the website. A hold more than 12 hours old has lapsed. Keys are the
+  // Survey book's line keys (survey-merge.js), so the line's name.
+  const LAPSE = 12 * 3600 * 1000;
+  const SM = () => window.SurveyMerge;
+  function blockKeys(list) {
+    const count = {};
+    return list.map(b => {
+      const first = b.title != null ? st.rows[b.title] : st.rows[b.legs[0]];
+      if (!first) return null;
+      const name = b.title != null ? str(first[0]) : `${str(first[0])} → ${str(first[1])}`;
+      const base = (b.title != null ? "t:" : "r:") + name.toLowerCase();
+      count[base] = (count[base] || 0) + 1;
+      return { key: count[base] > 1 ? `${base}#${count[base]}` : base, name };
+    });
+  }
+  function holder(key) {
+    const c = key && st.claims[key];
+    if (!c || !C.user || c.user_id === C.user.id || Date.now() - new Date(c.claimed_at).getTime() > LAPSE) return null;
+    return c;
+  }
+  const holdText = c => `${c.user_name || "Someone"} is editing this line (since ${new Date(c.claimed_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })})`;
+  function setClaims(list) { const o = {}; (list || []).forEach(c => { o[c.line_key] = c; }); const was = JSON.stringify(st.claims); st.claims = o; return was !== JSON.stringify(o); }
+  function claimsUnavailable(err) { if (/claim_site_map_lines|release_site_map_lines|site_map_line_claims|schema cache|does not exist/i.test((err && err.message) || "")) { st.claimsOff = true; return true; } return false; }
+  // Hold these lines. Returns the ones someone else holds.
+  async function claim(items, takeOver) {
+    if (st.claimsOff || !items.length) return [];
+    const { data, error } = await C.client.rpc("claim_site_map_lines", { site, keys: items.map(x => x.key), names: items.map(x => x.name), take_over: !!takeOver });
+    if (error) { if (!claimsUnavailable(error)) console.error(error); return []; }
+    setClaims(data);
+    return items.filter(x => holder(x.key));
+  }
+  async function release() {
+    if (st.claimsOff) return;
+    const { error } = await C.client.rpc("release_site_map_lines", { site });
+    if (error) claimsUnavailable(error);
+    await loadClaims();
+  }
+  async function loadClaims() {
+    if (st.claimsOff) return false;
+    const { data, error } = await C.client.from("site_map_line_claims").select("*").eq("site_id", site);
+    if (error) { claimsUnavailable(error); return false; }
+    return setClaims(data);
+  }
+  // Lines that differ between two books, by key.
+  function changedKeys(a, b) {
+    const A = SM().split(a), B = SM().split(b), sa = {}, sb = {};
+    A.lines.forEach(l => { sa[l.key] = SM().sig(l.rows); }); B.lines.forEach(l => { sb[l.key] = SM().sig(l.rows); });
+    const names = {}; A.lines.concat(B.lines).forEach(l => { names[l.key] = l.name; });
+    return [...new Set([...Object.keys(sa), ...Object.keys(sb)])].filter(k => sa[k] !== sb[k]).map(k => ({ key: k, name: names[k] }));
+  }
+  const lineList = a => a.length > 5 ? a.slice(0, 5).map(x => `"${x}"`).join(", ") + ` and ${a.length - 5} more` : a.map(x => `"${x}"`).join(", ");
+
   // ----- drawing the book -----
   function blocks() {
     // [{ title: index or null, legs: [indexes] }], and the starting-point row.
@@ -193,14 +247,15 @@
     list.forEach((o, j) => { if (j !== k && o.legs.length && !alone(o) && endOf(o) === first && (best == null || Math.abs(j - k) < Math.abs(best - k))) best = j; });
     return best;
   }
-  const sel = (i, c, opts, extra) => `<select data-r="${i}" data-c="${c}" aria-label="${extra}">${opts.map(([v, l]) => `<option value="${esc(v)}"${str(st.rows[i][c]).toLowerCase() === v.toLowerCase() ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  let selLocked = false;   // while drawing a line someone else holds
+  const sel = (i, c, opts, extra) => `<select data-r="${i}" data-c="${c}" aria-label="${extra}"${selLocked ? " disabled" : ""}>${opts.map(([v, l]) => `<option value="${esc(v)}"${str(st.rows[i][c]).toLowerCase() === v.toLowerCase() ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   function kindOpts(v) {
     const o = KINDS.map(k => [k, k]); if (v && !KINDS.some(k => k.toLowerCase() === v.toLowerCase())) o.push([v, v]);
     return o;
   }
-  function legRow(i, n) {
+  function legRow(i, n, locked) {
     const r = st.rows[i], [ft, inch] = r.inch != null ? [r.ftPart, r.inch] : ftIn(r[5]);
-    const inp = (c, label, cls, val) => `<label class="sb-c sb-${cls}"><span>${label}</span><input data-r="${i}" data-c="${c}" value="${esc(val != null ? val : str(r[c]))}"${/^(2|3|4)$/.test(String(c)) || c === "ft" || c === "in" ? ' inputmode="decimal"' : ""} autocomplete="off"></label>`;
+    const inp = (c, label, cls, val) => `<label class="sb-c sb-${cls}"><span>${label}</span><input data-r="${i}" data-c="${c}" value="${esc(val != null ? val : str(r[c]))}"${/^(2|3|4)$/.test(String(c)) || c === "ft" || c === "in" ? ' inputmode="decimal"' : ""} autocomplete="off"${locked ? " disabled" : ""}></label>`;
     return `<div class="sb-row" data-row="${i}"><span class="sb-n">${n}</span>
       ${inp(0, "From", "from")}<span class="sb-arrow" aria-hidden="true">→</span>${inp(1, "To", "to")}
       ${inp(2, "Depth ft", "depth")}${inp(4, "Heading °", "hdg")}${inp(3, "Back °", "back")}
@@ -208,27 +263,36 @@
       <label class="sb-c sb-kind"><span>Kind</span>${sel(i, 7, kindOpts(str(r[7])).concat(str(r[7]) ? [] : []), "Kind")}</label>
       <label class="sb-c sb-level"><span>Level from here</span>${sel(i, 10, [["", "—"]].concat(LEVELS.map(l => [l, l])), "Level from here")}</label>
       ${inp(8, "Note", "note")}${st.drawing ? inp(9, "Drawing", "draw") : ""}
-      <span class="sb-acts"><button type="button" class="sb-x" data-sb="row-ins" data-i="${i}" title="Add a leg after this one" aria-label="Add a leg after leg ${n}">+</button><button type="button" class="sb-x" data-sb="row-del" data-i="${i}" title="Remove this leg" aria-label="Remove leg ${n}">✕</button></span>
+      <span class="sb-acts"${locked ? ' style="visibility:hidden"' : ""}><button type="button" class="sb-x" data-sb="row-ins" data-i="${i}" title="Add a leg after this one" aria-label="Add a leg after leg ${n}">+</button><button type="button" class="sb-x" data-sb="row-del" data-i="${i}" title="Remove this leg" aria-label="Remove leg ${n}">✕</button></span>
       <div class="sb-msgs" data-msgs="${i}"></div></div>`;
   }
-  function blockHtml(b, k, list) {
-    const jt = joinTarget(list, k), jName = jt == null ? "" : (list[jt].title != null ? str(st.rows[list[jt].title][0]) : `Line ${jt + 1}`);
+  function blockHtml(b, k, list, keys) {
+    const kk = keys && keys[k], hold = kk && holder(kk.key), mine = kk && !hold && st.claims[kk.key] && C.user && st.claims[kk.key].user_id === C.user.id;
+    selLocked = !!hold;
+    const html = blockInner(b, k, list, hold);
+    selLocked = false;
+    return html.replace('<div class="sb-msgs"', `${hold ? `<p class="sb-hold" data-key="${esc(kk.key)}">🔒 ${esc(holdText(hold))}. <button type="button" class="btn small" data-sb="take" data-key="${esc(kk.key)}" data-name="${esc(kk.name)}">Take over</button></p>`
+      : mine ? `<p class="sb-hold mine">✎ You're editing this line. Others can't change it until you publish.</p>` : ""}<div class="sb-msgs"`);
+  }
+  function blockInner(b, k, list, hold) {
+    const lockAttr = hold ? " disabled" : "";
+    const jt = hold ? null : joinTarget(list, k), jName = jt == null ? "" : (list[jt].title != null ? str(st.rows[list[jt].title][0]) : `Line ${jt + 1}`);
     const t = b.title != null ? st.rows[b.title] : null, lv = t ? str(t[10]) : "";
     const legs = b.legs.length, feet = b.legs.reduce((s, i) => s + (Number(str(st.rows[i][5])) || 0), 0);
     return `<div class="sb-line${st.drawing ? " drawing" : ""}" data-block="${k}">
-      <div class="sb-lh">${t ? `<input class="sb-name" data-r="${b.title}" data-c="0" value="${esc(str(t[0]))}" aria-label="Line name">` : `<b class="sb-name">Line ${k + 1}</b>`}
+      <div class="sb-lh">${t ? `<input class="sb-name" data-r="${b.title}" data-c="0" value="${esc(str(t[0]))}" aria-label="Line name"${lockAttr}>` : `<b class="sb-name">Line ${k + 1}</b>`}
         ${t ? `<label class="sb-lv"><span class="sb-dot" style="background:${LEVEL_DOT[lv.toLowerCase()] || LEVEL_DOT["green circle"]}"></span>${sel(b.title, 10, [["", "Green circle"]].concat(LEVELS.slice(1).map(l => [l, l])), "Line level")}</label>
-          <label class="sb-join"><span>Loop with / GPS</span><input data-r="${b.title}" data-c="1" value="${esc(str(t[1]))}" placeholder="optional" autocomplete="off"></label>
-          <label class="sb-check" title="Show this line's name along it on the map"><input type="checkbox" data-sb="runlabel" data-t="${b.title}"${/show name\s*=\s*(yes|y|true|1)/i.test(str(t[9])) ? " checked" : ""}> Label on map</label>` : ""}
+          <label class="sb-join"><span>Loop with / GPS</span><input data-r="${b.title}" data-c="1" value="${esc(str(t[1]))}" placeholder="optional" autocomplete="off"${lockAttr}></label>
+          <label class="sb-check" title="Show this line's name along it on the map"><input type="checkbox" data-sb="runlabel" data-t="${b.title}"${lockAttr}${/show name\s*=\s*(yes|y|true|1)/i.test(str(t[9])) ? " checked" : ""}> Label on map</label>` : ""}
         <span class="sb-sum">${legs} leg${legs === 1 ? "" : "s"} · ${Math.round(feet)} ft</span>
         <span class="sb-lacts"><button type="button" class="btn small" data-sb="show" data-k="${k}">Show on map</button>
           <button type="button" class="btn small" data-sb="print" data-k="${k}">Print slate</button>
           ${jt != null ? `<button type="button" class="btn small" data-sb="line-join" data-k="${k}" data-t="${jt}" title="Add this line's legs onto the end of ${esc(jName)}, which finishes where this line starts">Join onto ${esc(jName.length > 28 ? jName.slice(0, 27) + "…" : jName)}</button>` : ""}
-          <button type="button" class="btn small" data-sb="line-del" data-k="${k}">Delete line</button></span></div>
+          ${hold ? "" : `<button type="button" class="btn small" data-sb="line-del" data-k="${k}">Delete line</button>`}</span></div>
       ${t ? `<div class="sb-msgs" data-msgs="${b.title}"></div>` : ""}
       <div class="sb-head" aria-hidden="true"><span>#</span><span>From</span><span></span><span>To</span><span>Depth ft</span><span>Heading °</span><span>Back °</span><span>Feet</span><span>In</span><span>Kind</span><span>Level from here</span><span>Note</span>${st.drawing ? "<span>Drawing</span>" : ""}<span></span></div>
-      ${b.legs.map((i, n) => legRow(i, n + 1)).join("")}
-      <button type="button" class="btn small sb-add" data-sb="leg-add" data-k="${k}">+ Add a leg</button></div>`;
+      ${b.legs.map((i, n) => legRow(i, n + 1, !!hold)).join("")}
+      ${hold ? "" : `<button type="button" class="btn small sb-add" data-sb="leg-add" data-k="${k}">+ Add a leg</button>`}</div>`;
   }
   function render() {
     if (!st.open) { box.hidden = true; box.innerHTML = ""; return; }
@@ -253,7 +317,7 @@
         <label class="sb-check">Map <select data-sb="mapsize">${[["side", "Beside the book"], ["large", "Large"], ["small", "Small"], ["off", "Hidden"]].map(([v, t]) => `<option value="${v}"${mapSize === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div>
       <div class="sb-origin"><b>Starting point</b> (every line is measured from here):
         ${o ? `<label><span>Station</span><input data-r="${bl.origin}" data-c="1" value="${esc(str(o[1]))}"></label><label><span>Depth ft</span><input data-r="${bl.origin}" data-c="2" inputmode="decimal" value="${esc(str(o[2]))}"></label>` : "<i>none yet</i>"}</div>
-      <div class="sb-lines">${bl.list.map(blockHtml).join("")}</div>
+      <div class="sb-lines">${(() => { const keys = blockKeys(bl.list); return bl.list.map((b, k) => blockHtml(b, k, bl.list, keys)).join(""); })()}</div>
       <div class="sb-pub" id="sb-pub"></div>`;
     drawChecks();
   }
@@ -292,6 +356,18 @@
     st.confirm = false; st.msg = null;
     save(); later();
   });
+  // Starting to edit a line holds it.
+  box.addEventListener("focusin", async e => {
+    const el = e.target;
+    if (st.claimsOff || !el.dataset || el.dataset.r == null && el.dataset.t == null) return;
+    const i = +(el.dataset.r != null ? el.dataset.r : el.dataset.t), bl = blocks(), k = bl.list.findIndex(x => x.title === i || x.legs.includes(i));
+    if (k < 0) return;
+    const kk = blockKeys(bl.list)[k];
+    if (!kk || (st.claims[kk.key] && C.user && st.claims[kk.key].user_id === C.user.id)) return;
+    const busy = holder(kk.key) ? [kk] : await claim([kk]);
+    if (busy.length) { el.blur(); st.msg = { kind: "bad", text: `${holdText(holder(kk.key))}, so it can't be changed now.` }; render(); }
+    else { const row = box.querySelector(`[data-block="${k}"]`); if (row && !row.querySelector(".sb-hold")) { const p = document.createElement("p"); p.className = "sb-hold mine"; p.textContent = "✎ You're editing this line. Others can't change it until you publish."; const lh = row.querySelector(".sb-lh"); if (lh) lh.after(p); } }
+  });
   box.addEventListener("toggle", e => { if (e.target.dataset && e.target.dataset.sb === "warn") st.warnOpen = e.target.open; }, true);
   box.addEventListener("change", async e => {
     const el = e.target;
@@ -317,6 +393,20 @@
     const blk = b.dataset.k != null ? bl.list[+b.dataset.k] : null;
     const lastOf = x => Math.max(x.title != null ? x.title : -1, ...x.legs);
     if (act === "close") return close();
+    if (act === "take") {
+      if (!b.dataset.sure) { b.dataset.sure = "1"; b.textContent = "Sure? They may lose their changes to it"; return; }
+      await claim([{ key: b.dataset.key, name: b.dataset.name }], true);
+      st.msg = { kind: "ok", text: `You're editing "${b.dataset.name}" now.` };
+      return render();
+    }
+    // Changing a line holds it; a line someone else holds can't be changed.
+    const rowBlock = i => bl.list.findIndex(x => x.title === i || x.legs.includes(i));
+    const touched = ["row-del", "row-ins"].includes(act) ? rowBlock(+b.dataset.i) : ["leg-add", "line-del", "line-join"].includes(act) ? +b.dataset.k : -1;
+    if (touched >= 0) {
+      const keys = blockKeys(bl.list), items = [keys[touched]].concat(act === "line-join" ? [keys[+b.dataset.t]] : []).filter(Boolean);
+      const busy = items.filter(x => holder(x.key)).concat(await claim(items.filter(x => !holder(x.key))));
+      if (busy.length) { st.msg = { kind: "bad", text: `${holdText(holder(busy[0].key))}, so it can't be changed now.` }; return render(); }
+    }
     if (act === "row-del") { st.rows.splice(+b.dataset.i, 1); }
     if (act === "row-ins") { const row = blankRow(); row[11] = 1; st.rows.splice(+b.dataset.i + 1, 0, row); }
     if (act === "leg-add" && blk) {
@@ -423,6 +513,11 @@
     if (c.errors.length) return drawChecks();
     if (st.base !== S.version) return catchUp();
     if (c.warnings.length && !st.confirm) { st.confirm = true; return drawChecks(); }
+    // Every line you changed must be yours: hold them now, and stop if someone else is on one.
+    if (st.orig && !st.claimsOff) {
+      const mineChanged = changedKeys(st.orig.rows, st.rows), busy = await claim(mineChanged);
+      if (busy.length) { st.msg = { kind: "bad", text: `Not published: ${lineList(busy.map(x => x.name))} ${busy.length === 1 ? "is" : "are"} being edited by ${holder(busy[0].key).user_name || "someone else"}. Undo your changes to ${busy.length === 1 ? "it" : "them"}, wait until they publish, or press Take over on the line.` }; return render(); }
+    }
     st.busy = true; st.msg = null; drawChecks();
     try {
       const before = current();
@@ -435,6 +530,7 @@
       try { localStorage.setItem(SIGNAL, JSON.stringify({ at: Date.now(), name: S.versionName ? S.versionName() : String(v) })); } catch (e) { /* the map tab just won't hear */ }
       if (S.reloadLayers) await S.reloadLayers();
       dropDraft(); st.summary = ""; st.confirm = false; st.undo = []; st.edits = [];
+      await release();   // published: the lines are free for the others again
       const w = fromWebsite(); st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.orig = copyBook(w);
       st.msg = { kind: "ok", text: `Published as version ${S.versionName ? S.versionName() : v}.` };
       check();
@@ -555,7 +651,7 @@
         ? { kind: "bad", text: `This is unpublished work from ${new Date(d.at).toLocaleString()}, started before the map's latest version was published. When you publish, only the lines you changed go on top of the latest version; everyone else's lines stay.` }
         : { kind: "ok", text: `Picked up your unpublished work from ${new Date(d.at).toLocaleString()}.` };
     }
-    else { st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.msg = null; st.edits = []; st.orig = copyBook(w); dropDraft(); }
+    else { st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.msg = null; st.edits = []; st.orig = copyBook(w); dropDraft(); if (fresh) release().then(render); }
     st.confirm = false; st.undo = [];
     check(); render();
   }
@@ -565,6 +661,10 @@
     host.classList.add("sb-open"); btn.classList.add("on"); btn.setAttribute("aria-pressed", "true");
     applyMapSize();
     start(false);
+    // Who's editing what: now, and every 30 seconds (redrawn only when it changed and you're not typing in the book).
+    loadClaims().then(ch => { if (ch) render(); });
+    clearInterval(st.poll);
+    st.poll = setInterval(async () => { if (st.open && await loadClaims() && !box.contains(document.activeElement)) render(); }, 30000);
     if (!PAGE) box.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function close() {
@@ -659,6 +759,14 @@
       if (!b) return "Fix the problems in the Survey book first, then use the map tools.";
       const r = E.apply(b.data, ops);
       if (r.error) return r.error;
+      // A line someone else is editing can't be changed with the map tools either.
+      if (!st.claimsOff) {
+        const after = SS.fromSurvey(r.data, levelsFor(r.data, b.runLevel)).rows.map(x => x.slice(0, 11).map(v => v == null ? "" : v));
+        const before = SS.fromSurvey(b.data, b.runLevel).rows.map(x => x.slice(0, 11).map(v => v == null ? "" : v));
+        const touched = changedKeys(before, after), busy = touched.filter(x => holder(x.key));
+        if (busy.length) return `${holdText(holder(busy[0].key)).replace("this line", `"${busy[0].name}"`)}, so it can't be changed now.`;
+        claim(touched).then(() => render());
+      }
       if (editId && !st.edits.includes(editId)) st.edits = st.edits.concat(editId);
       return useData(r.data, levelsFor(r.data, b.runLevel), what || "map change", `In the book: ${what || "your change"}. Check it, then publish.`);
     },
