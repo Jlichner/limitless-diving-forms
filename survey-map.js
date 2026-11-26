@@ -326,6 +326,13 @@
     if (!canvases[pane]) canvases[pane] = new LayeredCanvas({ pane, padding: 0.5, tolerance: 7 });
     return canvases[pane];
   }
+  // Landmark symbols get their own pane above every layer's lines and dots (Jamie 2026-11-26: a wreck symbol was
+  // hidden under a plain dot from a rated layer drawn over it). Shown and hidden with their layer, in applyViews.
+  function symPane(pane) {
+    const name = pane + "-sym";
+    if (!S.map.getPane(name)) S.map.createPane(name).style.zIndex = 540 + (pane === "sm-p-base" ? 0 : 1 + Math.max(0, S.layers.findIndex(l => "sm-p-" + l.id === pane)));
+    return name;
+  }
   function paneFor(layerId) {
     if (!layerId) return "sm-p-base";
     const name = "sm-p-" + layerId;
@@ -367,11 +374,11 @@
     if (!S.map) return;
     const v = id => S.view[id] || { visible: true, opacity: 1 };
     const base = S.map.getPane("sm-p-base");
-    if (base) { base.style.opacity = v("survey").opacity; base.style.display = v("survey").visible ? "" : "none"; }
+    const both = (name, o, vis) => [S.map.getPane(name), S.map.getPane(name + "-sym")].forEach(p => { if (p) { p.style.opacity = o; p.style.display = vis ? "" : "none"; } });
+    both("sm-p-base", v("survey").opacity, v("survey").visible);
     if (sat) { sat.setOpacity(v("satellite").visible ? v("satellite").opacity : 0); }
     for (const l of S.layers) {
-      const pane = S.map.getPane("sm-p-" + l.id);
-      if (pane) { pane.style.opacity = v(l.id).opacity; pane.style.display = v(l.id).visible ? "" : "none"; }
+      both("sm-p-" + l.id, v(l.id).opacity, v(l.id).visible);
       if (!images[l.id] && v(l.id).visible) addImage(l);
       if (images[l.id]) images[l.id].setOpacity(v(l.id).visible ? v(l.id).opacity : 0);
     }
@@ -562,7 +569,7 @@ ${marks}
         m = L.marker(ll(l.x, l.y), { pane, icon: L.divIcon({ className: "sm-mooring", iconSize: [8, 8] }), title: S.name(l.landmark), alt: S.name(l.landmark) });
         layers.moorings.addLayer(clickable(m, f, () => landmarkPopup(f)));
       } else if (l.icon && ICONS[l.icon]) {
-        m = L.marker(ll(l.x, l.y), { pane, title: S.name(l.landmark), alt: S.name(l.landmark), riseOnHover: true,
+        m = L.marker(ll(l.x, l.y), { pane: symPane(pane), title: S.name(l.landmark), alt: S.name(l.landmark), riseOnHover: true,
           icon: L.divIcon({ className: "sm-lm" + (l.transparent ? "" : " bg") + (fresh ? " new" : ""), iconSize: [24 * iconScale, 24 * iconScale], html: iconHtml(l.icon) }) });
         layers.icons.addLayer(clickable(m, f, () => landmarkPopup(f)));
       } else {
