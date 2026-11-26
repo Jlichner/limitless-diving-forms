@@ -18,6 +18,8 @@
   const esc = S.esc, site = S.site;
   const box = document.getElementById("sm-layers"), setupBox = document.getElementById("sm-setup");
   const BOOK_PAGE = new URLSearchParams(location.search).has("book");
+  // On the Survey book page Map setup folds away, and stays as it was left (kept in this browser).
+  const keepOpen = () => { if (BOOK_PAGE) try { localStorage.setItem("sb-setup-open", st.setupOpen ? "1" : "0"); } catch (e) { /* ignore */ } };
   const VIEW = "ld-sitemap-view2-" + site;
   const cloud = () => !!(C && C.available);
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
@@ -29,6 +31,7 @@
   const EMPTY = () => ({ runs: {}, plan: [], landmarks: {}, runNames: {} });
   const st = { layers: [], loadErr: null, photos: [], urls: {}, setupOpen: false, msg: null, busy: false,
     people: null, access: {}, align: null, rate: null, open: {} };
+  if (BOOK_PAGE) try { st.setupOpen = localStorage.getItem("sb-setup-open") === "1"; } catch (e) { /* private window */ }
 
   // ----- loading -----
   S.reloadLayers = () => loadLayers();
@@ -316,21 +319,21 @@
   function drawSetup() {
     if (!isAdmin()) { setupBox.innerHTML = ""; return; }
     // Map setup is on the Survey book page, with everything else that changes the map (Jamie 2026-11-26).
-    if (!BOOK_PAGE) {
-      setupBox.innerHTML = `<section class="panel sm-setup"><div class="se-head"><h2 class="sec">Map setup</h2>
-        <a class="btn" href="${esc(location.pathname)}?book" target="_blank" rel="noopener">Open the Survey book</a></div>
-        <p class="hint">Placing the map on the earth, version numbers, picture layers and photos to approve are in the Survey book, with the survey.</p></section>`;
-      return;
-    }
+    if (!BOOK_PAGE) { setupBox.innerHTML = ""; return; }
     const gr = S.data.georef || {}, g = S.geoRef();
     const pending = st.photos.filter(p => !p.approved);
+    if (!st.setupOpen && BOOK_PAGE) {
+      setupBox.innerHTML = `<section class="panel sm-setup"><div class="se-head"><h2 class="sec">Map setup</h2>
+        <button type="button" class="btn" data-su="open">Show</button></div>${pending.length ? `<p class="hint"><b>${pending.length} new photo${pending.length === 1 ? "" : "s"}</b> to approve.</p>` : ""}</section>`;
+      return;
+    }
     if (!st.setupOpen) {
       setupBox.innerHTML = `<section class="panel sm-setup"><div class="se-head"><h2 class="sec">Map setup</h2>
         <button type="button" class="btn" data-su="open">Open map setup</button></div>
         <p class="hint">Admins and Dive site admins: place the map on the earth, add picture layers, rate lines, choose which divers see which ratings${pending.length ? `, and approve <b>${pending.length} new photo${pending.length === 1 ? "" : "s"}</b>` : ""}.</p></section>`;
       return;
     }
-    setupBox.innerHTML = `<section class="panel sm-setup"><div class="se-head"><h2 class="sec">Map setup</h2><button type="button" class="btn" data-su="close">Close</button></div>
+    setupBox.innerHTML = `<section class="panel sm-setup"><div class="se-head"><h2 class="sec">Map setup</h2><button type="button" class="btn" data-su="close">${BOOK_PAGE ? "Hide" : "Close"}</button></div>
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
       ${st.loadErr === "setup" ? `<p class="se-err">Run the latest <code>supabase/schema.sql</code> in Supabase first: layers, access and photos need its new tables.</p>` : ""}
 
@@ -745,8 +748,8 @@
     if (!b) return;
     const act = b.dataset.su, id = b.dataset.id, layer = id && st.layers.find(l => l.id === id);
     const run = async fn => { st.busy = true; renderSetup(); try { await fn(); } catch (err) { say(C.explain ? C.explain(err) : err.message, "bad"); } st.busy = false; renderSetup(); };
-    if (act === "open") { st.setupOpen = true; say(null); renderSetup(); return; }
-    if (act === "close") { stopAlign(); stopRate(); stopMove(); st.setupOpen = false; return renderSetup(); }
+    if (act === "open") { st.setupOpen = true; keepOpen(); say(null); renderSetup(); return; }
+    if (act === "close") { stopAlign(); stopRate(); stopMove(); st.setupOpen = false; keepOpen(); return renderSetup(); }
     if (act === "move") { say(null); startMove(); return renderSetup(); }
     if (act === "move-cancel") { stopMove(); say(null); return renderSetup(); }
     if (act === "turn" && st.move) { st.move.declination = ((st.move.declination + Number(b.dataset.d) + 540) % 360) - 180; movePreview(); return renderSetup(); }
