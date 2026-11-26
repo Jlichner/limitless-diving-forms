@@ -344,6 +344,10 @@ div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-lef
 .sb-open.sb-map-side > .sm-work { grid-column: 1; grid-row: 2 / span 8; position: sticky; top: 8px; }
 .sb-open.sb-map-side > #sm-setup { grid-column: 2; grid-row: 2; }
 .sb-open.sb-map-side > #sm-setup .sm-setup { margin: 0 0 12px; }
+/* Map setup looks like Map tools beside it (Jamie 2026-11-26: "can these be the same size?") */
+.sb-page #sm-setup .sm-setup { padding: 8px 12px; border-radius: 10px; gap: 8px; }
+.sb-page #sm-setup .sm-setup > .se-head { padding: 4px 0; }
+.sb-page #sm-setup .sm-setup h2.sec { font-size: 22px; margin: 0; }
 .sb-open.sb-map-side > .sm-work.editing { grid-template-columns: minmax(0, 1fr); }
 .sb-open.sb-map-side > #sm-edit { grid-column: 2; grid-row: 3; max-height: 46vh; border: 1px solid var(--line, #d7e3e6); border-radius: 10px; padding: 8px 12px; background: var(--card, #fff); margin-bottom: 12px; }
 .sb-open.sb-map-side > #sm-book { grid-column: 2; grid-row: 4 / span 5; margin-top: 0; max-height: calc(100vh - 24px); overflow: auto; overscroll-behavior: contain; padding-bottom: 0; }
