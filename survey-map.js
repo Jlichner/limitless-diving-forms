@@ -635,7 +635,7 @@ ${marks}
     warn.hidden = !parts.length; warn.innerHTML = parts.join("<br>");
   };
   function focusChanges() {
-    if (S.changed && S.changed.length) S.map.fitBounds(L.latLngBounds(S.changed), { padding: [60, 60], maxZoom: 1.5 });
+    if (S.changed && S.changed.length) S.map.fitBounds(L.latLngBounds(S.changed), { padding: [60, 60], maxZoom: S.geoRef() ? 20 : 1.5 });   // placed on the earth: real zoom levels
   }
   function reset() { select(null); return show(S.data); }
   function setPicker(fn) { picker = fn || null; S.map.closePopup(); main.querySelector("#sm-map").classList.toggle("picking", !!picker); }

@@ -18,6 +18,10 @@
     msg: null, busy: false, summary: "", pending: [], mine: [], history: null, declining: null };
 
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
+  // Survey book page: the map's history is its own section at the bottom of the page, and Map tools can be folded
+  // away (Jamie 2026-11-26). Folded or not is kept in this browser.
+  let histBox = null, folded = false;
+  try { folded = localStorage.getItem("sb-tools-folded") === "1"; } catch (e) { /* private window */ }
   // On the Survey book page the tools change the book, which publishes everything together (Jamie 2026-11-26: all
   // survey changes in the Survey book). Admins don't get Edit map on the map page; the survey team still suggests
   // changes there, and Admins review them in the book.
@@ -611,7 +615,12 @@
     const descs = E.describeAll(base().data, st.draft), cur = current();
     const body = st.review ? reviewCard() : st.mode === "add" ? addForm() : st.mode === "point" ? pointForm() : st.mode === "move" ? moveForm() : st.mode === "confirm" ? confirmCard() : selCard();
     const broken = BOOK() && base().broken;
-    panel.innerHTML = `<div class="se-head"><h2>${BOOK() ? "Map tools" : "Edit the map"}</h2>${BOOK() ? "" : `<button type="button" class="btn" data-act="close">Done</button>`}</div>
+    if (BOOK()) drawHistory();
+    if (BOOK() && folded) {
+      panel.innerHTML = `<div class="se-head"><h2>Map tools</h2><button type="button" class="btn" data-act="unfold">Show</button></div>`;
+      return preview();
+    }
+    panel.innerHTML = `<div class="se-head"><h2>${BOOK() ? "Map tools" : "Edit the map"}</h2>${BOOK() ? `<button type="button" class="btn" data-act="fold">Hide</button>` : `<button type="button" class="btn" data-act="close">Done</button>`}</div>
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
       ${broken && !st.review ? `<p class="se-msg bad">Fix the problems marked in the Survey book first. The map tools work on the book.</p>` : body}
       ${st.review || BOOK() ? "" : `<section class="se-sec"><h3>Your changes${st.groups.length ? ` (${st.groups.length})` : ""}</h3>
@@ -625,10 +634,10 @@
       ${isAdmin() && !st.review ? `<section class="se-sec"><h3>Suggestions to review${st.pending.length ? ` (${st.pending.length})` : ""}</h3>
         ${st.pending.length ? `<ul class="se-list plain">${st.pending.map(x => `<li><b>${esc(x.author_name || "A member")}</b> · ${esc(when(x.created_at))}<br>${esc(x.summary)}
           <br><button type="button" class="btn" data-act="review" data-id="${esc(x.id)}">Preview and review</button></li>`).join("")}</ul>` : `<p class="hint">None waiting.</p>`}</section>
-        <section class="se-sec"><h3>History</h3>${st.history && st.history.length ? `<ul class="se-list plain">${st.history.map(h => `<li><b>${h.label ? `Version ${esc(h.label)}` : `Old version ${h.version}`}</b>${h.version === S.version ? " (on the map now)" : ""} · ${esc(when(h.published_at))}${h.published_by_name ? " · " + esc(h.published_by_name) : ""}<br>${esc(h.summary)}
+        ${BOOK() ? "" : `<section class="se-sec"><h3>History</h3>${st.history && st.history.length ? `<ul class="se-list plain">${st.history.map(h => `<li><b>${h.label ? `Version ${esc(h.label)}` : `Old version ${h.version}`}</b>${h.version === S.version ? " (on the map now)" : ""} · ${esc(when(h.published_at))}${h.published_by_name ? " · " + esc(h.published_by_name) : ""}<br>${esc(h.summary)}
           ${h.version !== S.version ? `<br><button type="button" class="btn" data-act="version" data-v="${h.version}">Preview</button>` : ""}</li>`).join("")}
           ${hasFile ? `<li><b>Original survey map</b> (${esc(fileData.version || "")})<br><button type="button" class="btn" data-act="version" data-v="0">Preview</button></li>` : ""}</ul>`
-          : `<p class="hint">Not published yet.${hasFile ? ` The map shows the original survey (${esc(fileData.version || "")}).` : ""}</p>`}</section>` : ""}
+          : `<p class="hint">Not published yet.${hasFile ? ` The map shows the original survey (${esc(fileData.version || "")}).` : ""}</p>`}</section>`}` : ""}
       ${!isAdmin() && st.mine.length && !st.review ? `<section class="se-sec"><h3>Your suggestions</h3><ul class="se-list plain">${st.mine.map(x => `<li>${esc(when(x.created_at))} · <b class="se-status ${esc(x.status)}">${esc({ pending: "Waiting for an Admin", approved: "On the map", declined: "Declined", withdrawn: "Taken back" }[x.status] || x.status)}</b>
           <br>${esc(x.summary)}${x.review_note ? `<br><i>Admin's note: ${esc(x.review_note)}</i>` : ""}
           ${x.status === "pending" ? `<br><button type="button" class="btn" data-act="withdraw" data-id="${esc(x.id)}">Take back</button>` : ""}</li>`).join("")}</ul></section>` : ""}`;
@@ -638,6 +647,7 @@
   // ----- events -----
   function pick(f, latlng) {
     if (st.review) return;
+    if (BOOK() && folded) { folded = false; try { localStorage.setItem("sb-tools-folded", "0"); } catch (e) { /* ignore */ } }
     if (st.mode === "point") { if (latlng) placeAt(latlng); return; }
     if (st.mode === "move") { if (latlng) moveAt(latlng); return; }
     if (st.mode === "add") {
@@ -664,6 +674,10 @@
   });
   async function onAct(act, b) {
     const f = st.sel;
+    if (act === "fold" || act === "unfold") {
+      folded = act === "fold"; try { localStorage.setItem("sb-tools-folded", folded ? "1" : "0"); } catch (e) { /* ignore */ }
+      return render();
+    }
     if (act === "unselect") { st.sel = null; return render(); }
     if (act === "add") { startAdd(f); return render(); }
     if (act === "cut" || act === "mark" || act === "run" || act === "drop") return startRemove(f, act);
@@ -693,7 +707,12 @@
     if (act === "clear") { st.draft = []; st.groups = []; saveDraft(); say(null); st.sel = null; return render(); }
     if (act === "send") return send();
     if (act === "review") { const ed = st.pending.find(x => x.id === b.dataset.id); if (ed) reviewEdit(ed); return render(); }
-    if (act === "version") { await reviewVersion(Number(b.dataset.v)); return render(); }
+    if (act === "version") {
+      await reviewVersion(Number(b.dataset.v));
+      // From the history at the bottom of the book page: show the version on the map and its card in Map tools.
+      if (BOOK()) { folded = false; const top = document.getElementById("sm-work"); if (top) top.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      return render();
+    }
     if (act === "review-close") { st.review = null; st.declining = null; return render(); }
     if (act === "approve") return approve();
     if (act === "decline") { st.declining = st.review.edit.id; return render(); }
@@ -747,6 +766,26 @@
 
   btn.addEventListener("click", () => (st.open ? close() : open()));
   S.onPublished(() => { if (BOOK()) { st.history = null; loadLists().then(render); } else if (st.open) render(); else S.show(S.data); });
+  // The history, at the bottom of the Survey book page, with its own scroll bar.
+  function drawHistory() {
+    if (!histBox) {
+      const host = document.querySelector("#surveymap .dm-panel");
+      if (!host) return;
+      histBox = document.createElement("div"); histBox.className = "panel sb-history"; histBox.id = "sb-history";
+      host.parentNode.insertBefore(histBox, host.nextSibling);
+      histBox.addEventListener("click", async e => {
+        const b = e.target.closest("[data-act]"); if (!b) return;
+        try { await onAct(b.dataset.act, b); } catch (err) { console.error(err); say("Something went wrong: " + (err && err.message || err), "bad"); render(); }
+      });
+    }
+    const h = st.history;
+    histBox.innerHTML = `<h2 class="sec">History</h2>
+      <p class="hint">Every published version. To roll back, press <b>Preview</b> on a version (it shows on the map and in Map tools), then <b>Put this version in the book</b> and publish the book.</p>
+      ${h && h.length ? `<ul class="se-list plain sb-hist-list">${h.map(x => `<li><b>${x.label ? `Version ${esc(x.label)}` : `Old version ${x.version}`}</b>${x.version === S.version ? " (on the map now)" : ""} · ${esc(when(x.published_at))}${x.published_by_name ? " · " + esc(x.published_by_name) : ""}<br>${esc(x.summary)}
+          ${x.version !== S.version ? `<br><button type="button" class="btn small" data-act="version" data-v="${x.version}">Preview</button>` : ""}</li>`).join("")}
+        ${hasFile ? `<li><b>Original survey map</b> (${esc(fileData.version || "")})<br><button type="button" class="btn small" data-act="version" data-v="0">Preview</button></li>` : ""}</ul>`
+        : `<p class="hint">${h ? "Not published yet." : "Loading…"}</p>`}`;
+  }
   // The Survey book page opens the tools beside the book (survey-book.js).
   S.openTools = () => { if (BOOK() && !st.open) open(); };
   S.toolsRender = () => { if (BOOK() && st.open) render(); };
