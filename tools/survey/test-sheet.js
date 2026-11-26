@@ -101,4 +101,13 @@ if (full && full.runs && Object.keys(full.runs).length) {
   const A = G.compute(full), B = G.compute(f.data);
   ok("Bonnie Castle round trip", !f.errors.length && Object.keys(A.at).every(k => B.at[k] && Math.hypot(A.at[k][0] - B.at[k][0], A.at[k][1] - B.at[k][1]) < 1e-6) && Math.abs(A.totalSurveyedFt - B.totalSurveyedFt) < 1e-6, f.errors.slice(0, 3));
 } else console.log("skip Bonnie Castle round trip (no local data)");
+{ // "Label on map": show name = yes in Drawing on a title row, for a plain run and the second run of a loop.
+  const lr = rows.map(r => r.slice()); lr[9][9] = "show name = yes"; lr[20][9] = "show name = yes";
+  const L1 = SS.toSurvey(lr, [], { id: "t" });
+  ok("run label read", !L1.errors.length && L1.data.plan[1].label === true && L1.data.plan[3].label2 === true && !L1.data.plan[0].label, L1.errors.concat([L1.data.plan]));
+  const g = G.compute(L1.data);
+  ok("run labels listed", JSON.stringify(g.runLabels) === JSON.stringify(["Saddle", "LoopB"]), g.runLabels);
+  const lb = SS.fromSurvey(L1.data), L2 = SS.toSurvey(lb.rows, lb.landmarkRows, { id: "t" });
+  ok("run label round trip", JSON.stringify(L2.data.plan) === JSON.stringify(L1.data.plan), L2.data.plan);
+}
 console.log(fails ? fails + " failed" : "all passed"); process.exit(fails ? 1 : 0);

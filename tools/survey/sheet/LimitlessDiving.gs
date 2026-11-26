@@ -34,7 +34,7 @@
     // Every site is measured from one starting point at (0, 0): Bonnie Castle's is the Bar.
     const origin = data.origin || "BAR";
     const at = { [key(origin)]: [0, 0] };
-    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], gaps: [], totalSurveyedFt: 0 };
+    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], gaps: [], jumps: [], runLabels: [], totalSurveyedFt: 0 };
     let box = [[0, 0], [0, 0]];
 
     // Where a run ends, relative to its start, ignoring stretch and turn: [distance, angle].
@@ -71,7 +71,7 @@
             out.segments.push(Object.assign({ kind: lineType, x0: x, y0: y, x1, y1, lengthFt: L, heading: Number(e.angle) }, ref,
               e.alt_text ? { text: e.alt_text, flipText: !!e.flip_text_side } : null));
             if (lineType !== "platform") out.totalSurveyedFt += L;
-          }
+          } else out.jumps.push(Object.assign({ x0: x, y0: y, x1, y1, lengthFt: L }, ref));   // not drawn, but the Survey book can show it
           x = x1; y = y1;
         } else if (e.type === "Arrow") {
           const a = radians(Number(e.angle) + rotation - opt.declination), d = e.distance == null ? 10 : Number(e.distance);
@@ -105,6 +105,8 @@
     const MAX_JOIN = 0.05;
 
     for (const step of data.plan) {
+      if (step.label) out.runLabels.push(step.run);
+      if (step.label2 && step.run2) out.runLabels.push(step.run2);
       if (step.mode === "draw") {
         draw(step.start, step.run, 1, 0);
       } else if (step.mode === "loop") {
@@ -652,7 +654,7 @@
      H Kind: Surveyed (solid line; blank means the same), Unsurveyed (dashed line), Platform (a suspended wooden
        platform: wide brown line, not counted as surveyed line) or Jump (not drawn). Older maps can
        also have Boat traffic and Arrow rows, which are still read but aren't offered in the dropdown.
-     I Note    J Drawing (rarely used: icon, label text and side, always draw..., as "name = value; name = value")
+     I Note    J Drawing (on a title row, "show name = yes" shows the run's name along it on the map; rarely used: icon, label text and side, always draw..., as "name = value; name = value")
      K Level: Green circle, Blue square, Black diamond or Double black diamond (who can see the line). On a title row
        it's the whole line's level; on a row, the level from that leg on. Blank: same as the row above (green to start).
        Blue, black and double black lines go in the map's rated layers, seen only by divers with that level or higher.
@@ -768,6 +770,8 @@
           const ll = geometry() && geometry().parseLatLon(g[1]);
           if (ll) cur.gps = { lat: ll[0], lon: ll[1] }; else errors.push(`Row ${rowNo}: "${str(r[1])}" isn't a GPS position I can read (try GPS N44.34465 W75.91859).`);
         } else cur.loopWith = str(r[1]).replace(/^loop with /i, "").trim();
+        // "show name = yes" in Drawing on a title row: the run's name is shown along it on the map.
+        if (str(r[9])) { const dr = parseDrawing(r[9], rowNo, errors); if (dr.show_label) cur.label = true; }
         return;
       }
       cur.legs.push({ row: r, rowNo });
@@ -863,14 +867,14 @@
         const other = data.plan.find(p => data.runNames[p.run] && data.runNames[p.run].toLowerCase() === b.loopWith.toLowerCase());
         if (!other) errors.push(`Row ${b.firstRow}: "${name}" is a loop with "${b.loopWith}", which isn't a line above it.`);
         else if (other.start !== start) errors.push(`Row ${b.firstRow}: "${name}" and "${b.loopWith}" must start From the same station to make a loop.`);
-        else { other.mode = "loop"; other.run2 = id; delete other.end; return; }
+        else { other.mode = "loop"; other.run2 = id; delete other.end; if (b.label) other.label2 = true; return; }
       }
       // A line that ends at a station already on the map before it started is stretched to meet it.
       const last = entries[entries.length - 1];
       if (last && last.type === "SaveLandmark" && last.landmark !== start && knownAtStart.has(last.landmark)) {
         if (Object.keys(last).length === 2) entries.pop();
-        data.plan.push({ mode: "fit", start, run: id, end: last.landmark });
-      } else data.plan.push({ mode: "draw", start, run: id });
+        data.plan.push(Object.assign({ mode: "fit", start, run: id, end: last.landmark }, b.label ? { label: true } : null));
+      } else data.plan.push(Object.assign({ mode: "draw", start, run: id }, b.label ? { label: true } : null));
     });
     // Stations listed in the Landmarks tab but not on any line (kept for the website's other layers).
     (landmarkRows || []).forEach(r => { const c = str(r[0]), n = str(r[1]); if (c && n && !/^code$/i.test(c) && !data.landmarks[c] && !known[n.toLowerCase()]) data.landmarks[c] = n; });
@@ -935,7 +939,7 @@
     for (const p of data.plan || []) {
       const e = ((data.runs || {})[p.run]) || [];
       if (e.length === 2 && e[0].gps_lat != null && e[1].landmark) { gpsAt[e[1].landmark] = e[0]; continue; }
-      steps.push({ run: p.run, start: p.start, end: p.mode === "fit" ? p.end : null }); if (p.run2) steps.push({ run: p.run2, start: p.start, loopWith: p.run });
+      steps.push({ run: p.run, start: p.start, end: p.mode === "fit" ? p.end : null, label: !!p.label }); if (p.run2) steps.push({ run: p.run2, start: p.start, loopWith: p.run, label: !!p.label2 });
     }
     for (const s of steps) {
       const entries = (data.runs || {})[s.run] || [];
@@ -943,6 +947,7 @@
       const t = blank(); t[0] = (data.runNames || {})[s.run] || s.run; if (s.loopWith) t[1] = "loop with " + ((data.runNames || {})[s.loopWith] || s.loopWith);
       const g = gpsAt[s.start]; if (g && !s.loopWith) { t[1] = `GPS ${g.gps_lat}, ${g.gps_lon}`; delete gpsAt[s.start]; }
       const lv = runLevel && runLevel[s.run]; if (lv && lv !== "green") t[10] = LEVEL_NAMES[lv];
+      if (s.label) t[9] = "show name = yes";
       rows.push(t);
       let from = name(s.start), pending = null;
       const flush = () => {
