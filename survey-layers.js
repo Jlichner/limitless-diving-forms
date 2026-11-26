@@ -356,11 +356,7 @@
         <button type="button" class="btn primary" data-su="add-image"${st.busy ? " disabled" : ""}>Add picture layer</button>
 </details>
 
-      <details class="sm-su"${st.open.rate ? " open" : ""} data-sec="rate"><summary>Rate lines and points (green circle to Secret Squirrel)</summary>${rateCard()}</details>
-
-      <p class="hint">Who sees which lines: each member's <b>Site maps access</b> is set in Records → Student accounts${C.can("admin") ? ` (<a href="index.html">open it</a>, then <b>Site maps access</b> under the list of registered students)` : ", by an Admin"}.</p>
-
-      ${st.layers.some(handPicked) ? `<details class="sm-su"${st.open.access ? " open" : ""} data-sec="access"><summary>Who can see restricted layers and Secret Squirrel lines</summary>${accessCard()}</details>` : ""}
+      <p class="hint">Rate lines (green circle to Secret Squirrel) in the <b>Survey book</b>'s Level column. Who sees which levels, and who's picked for Secret Squirrel lines, is set in Records → Student accounts${C.can("admin") ? ` (<a href="index.html">open it</a>, then <b>Site maps access</b> under the list of registered students)` : ", by an Admin"}.</p>
 
       <details class="sm-su"${st.open.photos || pending.length ? " open" : ""} data-sec="photos"><summary>Photos to approve (${pending.length})</summary>
         ${pending.length ? `<ul class="sm-su-list">${pending.map(p => `<li class="sm-su-photo">${st.urls[p.path] ? `<img src="${esc(st.urls[p.path])}" alt="">` : ""}
@@ -374,7 +370,7 @@
   function layerRow(l, i) {
     const al = st.align && st.align.id === l.id;
     if (l.rating) return `<li class="sm-su-layer"><b>${S.ratingSvg(l.rating)} ${esc(l.name)}</b>
-      <span class="hint">${Object.keys((l.survey && l.survey.runs) || {}).length} runs · ${l.rating === "squirrel" ? `only the divers you pick under "Who can see restricted layers", the survey team and Dive site admins see it` : "only divers you give this rating or higher can see it"}. Change its lines under "Rate lines".</span></li>`;
+      <span class="hint">${Object.keys((l.survey && l.survey.runs) || {}).length} runs · ${l.rating === "squirrel" ? `only the divers ticked for it in Student accounts, the survey team and Dive site admins see it` : "only divers you give this rating or higher can see it"}. Change its lines in the Survey book's Level column.</span></li>`;
     return `<li class="sm-su-layer"><div class="sm-form">
         <label>Name <input data-ly="${esc(l.id)}" data-k="name" value="${esc(l.name)}" maxlength="120"></label>
         <label>Note <input data-ly="${esc(l.id)}" data-k="note" value="${esc(l.note)}" maxlength="500"></label>
@@ -741,7 +737,7 @@
     if (!b) return;
     const act = b.dataset.su, id = b.dataset.id, layer = id && st.layers.find(l => l.id === id);
     const run = async fn => { st.busy = true; renderSetup(); try { await fn(); } catch (err) { say(C.explain ? C.explain(err) : err.message, "bad"); } st.busy = false; renderSetup(); };
-    if (act === "open") { st.setupOpen = true; say(null); renderSetup(); await loadAccess(); renderSetup(); return; }
+    if (act === "open") { st.setupOpen = true; say(null); renderSetup(); return; }
     if (act === "close") { stopAlign(); stopRate(); stopMove(); st.setupOpen = false; return renderSetup(); }
     if (act === "move") { say(null); startMove(); return renderSetup(); }
     if (act === "move-cancel") { stopMove(); say(null); return renderSetup(); }

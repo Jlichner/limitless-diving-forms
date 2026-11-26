@@ -457,6 +457,49 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     }
     return v.siteLevels || null;
   }
+  // Secret Squirrel (hand-picked) layers and who's been picked for them. Set here since 2026-11-26 (Jamie moved it
+  // out of the site map's Map setup): one tick box per hand-picked layer, per member.
+  function squirrel() {
+    if (!v.squirrel && !v.squirrelLoading) {
+      v.squirrelLoading = true;
+      const sb = C().client;
+      sb.from("site_map_layers").select("id, site_id, name, rating, restricted").eq("restricted", true).then(async ({ data, error }) => {
+        if (error) { v.squirrelLoading = false; v.squirrel = { error: C().explain(error), layers: [] }; return rerender(); }
+        const layers = (data || []).filter(l => !l.rating || l.rating === "squirrel");
+        const a = layers.length ? await sb.from("site_map_layer_access").select("layer_id, user_id").in("layer_id", layers.map(l => l.id)) : { data: [] };
+        const access = new Map();
+        (a.data || []).forEach(r => { if (!access.has(r.user_id)) access.set(r.user_id, new Set()); access.get(r.user_id).add(r.layer_id); });
+        v.squirrelLoading = false; v.squirrel = { layers, access, error: a.error ? C().explain(a.error) : null };
+        rerender();
+      });
+    }
+    return v.squirrel || null;
+  }
+  const siteTitle = id => String(id || "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  function squirrelLabel(l, list) {
+    const sites = new Set(list.map(x => x.site_id));
+    const base = l.rating === "squirrel" ? "Secret Squirrel" : l.name;
+    return sites.size > 1 || list.filter(x => x.site_id === l.site_id).length > 1 ? `${base} (${siteTitle(l.site_id)}${l.rating === "squirrel" ? "" : ""})` : base;
+  }
+  function squirrelBoxes(acc) {
+    const { esc } = L(), q = squirrel();
+    if (!q || q.error || !q.layers.length || (acc.role || "student") === "admin") return "";
+    const mine = q.access.get(acc.id) || new Set();
+    return q.layers.map(l => `<label class="sm-check sa-squirrel"><input type="checkbox" data-sa-squirrel="${esc(l.id)}" data-acc="${esc(acc.id)}"${mine.has(l.id) ? " checked" : ""}${v.squirrelBusy === acc.id + l.id ? " disabled" : ""}> ${esc(squirrelLabel(l, q.layers))}</label>`).join("");
+  }
+  async function setSquirrel(accId, layerId, on) {
+    const acc = (v.members || []).concat(v.accounts || []).find(a => a.id === accId) || {}, q = v.squirrel;
+    v.squirrelBusy = accId + layerId; rerender();
+    const t = C().client.from("site_map_layer_access");
+    const { error } = on ? await t.insert({ layer_id: layerId, user_id: accId }) : await t.delete().eq("layer_id", layerId).eq("user_id", accId);
+    v.squirrelBusy = null;
+    if (error && !(on && /duplicate|23505/.test(error.message + error.code))) { rerender(); L().toast("Not changed: " + C().explain(error)); return; }
+    if (!q.access.has(accId)) q.access.set(accId, new Set());
+    if (on) q.access.get(accId).add(layerId); else q.access.get(accId).delete(layerId);
+    rerender();
+    const l = q.layers.find(x => x.id === layerId) || {};
+    L().toast(`${acc.full_name || "They"} ${on ? "can now see" : "can no longer see"} the ${squirrelLabel(l, q.layers)} lines.`);
+  }
   function siteLevelSelect(acc, label) {
     const { esc } = L(), cur = v.siteLevels.get(acc.id) || "none";
     return `<select data-sa-sitelevel="${esc(acc.id)}" aria-label="${esc(label)}"${v.siteBusy === acc.id ? " disabled" : ""}>
@@ -475,7 +518,8 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     const cur = v.siteLevels.get(acc.id) || "none", info = SITE_LEVELS.find(l => l[0] === cur) || SITE_LEVELS[0];
     return `${h}<div class="row-actions"><label>Level ${siteLevelSelect(acc, "Site maps access for " + (acc.full_name || "this member"))}</label>
         <button class="btn small" data-sa="sitemaps">Everyone's site maps access</button></div>
-      <p class="hint">${esc(info[2])} Each level also sees everything below it. Changes save as soon as you pick.</p>`;
+      <p class="hint">${esc(info[2])} Each level also sees everything below it. Changes save as soon as you pick.</p>
+      ${squirrelBoxes(acc) ? `<div class="sa-squirrels">${squirrelBoxes(acc)}<p class="hint">Hand-picked lines: only the members ticked here (and the survey team and Dive site admins) see them.</p></div>` : ""}`;
   }
   // Everyone in the list (as searched and filtered) with their site maps access, to set in one place.
   function siteAccessPanel() {
@@ -484,10 +528,10 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
     if (v.siteLevels.error) return `${h}<p class="hint">${siteLevelsError()}</p>`;
     const list = dirMatches();
     return `${h}<p class="hint">Members see the lines for their level and every level below it: green circles for open water divers, blue squares for advanced,
-        black diamonds for tech, and double black diamonds for tech on scooters. The survey team sees everything and can suggest changes, which an admin approves.
+        black diamonds for tech, and double black diamonds for tech on scooters. Secret Squirrel lines are only for the members ticked for them. The survey team sees everything and can suggest changes, which an admin approves.
         Members with no access can't open the site maps. Changes save as soon as you pick. The search and level filter on the left narrow this list.</p>
       ${list.length ? `<ul class="sa-sitelist">${list.map(a => `<li><button class="linkbtn" data-sa="dpick" data-acc="${esc(a.id)}">${esc(a.full_name || a.email || "No name yet")}</button>
-        ${(a.role || "student") === "admin" ? `<span class="hint">Admin: always sees and runs everything</span>` : siteLevelSelect(a, "Site maps access for " + (a.full_name || "this member"))}</li>`).join("")}</ul>`
+        ${(a.role || "student") === "admin" ? `<span class="hint">Admin: always sees and runs everything</span>` : siteLevelSelect(a, "Site maps access for " + (a.full_name || "this member")) + squirrelBoxes(a)}</li>`).join("")}</ul>`
         : `<p class="hint">No one matches the search.</p>`}`;
   }
   function logbookBlock(acc) {
@@ -574,6 +618,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
   document.addEventListener("change", (e) => {
     const el = e.target; if (!el.dataset) return;
     if (el.dataset.saSitelevel) { setSiteLevel(el.dataset.saSitelevel, el.value); return; }
+    if (el.dataset.saSquirrel) { setSquirrel(el.dataset.acc, el.dataset.saSquirrel, el.checked); return; }
     if (!el.dataset.saRole) return;
     setRole(el.dataset.saRole, el.value);
   });

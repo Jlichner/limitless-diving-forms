@@ -208,3 +208,7 @@ body.reading-agreement #my-sites { display: none !important; }
 .sa-sitelist li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 8px 0; border-bottom: 1px solid var(--line, #dfe7ea); }
 .sa-sitelist .linkbtn { font-weight: 700; text-align: left; }
 .sa-sitelist select { max-width: 100%; }
+/* Secret Squirrel (hand-picked lines) tick boxes in Site maps access */
+.sa-squirrels { margin-top: 6px; }
+.sa-squirrel { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; font-size: .92rem; }
+.sa-sitelist .sa-squirrel { margin: 0; }
