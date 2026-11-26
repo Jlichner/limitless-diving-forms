@@ -84,6 +84,15 @@
         out.data = m.data; out.sp = sp;
         // Lines that would need stretching or turning more than 5% to join up are drawn as measured (Jamie 2026-11-25).
         const GG = window.SurveyGeometry;
+        // Lines drawn on top of each other (Jamie 2026-11-26).
+        if (GG && GG.overlaps) {
+          const geo = GG.compute(m.data), near = (x, y) => { let best = null, bd = Infinity; for (const [k, p] of Object.entries(geo.at)) { const d = Math.hypot(p[0] - x, p[1] - y); if (d < bd) { bd = d; best = k; } } return best && bd < 300 ? ` near ${m.data.landmarks[best] || best}` : ""; };
+          for (const o of GG.overlaps(geo)) {
+            const nm = r2 => m.data.runNames[r2] || r2, ft = Math.round(o.ft);
+            out.warnings.push(o.a === o.b ? `"${nm(o.a)}" runs over itself for ${ft} ft${near(o.x, o.y)}. Check for a leg entered twice, or a heading that should be its back course.`
+              : `"${nm(o.a)}" and "${nm(o.b)}" are drawn on top of each other for ${ft} ft${near(o.x, o.y)}. Check for legs entered twice, or a heading that should be its back course.`);
+          }
+        }
         if (GG) for (const g of GG.compute(m.data).gaps) {
           const nm = r2 => m.data.runNames[r2] || r2;
           out.warnings.push(`${g.other ? `"${nm(g.other)}" and "${nm(g.run)}" don't` : `"${nm(g.run)}" doesn't`} join up: ${Math.round(g.ft * 10) / 10} ft off, more than the 5% the map will stretch a line. Drawn as measured. Check the tape and headings.`);

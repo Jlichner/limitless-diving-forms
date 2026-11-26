@@ -258,7 +258,29 @@
     data.georef = g2;
     return data;
   }
-  const api = { compute, extras, radians, georef, stampGeoref, parseCoord, parseLatLon };
+  // Lines drawn on top of each other (Jamie 2026-11-26): pairs of lines with stretches within <tolFt> of each other
+  // and running the same way (within <tolDeg>), at least <minFt> long in all. Legs next to each other on one line
+  // don't count. Returns [{ a, b, ft, x, y }] (a, b: run ids; x, y: where the first overlap starts).
+  function overlaps(geo, minFt = 5, tolFt = 1.5, tolDeg = 4) {
+    const segs = geo.segments.filter(s => s.kind !== "removed" && s.kind !== "platform" && s.lengthFt > 1);
+    const sinTol = Math.sin(tolDeg * PI / 180), out = {};
+    for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+      const a = segs[i], b = segs[j];
+      if (a.run === b.run && Math.abs(a.index - b.index) <= 2) continue;
+      const ax = a.x1 - a.x0, ay = a.y1 - a.y0, La = Math.hypot(ax, ay), ux = ax / La, uy = ay / La;
+      const bx = b.x1 - b.x0, by = b.y1 - b.y0, Lb = Math.hypot(bx, by);
+      if (Math.abs(ux * by - uy * bx) / Lb > sinTol) continue;
+      const t0 = (b.x0 - a.x0) * ux + (b.y0 - a.y0) * uy, t1 = (b.x1 - a.x0) * ux + (b.y1 - a.y0) * uy;
+      const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(La, Math.max(t0, t1));
+      if (hi - lo < 1) continue;
+      const off = t => { const f = (t - t0) / (t1 - t0); return Math.abs((b.x0 + bx * f - a.x0) * uy - (b.y0 + by * f - a.y0) * ux); };
+      if (off(lo) > tolFt || off(hi) > tolFt) continue;
+      const k = a.run + "|" + b.run, o = out[k] || (out[k] = { a: a.run, b: b.run, ft: 0, x: a.x0 + ux * lo, y: a.y0 + uy * lo });
+      o.ft += hi - lo;
+    }
+    return Object.values(out).filter(o => o.ft >= minFt);
+  }
+  const api = { compute, extras, radians, georef, stampGeoref, parseCoord, parseLatLon, overlaps };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveyGeometry = api;
 })(typeof window !== "undefined" ? window : globalThis);
