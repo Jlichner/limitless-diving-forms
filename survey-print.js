@@ -385,7 +385,7 @@
               ${set.bottom ? `<button type="button" class="btn" data-pm="pick-clear">North up instead</button>` : ""}`}
         </fieldset>
         <fieldset class="pm-fs"><legend>Show</legend>
-          <label class="pm-f">Landmark names <select data-k="names">${[["marked", "Only points with a symbol or a shown name"], ["all", "All points"], ["none", "None"]]
+          <label class="pm-f">Landmark names <select data-k="names">${[["marked", "Symbols and marked names"], ["all", "All points"], ["none", "None"]]
             .map(([v, l]) => `<option value="${v}"${set.names === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
           ${[["depths", "Depths"], ["points", "Stakes and tie-offs"], ["moorings", "Mooring blocks"]].map(([k2, l]) => `<label class="sm-check"><input type="checkbox" data-k="${k2}"${set[k2] ? " checked" : ""}> ${l}</label>`).join("")}
         </fieldset>
