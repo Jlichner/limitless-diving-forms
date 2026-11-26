@@ -25,6 +25,10 @@ const bad = SS.toSurvey([["", "Log", 70], ["X"], ["Nowhere", "Rock", 70, 0, 180,
 ok("unknown start station is an error", bad.errors.some(e => /isn't a named station/.test(e)));
 const warn = SS.toSurvey([["", "Log", 70], ["Log", "Rock", 70, 10, 45, 10]], []);
 ok("backcourse warning", warn.warnings.length === 1);
+for (const kind of ["Surveyed", "Unsurveyed", "Platform"]) {
+  const pt = SS.toSurvey([["", "Log", 70], ["X"], ["Log", "Rock", 70, null, 45, 10, null, "Surveyed"], ["Rock", "Stake", 66, null, null, null, null, kind]], []);
+  ok("point-only row ok as " + kind, !pt.errors.length && Object.values(pt.data.runs)[0].filter(e => e.type === "Stake").length === 1, pt.errors);
+}
 const back = SS.fromSurvey(r.data), r2 = SS.toSurvey(back.rows, back.landmarkRows, { id: "t" });
 ok("round trip runs", JSON.stringify(r2.data.runs) === JSON.stringify(r.data.runs));
 ok("round trip plan", JSON.stringify(r2.data.plan) === JSON.stringify(r.data.plan));
