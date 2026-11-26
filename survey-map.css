@@ -299,7 +299,7 @@ div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-lef
 #sb-print .sl-hint { font-size: 8pt; margin: 6px 0 0; }
 
 /* The Survey book's own tab (site map page opened with ?book): just the map and the book. */
-.sb-page #sm-stats, .sb-page #sm-setup, .sb-page #sm-layers-panel, .sb-page #sm-issues-panel, .sb-page #sm-key, .sb-page #sm-list,
+.sb-page #sm-stats, .sb-page #sm-layers-panel, .sb-page #sm-issues-panel, .sb-page #sm-key, .sb-page #sm-list,
 .sb-page #surveymap > section.panel:not(.dm-panel), .sb-page #sm-credit,
 .sb-page #sm-kml, .sb-page #sm-print-btn, .sb-page #sm-edit-btn { display: none !important; }
 .sb-page .pub-hero { padding-bottom: 4px; }
@@ -341,9 +341,11 @@ div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-lef
    book on the right scrolls. */
 .sb-open.sb-map-side { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); column-gap: 16px; align-items: start; }
 .sb-open.sb-map-side > * { grid-column: 1 / -1; }
-.sb-open.sb-map-side > .sm-work { grid-column: 1; grid-row: 2 / span 6; position: sticky; top: 8px; }
+.sb-open.sb-map-side > .sm-work { grid-column: 1; grid-row: 2 / span 8; position: sticky; top: 8px; }
+.sb-open.sb-map-side > #sm-setup { grid-column: 2; grid-row: 2; }
+.sb-open.sb-map-side > #sm-setup .sm-setup { margin: 0 0 12px; }
 .sb-open.sb-map-side > .sm-work.editing { grid-template-columns: minmax(0, 1fr); }
-.sb-open.sb-map-side > #sm-edit { grid-column: 2; grid-row: 2; max-height: 46vh; border: 1px solid var(--line, #d7e3e6); border-radius: 10px; padding: 8px 12px; background: var(--card, #fff); margin-bottom: 12px; }
-.sb-open.sb-map-side > #sm-book { grid-column: 2; grid-row: 3 / span 5; margin-top: 0; }
+.sb-open.sb-map-side > #sm-edit { grid-column: 2; grid-row: 3; max-height: 46vh; border: 1px solid var(--line, #d7e3e6); border-radius: 10px; padding: 8px 12px; background: var(--card, #fff); margin-bottom: 12px; }
+.sb-open.sb-map-side > #sm-book { grid-column: 2; grid-row: 4 / span 5; margin-top: 0; }
 .sb-open.sb-map-side #sm-map { height: calc(100vh - 24px); min-height: 360px; }
 body.sb-wide .layout, body.sb-wide .pub { max-width: none; }

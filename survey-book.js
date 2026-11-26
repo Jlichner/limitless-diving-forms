@@ -47,6 +47,10 @@
     // The map tools go above the book when the map is beside it, so the map keeps its width.
     const tools = document.getElementById("sm-edit");
     if (PAGE && tools) { if (side && tools.parentNode !== host) host.insertBefore(tools, box); else if (!side && tools.parentNode !== work) work.appendChild(tools); }
+    // Map setup (placing the map, version numbers, picture layers, photos) sits with the book too (Jamie 2026-11-26).
+    const setup = document.getElementById("sm-setup");
+    if (PAGE && setup && setup.parentNode !== host) host.insertBefore(setup, side && tools && tools.parentNode === host ? tools : box);
+    if (PAGE && setup && tools && side && setup.nextSibling !== tools) host.insertBefore(setup, tools);
     setTimeout(() => S.map.invalidateSize(), 50);
   }
 
@@ -533,7 +537,16 @@
     try { S.reset(); } catch (e) { console.error(e); }
   }
   let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (st.open) applyMapSize(); }, 200); });
-  S.onPublished(() => { if (st.open) render(); });
+  // Map setup on this page publishes too (placing the map, a new version number). Those don't change the survey,
+  // so the book's work still fits: it carries on from the new version instead of being refused as out of date.
+  const surveyKey = d => JSON.stringify([d.runs, d.plan, d.landmarks, d.runNames, d.origin]);
+  let lastKey = surveyKey(S.data), lastVersion = S.version;
+  S.onPublished(() => {
+    const k = surveyKey(S.data);
+    if (st.open && st.base === lastVersion && k === lastKey) { st.base = S.version; if (loadDraft()) save(); }
+    lastKey = k; lastVersion = S.version;
+    if (st.open) { check(); render(); }
+  });
   if (!PAGE) {
     // On the map: the button opens the book in a new tab. When the book there publishes, offer a refresh here.
     btn.addEventListener("click", () => { const w = window.open(bookUrl(), "_blank"); if (!w) location.href = bookUrl(); });
