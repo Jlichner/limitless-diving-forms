@@ -87,8 +87,17 @@
         // Lines drawn on top of each other (Jamie 2026-11-26).
         if (GG && GG.overlaps) {
           const geo = GG.compute(m.data), near = (x, y) => { let best = null, bd = Infinity; for (const [k, p] of Object.entries(geo.at)) { const d = Math.hypot(p[0] - x, p[1] - y); if (d < bd) { bd = d; best = k; } } return best && bd < 300 ? ` near ${m.data.landmarks[best] || best}` : ""; };
+          out.doubles = [];
+          const firstRow = run => Math.min(...Object.values(r.lineRows[run] || { x: Infinity }));
           for (const o of GG.overlaps(geo)) {
             const nm = r2 => m.data.runNames[r2] || r2, ft = Math.round(o.ft);
+            // The copy further down the book is the extra one: its legs that lie wholly on the other line (80% or
+            // more) can become jumps, which aren't drawn and leave everything after them where it is.
+            const side = o.a === o.b ? "b" : firstRow(o.b) >= firstRow(o.a) ? "b" : "a", run = o[side];
+            for (const [i, [cov, len]] of Object.entries(o.legs[side])) {
+              const row = r.lineRows[run] && r.lineRows[run][i];
+              if (row != null && cov >= 0.8 * len && idx[row - 1] != null) out.doubles.push(idx[row - 1]);
+            }
             out.warnings.push(o.a === o.b ? `"${nm(o.a)}" runs over itself for ${ft} ft${near(o.x, o.y)}. Check for a leg entered twice, or a heading that should be its back course.`
               : `"${nm(o.a)}" and "${nm(o.b)}" are drawn on top of each other for ${ft} ft${near(o.x, o.y)}. Check for legs entered twice, or a heading that should be its back course.`);
           }
@@ -242,6 +251,8 @@
     const nErr = c.errors.length, nWarn = c.warnings.length;
     pub.innerHTML = `${c.other.errors.length ? `<div class="sb-err"><b>Fix these to publish:</b><ul>${c.other.errors.map(t => `<li>${esc(t)}</li>`).join("")}</ul></div>` : ""}
       ${c.other.warnings.length || c.notes.length ? `<details class="sb-warn" data-sb="warn"${st.warnOpen ? " open" : ""}><summary><b>Worth a look (${c.other.warnings.length + c.notes.length})</b></summary><ul>${c.other.warnings.concat(c.notes).map(t => `<li>${esc(t)}</li>`).join("")}</ul></details>` : ""}
+      ${c.doubles && c.doubles.length ? `<div class="sb-dbl"><button type="button" class="btn" data-sb="undouble">Hide ${new Set(c.doubles).size} doubled leg${new Set(c.doubles).size === 1 ? "" : "s"}</button>
+        <span class="hint">Legs drawn on top of another line become Jumps: not drawn, and everything after them stays where it is. Changing Kind back undoes it.</span></div>` : ""}
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
       <div class="sb-pubrow"><label class="sb-what"><span>What changed? (for the map's history)</span><input id="sb-summary" maxlength="300" value="${esc(st.summary)}" placeholder="e.g. Added the Saddle spur from Sunday's dive"></label>
         <button type="button" class="btn primary" data-sb="publish"${st.busy || nErr ? " disabled" : ""}>${st.busy ? "Publishing…" : nErr ? `Fix ${nErr} problem${nErr === 1 ? "" : "s"} to publish` : st.confirm ? "Publish anyway" : "Publish to the map"}</button></div>
@@ -331,6 +342,12 @@
       const a1 = place("target"), a2 = place("here");
       st.rows = errs(a2) < errs(a1) ? a2 : a1;
       st.msg = { kind: "ok", text: "Joined. Check the map, then publish." };
+    }
+    if (act === "undouble") {
+      const rows = [...new Set((st.check && st.check.doubles) || [])];
+      rows.forEach(i => { st.rows[i][7] = "Jump"; });
+      st.msg = { kind: "ok", text: `${rows.length} doubled leg${rows.length === 1 ? " is" : "s are"} now Jump${rows.length === 1 ? "" : "s"}. Check the map, then publish.` };
+      st.confirm = false; save(); check(); return render();
     }
     if (act === "show" && blk) return showLine(blk);
     if (act === "print" && blk) return printSlate(blk);

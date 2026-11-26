@@ -257,7 +257,8 @@
   }
   // Lines drawn on top of each other (Jamie 2026-11-26): pairs of lines with stretches within <tolFt> of each other
   // and running the same way (within <tolDeg>), at least <minFt> long in all. Legs next to each other on one line
-  // don't count. Returns [{ a, b, ft, x, y }] (a, b: run ids; x, y: where the first overlap starts).
+  // don't count. Returns [{ a, b, ft, x, y, legs }] (a, b: run ids; x, y: where the first overlap starts; legs:
+  // { a: { index: [feet covered, leg length] }, b: { ... } }, the legs of each line that lie on the other).
   function overlaps(geo, minFt = 5, tolFt = 1.5, tolDeg = 4) {
     const segs = geo.segments.filter(s => s.kind !== "removed" && s.kind !== "platform" && s.lengthFt > 1);
     const sinTol = Math.sin(tolDeg * PI / 180), out = {};
@@ -272,8 +273,10 @@
       if (hi - lo < 1) continue;
       const off = t => { const f = (t - t0) / (t1 - t0); return Math.abs((b.x0 + bx * f - a.x0) * uy - (b.y0 + by * f - a.y0) * ux); };
       if (off(lo) > tolFt || off(hi) > tolFt) continue;
-      const k = a.run + "|" + b.run, o = out[k] || (out[k] = { a: a.run, b: b.run, ft: 0, x: a.x0 + ux * lo, y: a.y0 + uy * lo });
+      const k = a.run + "|" + b.run, o = out[k] || (out[k] = { a: a.run, b: b.run, ft: 0, x: a.x0 + ux * lo, y: a.y0 + uy * lo, legs: { a: {}, b: {} } });
       o.ft += hi - lo;
+      const add = (side, s) => { const l = o.legs[side][s.index] || (o.legs[side][s.index] = [0, s.lengthFt]); l[0] += hi - lo; };
+      add("a", a); add("b", b);
     }
     return Object.values(out).filter(o => o.ft >= minFt);
   }

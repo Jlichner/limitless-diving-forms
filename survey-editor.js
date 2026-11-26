@@ -370,6 +370,7 @@
     const r = current();
     if (r.error) { say("Your changes no longer fit the map: " + r.error + " Undo the last change or start over.", "bad"); return render(); }
     if (!st.summary.trim()) { say("Say what you changed, who surveyed it and when.", "bad"); return render(); }
+    if (isAdmin() && S.layersError) { say("The other levels' lines didn't load, so publishing now could mix them up. Refresh the page, then publish.", "bad"); return render(); }
     st.busy = true; render();
     try {
       if (isAdmin()) {
@@ -388,6 +389,11 @@
           say(`Published as version ${S.versionName()}.`, "ok");
           st.history = null;
         } catch (err) {
+          // A timeout can come back after the publish went through anyway: then the layers saved above belong with
+          // it and must stay. Only put them back when the main survey really wasn't published.
+          let landed = false;
+          try { const q = await C.client.from("site_maps").select("version").eq("id", site).maybeSingle(); landed = !q.error && q.data && q.data.version > S.version; } catch (e) { /* treat as not published */ }
+          if (landed) { say("Supabase was slow, but it was published. Refreshing the page shows it.", "ok"); st.draft = []; st.groups = []; saveDraft(); st.busy = false; return render(); }
           for (const l of saved) await C.client.from("site_map_layers").update({ survey: l.survey }).eq("id", l.id);
           throw err;
         }

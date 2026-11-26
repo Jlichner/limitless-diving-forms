@@ -134,7 +134,7 @@
       const d = num(originRow.r[2]); if (has(d)) data.originPoint = { depth: d };
     }
 
-    const usedIds = {}, levels = [], stated = {};
+    const usedIds = {}, levels = [], stated = {}, lineRows = {};   // lineRows[run][entry index] = sheet row of that line
     blocks.forEach((b, bi) => {
       const legs = b.legs;
       if (!legs.length) return;
@@ -203,6 +203,7 @@
           if (!to && note) lineNote = note;
           if (lineNote) line.note = lineNote;
           if (level !== lastLevel && type !== "Arrow") { levels.push({ run: id, index: entries.length, level, row: rowNo }); lastLevel = level; }
+          (lineRows[id] = lineRows[id] || {})[entries.length] = rowNo;
           entries.push(line);
         }
         if (!to) return;
@@ -232,7 +233,7 @@
     // Stations listed in the Landmarks tab but not on any line (kept for the website's other layers).
     (landmarkRows || []).forEach(r => { const c = str(r[0]), n = str(r[1]); if (c && n && !/^code$/i.test(c) && !data.landmarks[c] && !known[n.toLowerCase()]) data.landmarks[c] = n; });
     if (!data.origin) errors.push("The sheet has no starting point: put it in To on the first row, with its depth.");
-    return { data, warnings, errors, levels, stated };
+    return { data, warnings, errors, levels, stated, lineRows };
   }
 
   // Splits the sheet's map into the main survey (green) and one survey per rated layer, by the Level column.

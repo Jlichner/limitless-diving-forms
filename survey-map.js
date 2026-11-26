@@ -614,13 +614,19 @@ ${marks}
     details(d, geo);
     applyViews();
     if (S.onShown) S.onShown();
-    const warn = main.querySelector("#sm-warn");
-    warn.hidden = !geo.warnings.length; warn.innerHTML = geo.warnings.map(esc).join("<br>");
+    S.lastWarnings = geo.warnings;
+    S.refreshWarn();
     if (firstDraw) { firstDraw = false; fit(); }
     if (ring) ring.bringToFront && ring.bringToFront();
     return geo;
   }
 
+  // Under the map: drawing warnings, and a notice when the rated layers couldn't be loaded (survey-layers.js).
+  S.refreshWarn = function () {
+    const warn = main.querySelector("#sm-warn"); if (!warn) return;
+    const parts = (S.layersNotice ? [S.layersNotice] : []).concat((S.lastWarnings || []).map(esc));
+    warn.hidden = !parts.length; warn.innerHTML = parts.join("<br>");
+  };
   function focusChanges() {
     if (S.changed && S.changed.length) S.map.fitBounds(L.latLngBounds(S.changed), { padding: [60, 60], maxZoom: 1.5 });
   }
