@@ -104,4 +104,74 @@ t("a site with no survey yet starts from its own starting point", () => {
   assert.ok(E.apply(base, [{ op: "add_run", run: "R2", name: "x", start: "ENTRY", entries: [{ type: "SurveyedLine", length_ft: 5, angle: 0 }] }]).error);
 });
 
+t("move a stake along its line: the lines stay put, the stake moves", () => {
+  // A small made-up run: 30 ft east, stake, 30 ft east (straight through), then 40 ft north.
+  const d = { origin: "O", landmarks: {}, runNames: { R: "Test" }, plan: [{ mode: "draw", start: "O", run: "R" }],
+    runs: { R: [{ type: "SurveyedLine", length_ft: 30, angle: 90 }, { type: "Stake" }, { type: "SurveyedLine", length_ft: 30, angle: 90 },
+      { type: "SurveyedLine", length_ft: 40, angle: 0 }, { type: "TieOff" }] } };
+  const shape = g => g.segments.reduce((acc, s) => acc.concat([[s.x0, s.y0], [s.x1, s.y1]]), []);
+  const ends = g => { const p = shape(g); return [p[0], p[p.length - 1]].map(q => q.map(v => v.toFixed(6)).join()); };
+  const g0 = G.compute(d);
+  // Slide the stake a quarter of the way up the 40 ft line.
+  const r = E.apply(d, [{ op: "move_point", run: "R", index: 1, seg: 3, frac: 0.25 }]);
+  assert.strictEqual(r.error, null);
+  assert.deepStrictEqual(r.data.runs.R.map(e => e.type + (e.length_ft || "")), ["SurveyedLine60", "SurveyedLine10", "Stake", "SurveyedLine30", "TieOff"]);
+  const g1 = G.compute(r.data);
+  assert.deepStrictEqual(ends(g1), ends(g0), "the run starts and ends where it did");
+  assert.ok(Math.abs(g1.stakes[0].x - 60) < 1e-6 && Math.abs(g1.stakes[0].y - 10) < 1e-6, "the stake is 10 ft up the north line");
+  assert.ok(Math.abs(g1.totalSurveyedFt - g0.totalSurveyedFt) < 0.01, "same feet of line");
+  // The tie-off at the end moves back to the middle of the first line.
+  const r2 = E.apply(r.data, [{ op: "move_point", run: "R", index: 4, seg: 0, frac: 0.5 }]);
+  assert.strictEqual(r2.error, null);
+  const g2 = G.compute(r2.data);
+  assert.ok(Math.abs(g2.tieoffs[0].x - 30) < 1e-6 && Math.abs(g2.tieoffs[0].y) < 1e-6);
+  assert.deepStrictEqual(ends(g2), ends(g0));
+  assert.ok(E.apply(d, [{ op: "move_point", run: "R", index: 0, seg: 2, frac: 0.5 }]).error, "a line isn't a stake");
+  assert.ok(E.apply(d, [{ op: "move_point", run: "R", index: 1, seg: 1, frac: 0.5 }]).error, "a stake isn't a line");
+  assert.ok(/Move the stake on Test/.test(E.describe({ op: "move_point", run: "R", index: 1, seg: 3, frac: 0.25 }, d)));
+});
+
+t("move a real stake: every line of the survey stays where it was", () => {
+  const pos = g => JSON.stringify(g.segments.map(s => [s.x0, s.y0, s.x1, s.y1].map(v => v.toFixed(4))).sort());
+  for (const [run, es] of Object.entries(base.runs)) {
+    const idx = es.findIndex(e => e.type === "Stake"), seg = es.findIndex((e, i) => i > idx + 1 && E.LINE.test(e.type));
+    if (idx < 0 || seg < 0) continue;
+    const r = E.apply(base, [{ op: "move_point", run, index: idx, seg, frac: 0.5 }]);
+    assert.strictEqual(r.error, null);
+    const g = G.compute(r.data);
+    assert.deepStrictEqual(g.warnings, []);
+    // Every old corner is still a corner, give or take rounding to a hundredth of a foot (lines may be split
+    // or joined, but the drawing is the same). Only the old stake point can go, if two straight lines joined there.
+    const pts = g2 => g2.segments.flatMap(s => [[s.x0, s.y0], [s.x1, s.y1]]);
+    const now = pts(g), far = pts(geo0).filter(([x, y]) => !now.some(([u, v]) => Math.hypot(x - u, y - v) < 0.05));
+    const st = geo0.stakes.find(s => s.run === run && s.index === idx);
+    assert.ok(far.every(([x, y]) => Math.hypot(x - st.x, y - st.y) < 0.05), far.length + " corners moved");
+    assert.ok(Math.abs(g.totalSurveyedFt - geo0.totalSurveyedFt) < 0.05);
+    return;
+  }
+  assert.fail("no run with a stake to test");
+});
+
+t("move a stake anywhere: the lines either side bend, the rest stays put", () => {
+  const d = { origin: "O", landmarks: { END: "End" }, runNames: { R: "Test" }, plan: [{ mode: "draw", start: "O", run: "R" }],
+    runs: { R: [{ type: "SurveyedLine", length_ft: 30, angle: 90 }, { type: "Stake" }, { type: "SurveyedLine", length_ft: 30, angle: 90 },
+      { type: "SurveyedLine", length_ft: 40, angle: 0 }, { type: "SaveLandmark", landmark: "END" }] } };
+  const g0 = G.compute(d);
+  const st = g0.stakes[0];
+  // Lines either side, worked out the way the editor does: from the stake's new spot to the ends of those lines.
+  const a = g0.segments.find(s => s.index === 0), b = g0.segments.find(s => s.index === 2), compass = (dx, dy) => 90 - Math.atan2(dy, dx) * 180 / Math.PI, turn = compass(a.x1 - a.x0, a.y1 - a.y0) - 90;
+  const P = [st.x + 5, st.y + 10];
+  const leg = (x0, y0, x1, y1) => ({ length_ft: Math.hypot(x1 - x0, y1 - y0), angle: ((compass(x1 - x0, y1 - y0) - turn) % 360 + 360) % 360 });
+  const c = { op: "bend_point", run: "R", index: 1, before: Object.assign({ i: 0 }, leg(a.x0, a.y0, P[0], P[1])), after: Object.assign({ i: 2 }, leg(P[0], P[1], b.x1, b.y1)) };
+  const r = E.apply(d, [c]);
+  assert.strictEqual(r.error, null);
+  const g1 = G.compute(r.data);
+  assert.ok(Math.hypot(g1.stakes[0].x - P[0], g1.stakes[0].y - P[1]) < 0.02, "the stake is where it was put");
+  assert.ok(Math.hypot(g1.at.END[0] - g0.at.END[0], g1.at.END[1] - g0.at.END[1]) < 0.02, "the end of the run stays put");
+  assert.ok(/line before it now/.test(E.describe(c, d)));
+  // A named point between the two lines can't move this way.
+  const d2 = JSON.parse(JSON.stringify(d)); d2.runs.R.splice(2, 0, { type: "SaveLandmark", landmark: "MID" });
+  assert.ok(E.apply(d2, [Object.assign({}, c, { after: Object.assign({}, c.after, { i: 3 }) })]).error);
+});
+
 console.log(`${n} tests passed`);

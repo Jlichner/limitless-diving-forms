@@ -317,3 +317,6 @@ div.sb-err ul, div.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
 .sm-book .sb-pub { background: #ffffff; }
 .sm-book .sb-row.bad { background: #fff1f1; }
 .sm-book .sb-c input:disabled, .sm-book .sb-c select:disabled { color: #5d7179; background: #f2f5f6; }
+
+/* Edit map: how a stake moves (anywhere / along its line) */
+.se-choice { border: 0; padding: 0; margin: 0 0 .5rem; display: grid; gap: .35rem; }
