@@ -213,4 +213,13 @@ t("set_icon gives a point a wreck symbol, and takes it off again", () => {
   assert.ok(E.apply(d, [{ op: "set_icon", landmark: "NOPE", icon: "" }]).error, "a point that isn't there");
 });
 
+t("a far-away point (long Jump) can be added", () => {
+  const d = { origin: "A", landmarks: { A: "A" }, plan: [], runNames: {}, runs: {} };
+  const ok = E.apply(d, [{ op: "add_run", run: "PT1", name: "IL start", start: "A", end: null, landmarks: { LM1: "IL start" },
+    entries: [{ type: "Jump", length_ft: 3500, length_in: 4, angle: 210 }, { type: "SaveLandmark", landmark: "LM1", show_label: true }] }]);
+  assert.strictEqual(ok.error, null);
+  const bad = E.apply(d, [{ op: "add_run", run: "R2", name: "x", start: "A", end: null, entries: [{ type: "SurveyedLine", length_ft: 3500, angle: 210 }] }]);
+  assert.ok(bad.error, "a drawn line still can't be 3500 ft");
+});
+
 console.log(`${n} tests passed`);

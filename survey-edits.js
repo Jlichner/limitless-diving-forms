@@ -68,7 +68,10 @@
     const out = { type: e.type };
     if (LINE.test(e.type) || e.type === "Jump") {
       const ft = Number(e.length_ft) || 0, inch = Number(e.length_in) || 0, ang = Number(e.angle);
-      check(ft >= 0 && ft <= 2000 && inch >= 0 && inch < 12, "Lengths must be 0–2000 ft and 0–11 in.");
+      // A Jump isn't drawn: "Add a point on the map" saves one from the starting point to the spot, which can be far
+      // across a big site, so it may be longer (Jamie 2026-11-25 hit the 2000 ft limit placing a point).
+      const max = e.type === "Jump" ? 50000 : 2000;
+      check(ft >= 0 && ft <= max && inch >= 0 && inch < 12, `Lengths must be 0–${max} ft and 0–11 in.`);
       check(ft + inch > 0, "A line needs a length.");
       check(isFinite(ang) && ang >= 0 && ang <= 360, "Headings must be 0–360°.");
       out.length_ft = ft; if (inch) out.length_in = inch; out.angle = ang;
