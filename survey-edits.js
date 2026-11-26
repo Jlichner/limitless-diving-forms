@@ -33,6 +33,10 @@
   const KEY = /^[A-Z][A-Z0-9_]{0,59}$/;
   // Stakes and tie-offs that can slide along their line. A named stake (SavedStake) isn't one: other lines start there.
   const MOVABLE = /^(Stake|TieOff|RemovedStake)$/;
+  // Symbols a diver can pick for a point (icons in survey-icons.js). "" = the plain dot.
+  const SYMBOLS = [["", "Plain dot"], ["icons/shipwreck.png", "Shipwreck"], ["icons/tugboat.png", "Tugboat"],
+    ["icons/spookytree.png", "Tree"], ["icons/cribbing.png", "Cribbing"], ["icons/mooringblock.png", "Mooring block"]];
+  const ICON_OK = /^icons\/[a-z0-9_-]{1,60}\.(png|svg)$/;
   const lenFt = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
   const withLen = (e, ft) => { const o = Object.assign({}, e, { length_ft: ft }); delete o.length_in; return o; };
 
@@ -170,6 +174,21 @@
         r[c.index] = Object.assign({}, p);   // a copy, so the map shows it as changed
         return;
       }
+      case "set_icon": {
+        // The symbol drawn for a landmark (Jamie 2026-11-25: "a wreck symbol"). "" = the plain dot.
+        check(typeof c.landmark === "string" && c.landmark.length > 0, "Which point?");
+        check(!c.icon || ICON_OK.test(c.icon), "That symbol isn't one of the map's symbols.");
+        let n = 0;
+        for (const r of Object.values(d.runs)) for (let i = 0; i < r.length; i++) {
+          const e = r[i];
+          if (e.type !== "SaveLandmark" || e.landmark !== c.landmark) continue;
+          r[i] = Object.assign({}, e);   // a copy, so the map shows it as changed
+          if (c.icon) r[i].icon_path = c.icon; else delete r[i].icon_path;
+          n++;
+        }
+        check(n > 0, "That point isn't on the map any more.");
+        return;
+      }
       case "delete_point": {
         const r = runOf(d, c.run), p = r[c.index];
         check(Number.isInteger(c.index) && p && /^(Stake|TieOff|RemovedStake|Arrow)$/.test(p.type), "That stake or tie-off isn't there any more.");
@@ -248,6 +267,7 @@
         const e = (data.runs[c.run] || [])[c.index] || {}, leg = g => `${Math.round(g.length_ft * 10) / 10} ft at ${Math.round(g.angle)}°`;
         return `Move the ${e.type === "TieOff" ? "tie-off" : "stake"} on ${runName(c.run)}: line before it now ${leg(c.before)}${c.after ? `, line after it ${leg(c.after)}` : ""}`;
       }
+      case "set_icon": { const sym = (SYMBOLS.find(x => x[0] === (c.icon || "")) || [0, "another symbol"])[1]; return `Show ${(data.landmarks && data.landmarks[c.landmark]) || c.landmark} as ${sym === "Plain dot" ? "a plain dot" : "a " + sym.toLowerCase()}`; }
       case "delete_point": { const e = (data.runs[c.run] || [])[c.index] || {}; return `Delete the ${e.type === "TieOff" ? "tie-off" : e.type === "Arrow" ? "arrow" : "stake"} on ${runName(c.run)}`; }
       case "drop_segment": { const e = (data.runs[c.run] || [])[c.index] || {}; return `Take out line ${nth(c.run, c.index)} of ${runName(c.run)} (${feet(e)} at ${e.angle}°)`; }
       default: return "Unknown change";
@@ -269,7 +289,7 @@
     }
   }
 
-  const api = { apply, dependents, describe, describeAll, newId, copy, LINE, MOVABLE };
+  const api = { apply, dependents, describe, describeAll, newId, copy, LINE, MOVABLE, SYMBOLS };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.SurveyEdits = api;
 })(typeof window !== "undefined" ? window : globalThis);

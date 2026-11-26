@@ -168,6 +168,7 @@
     const lm = { type: "SaveLandmark", landmark: p.key };
     if (p.depth !== "" && Number(p.depth) >= 0 && Number(p.depth) <= 400) lm.depth = Number(p.depth);
     if (p.label) lm.show_label = true;
+    if (p.icon) lm.icon_path = p.icon;
     return [{ op: "add_run", run: p.run, name: `${name} (placed on the map)`, start: origin, end: null,
       entries: [{ type: "Jump", length_ft: ft, length_in: inch, angle: ang }, lm], landmarks: { [p.key]: name } }];
   }
@@ -191,12 +192,16 @@
     say(`Added "${p.name.trim()}" to your changes. Add another point, or send them below.`, "ok");
     render();
   }
+  function symbolSelect(cur, attrs) {
+    return `<select ${attrs}>${E.SYMBOLS.map(([v, l]) => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  }
   function pointForm() {
     const p = st.pt;
     return `<section class="se-sec"><h3>Add a point on the map</h3>
       <p class="hint">${p.at ? "Tap the map again to move it." : "Tap the map where the point is. You can tap on a picture layer (photo map): turn it on in Layers and line it up first."}</p>
       <label class="se-wide">Name (shown on the map) <input id="se-pt-name" data-p="name" maxlength="120" value="${esc(p.name)}" placeholder="e.g. Old dock"></label>
       <label>Depth ft <input data-p="depth" inputmode="decimal" size="4" value="${esc(p.depth)}"></label>
+      <label>Symbol ${symbolSelect(p.icon || "", 'data-p="icon"')}</label>
       <label class="se-check"><input type="checkbox" data-p="label"${p.label ? " checked" : ""}> Show the name on the map</label>
       <div class="se-acts"><button type="button" class="btn primary" data-act="pt-save"${p.at ? "" : " disabled"}>Add to my changes</button>
         <button type="button" class="btn" data-act="pt-cancel">Cancel</button></div></section>`;
@@ -469,6 +474,11 @@
   }
 
   // ----- drawing the panel -----
+  // The symbol a landmark has now, in the map being edited (with the changes so far).
+  function curIcon(f) {
+    for (const r of Object.values(current().data.runs)) for (const e of r) if (e.type === "SaveLandmark" && e.landmark === f.landmark) return e.icon_path || "";
+    return "";
+  }
   function selCard() {
     const f = st.sel;
     if (!f) return `<p class="hint">Tap a stake, tie-off, landmark or line on the map. Then add a new line from it, or delete or mark as removed the line it's on.</p>
@@ -485,6 +495,8 @@
         ${f.kind === "segment" ? `<button type="button" class="btn" data-act="drop">Take out just this line</button>` : ""}
         ${(f.kind === "stake" || f.kind === "tieoff") && r && r[f.index] && E.MOVABLE.test(r[f.index].type) ? `<button type="button" class="btn" data-act="move">Move it</button>
           <button type="button" class="btn" data-act="del-point">Delete just this ${f.kind === "tieoff" ? "tie-off" : "stake"}</button>` : ""}
+        ${f.kind === "landmark" && !f.origin ? `<label class="se-sym">Symbol ${symbolSelect(curIcon(f), 'id="se-sym"')}</label>
+          <button type="button" class="btn" data-act="set-icon">Change the symbol</button>` : ""}
         ${onRun ? `<button type="button" class="btn danger" data-act="run">Delete the whole run: ${esc(S.runName(f.run))}</button>` : ""}
         <button type="button" class="btn" data-act="unselect">Cancel</button></div>
       ${f.kind === "segment" ? `<p class="hint">"Take out just this line" keeps everything after it where it is. "Mark as removed line" keeps it on the map in grey, for line that was pulled.</p>` : ""}</div>`;
@@ -631,6 +643,11 @@
     if (act === "pt-save") return savePoint();
     if (act === "move") { startMove(f); return render(); }
     if (act === "del-point") return commit([{ op: "delete_point", run: f.run, index: f.index }]);
+    if (act === "set-icon") {
+      const icon = (panel.querySelector("#se-sym") || {}).value || "";
+      if (icon === curIcon(f)) { say("That's the symbol it has already. Pick another one first.", "bad"); return render(); }
+      return commit([{ op: "set_icon", landmark: f.landmark, icon }]);
+    }
     if (act === "mv-save") return saveMove();
     if (act === "mv-cancel") { st.mode = "idle"; st.mv = null; setPlacing(false); say(null); return render(); }
     if (act === "pt-cancel") { st.mode = "idle"; st.pt = null; setPlacing(false); say(null); return render(); }

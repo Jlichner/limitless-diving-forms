@@ -198,4 +198,19 @@ t("delete_point takes out just the stake", () => {
   assert.ok(E.apply(d, [{ op: "delete_point", run: "R", index: 3 }]).error, "a named point can't be deleted this way");
 });
 
+t("set_icon gives a point a wreck symbol, and takes it off again", () => {
+  const d = { origin: "A", landmarks: { A: "A", END: "Old barge" }, plan: [{ mode: "draw", start: "A", run: "R" }], runNames: { R: "R" },
+    runs: { R: [{ type: "SurveyedLine", length_ft: 30, angle: 90 }, { type: "SaveLandmark", landmark: "END" }] } };
+  const c = { op: "set_icon", landmark: "END", icon: "icons/shipwreck.png" }, r = E.apply(d, [c]);
+  assert.strictEqual(r.error, null);
+  assert.strictEqual(r.data.runs.R[1].icon_path, "icons/shipwreck.png");
+  assert.strictEqual(G.compute(r.data).landmarks.find(l => l.landmark === "END").icon, "icons/shipwreck.png");
+  assert.strictEqual(d.runs.R[1].icon_path, undefined, "the original isn't changed");
+  assert.ok(/Show Old barge as a shipwreck/.test(E.describe(c, d)), E.describe(c, d));
+  const back = E.apply(r.data, [{ op: "set_icon", landmark: "END", icon: "" }]);
+  assert.strictEqual(back.data.runs.R[1].icon_path, undefined);
+  assert.ok(E.apply(d, [{ op: "set_icon", landmark: "END", icon: "https://evil.example/x.png" }]).error, "only the map's own symbols");
+  assert.ok(E.apply(d, [{ op: "set_icon", landmark: "NOPE", icon: "" }]).error, "a point that isn't there");
+});
+
 console.log(`${n} tests passed`);
