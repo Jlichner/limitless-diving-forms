@@ -29,7 +29,8 @@
   // A new leg not filled in yet is a blank row that belongs to its line: marked in a 12th cell the sheet never reads.
   const held = r => r[11] === 1 && isBlank(r);
   const isTitle = r => str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^(loop with |gps\b)/i.test(str(r[1])));
-  const st = { open: false, rows: null, lm: [], base: 0, savedAt: null, check: null, msg: null, busy: false, summary: "", confirm: false, drawing: false, timer: null, warnOpen: false };
+  const st = { open: false, rows: null, lm: [], base: 0, savedAt: null, check: null, msg: null, busy: false, summary: "", confirm: false, drawing: false, timer: null, warnOpen: false,
+    undo: [], edits: [] };   // undo: the book before each change made with the map tools; edits: suggestions added in
   // How much room the map above the book takes: each person's choice, kept in this browser.
   // "side" puts the map on the left and the book on the right, for wide screens (Jamie 2026-11-26, 1920 × 1080);
   // it's the first choice on a screen at least 1300 px wide.
@@ -43,6 +44,9 @@
     host.classList.toggle("sb-map-small", mapSize === "small" || (mapSize === "side" && !side));
     host.classList.toggle("sb-map-off", mapSize === "off");
     document.body.classList.toggle("sb-wide", side);
+    // The map tools go above the book when the map is beside it, so the map keeps its width.
+    const tools = document.getElementById("sm-edit");
+    if (PAGE && tools) { if (side && tools.parentNode !== host) host.insertBefore(tools, box); else if (!side && tools.parentNode !== work) work.appendChild(tools); }
     setTimeout(() => S.map.invalidateSize(), 50);
   }
 
@@ -67,7 +71,7 @@
   function sameAsWebsite() { return plain(st.rows) === plain(fromWebsite().rows); }
   function current() { return SS.joinLevels(S.data, ratedLayers()).data; }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ rows: st.rows, lm: st.lm, base: st.base, at: new Date().toISOString() })); } catch (e) { /* private window */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ rows: st.rows, lm: st.lm, base: st.base, edits: st.edits, at: new Date().toISOString() })); } catch (e) { /* private window */ }
   }
   function loadDraft() {
     try { const d = JSON.parse(localStorage.getItem(KEY) || "null"); return d && Array.isArray(d.rows) ? d : null; } catch (e) { return null; }
@@ -125,6 +129,9 @@
     st.rows.forEach((r, i) => { const t = inchError(r); if (t) { (out.byRow[i] = out.byRow[i] || []).push({ kind: "errors", text: t }); out.errors.push(`Row ${i + 1}: ${t}`); } });
     st.check = out;
     preview();
+    // The map tools beside the book only work while the book has no mistakes.
+    const broken = !!out.errors.length;
+    if (broken !== st.broken) { st.broken = broken; if (S.toolsRender) setTimeout(S.toolsRender, 0); }
   }
   function preview() {
     const c = st.check;
@@ -233,6 +240,7 @@
         Your work is kept in this browser until you publish.</p>
       ${stale ? `<p class="se-msg bad">The map was published again (version ${esc(S.versionName ? S.versionName() : String(S.version))}) since this book was started from version ${esc(String(st.base))}. Publishing this book would undo those changes, so it isn't allowed. Press <b>Download spreadsheet</b> to keep your work, then <b>Start from the website</b> and add your changes again.</p>` : ""}
       <div class="sb-bar"><button type="button" class="btn primary" data-sb="line-add">+ New line</button>
+        ${st.undo.length ? `<button type="button" class="btn" data-sb="undo-map">Undo: ${esc(st.undo[st.undo.length - 1].what)}</button>` : ""}
         <button type="button" class="btn" data-sb="print-blank">Print blank slate</button>
         <button type="button" class="btn" data-sb="csv">Download spreadsheet</button>
         <label class="btn sb-file">Load spreadsheet (CSV)<input type="file" accept=".csv,text/csv" data-sb="csv-in" hidden></label>
@@ -364,6 +372,12 @@
       return start(true);
     }
     if (act === "publish") return publish();
+    if (act === "undo-map") {
+      const u = st.undo.pop(); if (!u) return;
+      st.rows = u.rows; st.lm = u.lm; st.edits = u.edits; st.confirm = false;
+      st.msg = { kind: "ok", text: `Undone: ${u.what}.` };
+      save(); check(); return render();
+    }
     if (["row-del", "row-ins", "leg-add", "line-add", "line-del", "line-join"].includes(act)) {
       // keep blank lines between lines; drop runs of extra blank rows
       st.rows = st.rows.filter((r, i, a) => !(isBlank(r) && !held(r) && i > 0 && isBlank(a[i - 1]) && !held(a[i - 1])));
@@ -413,12 +427,13 @@
       const before = current();
       const summary = (st.summary.trim() ? st.summary.trim() + " — " : "") + "from the Survey book: " + SS.describeChange(before, c.data);
       const { data: v, error } = await C.client.rpc("publish_site_map_book", { site, new_data: c.sp.src.green, expected_version: st.base, summary: summary.slice(0, 2000),
-        layers: { blue: c.sp.src.blue, black: c.sp.src.black, "double-black": c.sp.src["double-black"], squirrel: c.sp.src.squirrel } });
+        layers: { blue: c.sp.src.blue, black: c.sp.src.black, "double-black": c.sp.src["double-black"], squirrel: c.sp.src.squirrel },
+        ...(st.edits.length ? { edit_ids: st.edits } : {}) });
       if (error) throw error;
       S.setPublished(c.sp.src.green, v, new Date().toISOString());
       try { localStorage.setItem(SIGNAL, JSON.stringify({ at: Date.now(), name: S.versionName ? S.versionName() : String(v) })); } catch (e) { /* the map tab just won't hear */ }
       if (S.reloadLayers) await S.reloadLayers();
-      dropDraft(); st.summary = ""; st.confirm = false;
+      dropDraft(); st.summary = ""; st.confirm = false; st.undo = []; st.edits = [];
       const w = fromWebsite(); st.rows = w.rows; st.lm = w.lm; st.base = S.version;
       st.msg = { kind: "ok", text: `Published as version ${S.versionName ? S.versionName() : v}.` };
       check();
@@ -490,15 +505,15 @@
   function start(fresh) {
     const w = fromWebsite(), d = fresh ? null : loadDraft();
     if (d) {
-      st.rows = d.rows; st.lm = d.lm && d.lm.length ? d.lm : w.lm; st.base = d.base; st.savedAt = d.at;
+      st.rows = d.rows; st.lm = d.lm && d.lm.length ? d.lm : w.lm; st.base = d.base; st.savedAt = d.at; st.edits = Array.isArray(d.edits) ? d.edits : [];
       // The book publishes the whole survey, so work started on an older version would wipe out whatever was
       // published since (Jamie 2026-11-26: a night's survey went missing). Publishing it is refused; say so now.
       st.msg = d.base !== S.version
         ? { kind: "bad", text: `This is unpublished work from ${new Date(d.at).toLocaleString()}, started before the map's latest version was published. Publishing it would undo that version, so it will be refused. Download it as a spreadsheet to keep it, then press "Start from the website" and add your changes again.` }
         : { kind: "ok", text: `Picked up your unpublished work from ${new Date(d.at).toLocaleString()}.` };
     }
-    else { st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.msg = null; dropDraft(); }
-    st.confirm = false;
+    else { st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.msg = null; st.edits = []; dropDraft(); }
+    st.confirm = false; st.undo = [];
     check(); render();
   }
   function open() {
@@ -546,6 +561,63 @@
     box.innerHTML = `<p class="acct-note bad">The Survey book is for Admins and Dive site admins. <a href="${esc(location.pathname)}">Back to the map</a></p>`;
     return;
   }
+  // ----- the map tools (survey-editor.js) work on the book -----
+  // All survey changes are made here (Jamie 2026-11-26): tapping the map to add a line, move a stake, change a symbol,
+  // and so on changes the book, and the book publishes everything together. A change made on the map is turned back
+  // into the book's rows (the same way "Start from the website" makes them), so it shows in the book straight away.
+  const levelId = k => { const l = S.layers.find(x => x.kind === "survey" && x.rating === k); return l ? l.id : null; };
+  function toolBase() {
+    const c = st.check;
+    if (!st.open || !c || !c.sp || c.errors.length) return null;
+    const src = c.sp.src, j = SS.joinLevels(src.green, { blue: src.blue, black: src.black, "double-black": src["double-black"], squirrel: src.squirrel });
+    const runLayer = {};
+    Object.entries(j.runLevel).forEach(([r, k]) => { const id = levelId(k); if (id) runLayer[r] = id; });
+    return { data: j.data, runLayer, runLevel: j.runLevel };
+  }
+  // A new line takes the level of the line it starts from (a line added off a black diamond line is black diamond).
+  function levelsFor(d, known) {
+    const out = Object.assign({}, known), saver = {};
+    for (const [run, r] of Object.entries(d.runs)) for (const e of r) if ((e.type === "SaveLandmark" || e.type === "SavedStake") && e.landmark && !saver[e.landmark]) saver[e.landmark] = run;
+    const find = (run, seen) => {
+      if (run in out) return out[run];
+      const step = d.plan.find(p => p.run === run || p.run2 === run), from = step && saver[step.start];
+      if (!from || seen.has(from)) return null;
+      seen.add(from); return find(from, seen);
+    };
+    Object.keys(d.runs).forEach(r => { if (!(r in out)) { const k = find(r, new Set([r])); if (k) out[r] = k; } });
+    return out;
+  }
+  function remember(what) { st.undo.push({ rows: JSON.parse(JSON.stringify(st.rows)), lm: JSON.parse(JSON.stringify(st.lm)), edits: st.edits.slice(), what }); if (st.undo.length > 30) st.undo.shift(); }
+  function useData(d, runLevel, what, msg) {
+    remember(what);
+    const out = SS.fromSurvey(d, runLevel);
+    st.rows = out.rows.map(r => r.slice(0, 11).map(v => v == null ? "" : v)); st.lm = out.landmarkRows;
+    st.confirm = false; st.msg = { kind: "ok", text: msg };
+    save(); check(); render();
+    return null;
+  }
+  S.book = {
+    active: () => st.open,
+    base: toolBase,
+    published: current,
+    preview: () => preview(),
+    // ops: changes in survey-edits.js form. Returns an error message, or null when they're in the book.
+    apply(ops, what, editId) {
+      const b = toolBase();
+      if (!b) return "Fix the problems in the Survey book first, then use the map tools.";
+      const r = E.apply(b.data, ops);
+      if (r.error) return r.error;
+      if (editId && !st.edits.includes(editId)) st.edits = st.edits.concat(editId);
+      return useData(r.data, levelsFor(r.data, b.runLevel), what || "map change", `In the book: ${what || "your change"}. Check it, then publish.`);
+    },
+    // An earlier version from the map's history, back into the book (published with the next Publish).
+    loadVersion(green, layers, name) {
+      const j = SS.joinLevels(green, layers || ratedLayers());
+      return useData(j.data, j.runLevel, `${name} put back`, `${name} is in the book${layers ? "" : " (its main lines; the other levels are as they are now)"}. Check it, then publish to put it back on the map.`);
+    },
+  };
+  const E = window.SurveyEdits;
+
   // Wait for the rated layers (blue, black, double black, Secret Squirrel): the book holds every level's lines.
   box.hidden = false;
   box.innerHTML = `<p class="hint">Loading every level's lines…</p>`;
@@ -555,5 +627,6 @@
       return;
     }
     open();
+    if (S.openTools) S.openTools();
   });
 });

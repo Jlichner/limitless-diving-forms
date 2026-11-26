@@ -2008,8 +2008,11 @@ grant execute on function public.claim_site_map_issue_notice(uuid) to authentica
 -- ---------- Survey book: publish the whole survey from the website (added 2026-11-25) ----------
 -- The website's Survey book (survey-book.js) replaces the Google Sheet. Like sheet_publish_site_map, it publishes the
 -- main (green) map and the blue, black and double black layers together, but as the signed-in Admin or Dive site admin.
+-- edit_ids: survey team suggestions the Admin added into the book; they're marked approved (2026-11-26).
+drop function if exists public.publish_site_map_book(text, jsonb, integer, text, jsonb);
 create or replace function public.publish_site_map_book(site text, new_data jsonb, expected_version integer,
-                                                        summary text default '', layers jsonb default null)
+                                                        summary text default '', layers jsonb default null,
+                                                        edit_ids uuid[] default null)
 returns integer language plpgsql security definer set search_path = '' as $$
 declare cur integer; nv integer; k text; sv jsonb; who text;
   names jsonb := '{"blue": ["Blue square · Intermediate", "Advanced divers and up", 101],
@@ -2052,7 +2055,11 @@ begin
       end if;
     end loop;
   end if;
+  if edit_ids is not null then
+    update public.site_map_edits set status = 'approved', reviewed_by = (select auth.uid()), reviewed_at = now()
+     where id = any(edit_ids) and site_id = site and status = 'pending';
+  end if;
   return nv;
 end $$;
-revoke all on function public.publish_site_map_book(text, jsonb, integer, text, jsonb) from public, anon;
-grant execute on function public.publish_site_map_book(text, jsonb, integer, text, jsonb) to authenticated;
+revoke all on function public.publish_site_map_book(text, jsonb, integer, text, jsonb, uuid[]) from public, anon;
+grant execute on function public.publish_site_map_book(text, jsonb, integer, text, jsonb, uuid[]) to authenticated;

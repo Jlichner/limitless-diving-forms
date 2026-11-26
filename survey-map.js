@@ -157,7 +157,7 @@
     const started = geo.segments.length > 0;
     main.querySelector("#sm-note").innerHTML = !started
       ? `<b>Help us map this site.</b> No lines have been surveyed here yet. Every line is measured from the ${esc(S.name(d.origin || "BAR"))}.
-         ${S.canEdit() ? `Tap <b>Edit map</b> to add the first line you surveyed: its length, compass heading, and what's at its end.` : "Our survey team adds the lines as they map it."}`
+         ${S.isSiteAdmin() ? `Open the <b>Survey book</b> to add the first line you surveyed.` : S.canEdit() ? `Tap <b>Edit map</b> to add the first line you surveyed: its length, compass heading, and what's at its end.` : "Our survey team adds the lines as they map it."}`
       : S.version
       ? `<b>Updated ${esc(when)}</b> (version ${esc(S.versionName())}). Zoom in, and tap a line or landmark to see what was measured.`
       : `<b>New:</b> the ${esc(String(d.version || "").replace(/^v[\d.]+ /, ""))} survey map, now drawn live from the survey data. Zoom in, and tap a line or landmark to see what was measured.`;
