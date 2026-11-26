@@ -855,7 +855,9 @@
         let ft = num(r[5]); const m = num(r[6]);
         if (ft == null && has(m) && m !== 0) ft = round(m / 0.3048, 3);
         if (hdg == null && has(bc)) hdg = (bc + 180) % 360;
-        const pointOnly = type === "SurveyedLine" && hdg == null && !ft;
+        // A row with no heading and no distance just marks a stake or station where the line already is: no leg, so the Kind
+        // (Surveyed, Unsurveyed, Platform, Jump) makes no difference to it.
+        const pointOnly = type !== "Arrow" && hdg == null && !ft;
         let lineNote = drawing.note; delete drawing.note;
         if (!pointOnly) {
           if (hdg == null || !has(hdg) || hdg < 0 || hdg > 360) { errors.push(`Row ${rowNo}: the heading "${str(r[4])}" isn't a compass heading (0 to 360).`); return; }
