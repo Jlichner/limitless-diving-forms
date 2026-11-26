@@ -299,7 +299,7 @@ div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-lef
 #sb-print .sl-hint { font-size: 8pt; margin: 6px 0 0; }
 
 /* The Survey book's own tab (site map page opened with ?book): just the map and the book. */
-.sb-page #sm-stats, .sb-page #sm-layers-panel, .sb-page #sm-issues-panel, .sb-page #sm-key, .sb-page #sm-list,
+.sb-page #sm-stats, .sb-page #sm-issues-panel, .sb-page #sm-key, .sb-page #sm-list,
 .sb-page #surveymap > section.panel:not(.dm-panel), .sb-page #sm-credit,
 .sb-page #sm-kml, .sb-page #sm-print-btn, .sb-page #sm-edit-btn { display: none !important; }
 .sb-page .pub-hero { padding-bottom: 4px; }
@@ -341,16 +341,21 @@ div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-lef
    book on the right scrolls. */
 .sb-open.sb-map-side { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); column-gap: 16px; align-items: start; }
 .sb-open.sb-map-side > * { grid-column: 1 / -1; }
-.sb-open.sb-map-side > .sm-work { grid-column: 1; grid-row: 2 / span 8; position: sticky; top: 8px; }
-.sb-open.sb-map-side > #sm-setup { grid-column: 2; grid-row: 2; }
+.sb-open.sb-map-side > .sm-work { grid-column: 1; grid-row: 2 / span 9; position: sticky; top: 8px; }
+.sb-open.sb-map-side > #sm-setup { grid-column: 2; grid-row: 3; }
 .sb-open.sb-map-side > #sm-setup .sm-setup { margin: 0 0 12px; }
 /* Map setup looks like Map tools beside it (Jamie 2026-11-26: "can these be the same size?") */
 .sb-page #sm-setup .sm-setup { padding: 8px 12px; border-radius: 10px; gap: 8px; }
+.sb-page #sm-layers-panel { padding: 8px 12px; border-radius: 10px; margin: 0 0 12px; }
+.sb-page #sm-layers-panel > .se-head { padding: 4px 0; }
+.sb-page #sm-layers-panel h2.sec { font-size: 22px; margin: 0; }
+.sb-page #sm-layers[hidden] { display: none; }
+.sb-open.sb-map-side > #sm-layers-panel { grid-column: 2; grid-row: 2; }
 .sb-page #sm-setup .sm-setup > .se-head { padding: 4px 0; }
 .sb-page #sm-setup .sm-setup h2.sec { font-size: 22px; margin: 0; }
 .sb-open.sb-map-side > .sm-work.editing { grid-template-columns: minmax(0, 1fr); }
-.sb-open.sb-map-side > #sm-edit { grid-column: 2; grid-row: 3; max-height: 46vh; border: 1px solid var(--line, #d7e3e6); border-radius: 10px; padding: 8px 12px; background: var(--card, #fff); margin-bottom: 12px; }
-.sb-open.sb-map-side > #sm-book { grid-column: 2; grid-row: 4 / span 5; margin-top: 0; max-height: calc(100vh - 24px); overflow: auto; overscroll-behavior: contain; padding-bottom: 0; }
+.sb-open.sb-map-side > #sm-edit { grid-column: 2; grid-row: 4; max-height: 46vh; border: 1px solid var(--line, #d7e3e6); border-radius: 10px; padding: 8px 12px; background: var(--card, #fff); margin-bottom: 12px; }
+.sb-open.sb-map-side > #sm-book { grid-column: 2; grid-row: 5 / span 5; margin-top: 0; max-height: calc(100vh - 24px); overflow: auto; overscroll-behavior: contain; padding-bottom: 0; }
 /* A line someone is editing (Survey book) */
 .sb-hold { margin: 4px 0 6px; padding: 6px 10px; border-radius: 8px; background: #fff4e5; color: #7a4a00; font-size: 13px; }
 .sb-hold.mine { background: #e8f4ff; color: #0b4a7a; }

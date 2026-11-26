@@ -147,7 +147,7 @@
       hint: !l.imageUrl ? "Picture not added yet" : !l.bounds ? "Not lined up yet" : l.bounds.north != null && !S.geoRef() ? "Shows once the map is placed on the earth" : "" });
     out.push({ id: "survey", name: "Green Circle - Beginner", rating: "green", hint: "The main survey: green circle lines, for every member with site maps access" });
     for (const l of st.layers.filter(l => l.kind === "survey")) out.push({ id: l.id, name: l.name, restricted: l.restricted, note: l.note, rating: l.rating,
-      hint: l.survey && Object.keys(l.survey.runs || {}).length ? `${Object.keys(l.survey.runs).length} runs of line` : "No lines yet" });
+      hint: l.survey && Object.keys(l.survey.runs || {}).length ? `${Object.keys(l.survey.runs).length} line${Object.keys(l.survey.runs).length === 1 ? "" : "s"}` : "No lines yet" });
     return out;
   }
   function render() {

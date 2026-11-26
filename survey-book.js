@@ -38,6 +38,22 @@
   let mapSize = wide() ? "side" : "small";
   try { mapSize = localStorage.getItem("sb-map-layout") || mapSize; } catch (e) { /* private window */ }
   if (!/^(side|large|small|off)$/.test(mapSize)) mapSize = "small";
+  // Layers on the book page folds away like Map setup and Map tools; kept in this browser.
+  function foldLayers(lay) {
+    let open = false;
+    try { open = localStorage.getItem("sb-layers-open") === "1"; } catch (e) { /* private window */ }
+    let head = lay.querySelector(".se-head");
+    if (!head) {
+      const h = lay.querySelector("h2");
+      head = document.createElement("div"); head.className = "se-head";
+      h.parentNode.insertBefore(head, h); head.appendChild(h);
+      const b = document.createElement("button"); b.type = "button"; b.className = "btn"; head.appendChild(b);
+      b.addEventListener("click", () => { open = !open; try { localStorage.setItem("sb-layers-open", open ? "1" : "0"); } catch (e) { /* ignore */ } show(); });
+    }
+    const body = lay.querySelector("#sm-layers"), b = head.querySelector("button");
+    const show = () => { body.hidden = !open; b.textContent = open ? "Hide" : "Show"; };
+    show();
+  }
   function applyMapSize() {
     const side = mapSize === "side" && wide();
     host.classList.toggle("sb-map-side", side);
@@ -51,6 +67,9 @@
     const setup = document.getElementById("sm-setup");
     if (PAGE && setup && setup.parentNode !== host) host.insertBefore(setup, side && tools && tools.parentNode === host ? tools : box);
     if (PAGE && setup && tools && side && setup.nextSibling !== tools) host.insertBefore(setup, tools);
+    // The map's Layers (photo layers, satellite, survey levels on and off) sit above Map setup (Jamie 2026-11-26).
+    const lay = document.getElementById("sm-layers-panel");
+    if (PAGE && lay && setup && lay.nextSibling !== setup) { host.insertBefore(lay, setup); foldLayers(lay); }
     setTimeout(() => S.map.invalidateSize(), 50);
   }
 
