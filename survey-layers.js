@@ -37,7 +37,22 @@
   S.layersLoaded = new Promise(r => { firstLoaded = r; });
   async function loadLayers() {
     if (!cloud()) { firstLoaded(); return; }
-    try { await loadLayersNow(); } finally { S.layersError = st.loadErr || null; firstLoaded(); }
+    try {
+      // Supabase can time out ("upstream request timeout"): try again twice before giving up, so the rated lines
+      // don't just quietly vanish from the map (Jamie 2026-11-26).
+      for (let i = 0; ; i++) {
+        await loadLayersNow();
+        if (!st.loadErr || st.loadErr === "setup" || i >= 2) break;
+        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+      }
+    } finally {
+      S.layersError = st.loadErr || null;
+      S.layersNotice = st.loadErr && st.loadErr !== "setup"
+        ? `<b>Only the green circle lines are showing:</b> the other levels' lines couldn't be loaded (${esc(st.loadErr)}). <a href="${esc(location.pathname + location.search)}">Refresh the page</a> to try again. Don't publish from Edit map until they're back.`
+        : null;
+      if (S.refreshWarn) S.refreshWarn();
+      firstLoaded();
+    }
   }
   async function loadLayersNow() {
     const { data, error } = await C.client.from("site_map_layers").select("*").eq("site_id", site).order("sort").order("created_at");
