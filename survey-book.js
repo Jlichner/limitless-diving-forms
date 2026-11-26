@@ -73,6 +73,12 @@
         const sp = SS.splitLevels(m.data, r.levels, r.stated);
         out.errors.push(...sp.errors); out.warnings.push(...sp.warnings);
         out.data = m.data; out.sp = sp;
+        // Lines that would need stretching or turning more than 5% to join up are drawn as measured (Jamie 2026-11-25).
+        const GG = window.SurveyGeometry;
+        if (GG) for (const g of GG.compute(m.data).gaps) {
+          const nm = r2 => m.data.runNames[r2] || r2;
+          out.warnings.push(`${g.other ? `"${nm(g.other)}" and "${nm(g.run)}" don't` : `"${nm(g.run)}" doesn't`} join up: ${Math.round(g.ft * 10) / 10} ft off, more than the 5% the map will stretch a line. Drawn as measured. Check the tape and headings.`);
+        }
       }
     }
     // Messages that name a row go under that row.

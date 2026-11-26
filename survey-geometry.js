@@ -31,7 +31,7 @@
     // Every site is measured from one starting point at (0, 0): Bonnie Castle's is the Bar.
     const origin = data.origin || "BAR";
     const at = { [key(origin)]: [0, 0] };
-    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], totalSurveyedFt: 0 };
+    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], gaps: [], totalSurveyedFt: 0 };
     let box = [[0, 0], [0, 0]];
 
     // Where a run ends, relative to its start, ignoring stretch and turn: [distance, angle].
@@ -50,7 +50,8 @@
       return [Math.sqrt(x * x + y * y), degrees(a)];
     }
 
-    function draw(start, runName, stretch, rotation) {
+    // keep: a landmark already on the map stays where it is (a run drawn as measured, not joined up, ends short of it).
+    function draw(start, runName, stretch, rotation, keep) {
       const entries = data.runs[runName];
       if (!entries) { out.warnings.push(`No run called ${runName}`); return; }
       const s = at[key(start)];
@@ -72,6 +73,8 @@
         } else if (e.type === "Arrow") {
           const a = radians(Number(e.angle) + rotation - opt.declination), d = e.distance == null ? 10 : Number(e.distance);
           out.arrows.push(Object.assign({ x: x + d * Math.cos(a), y: y + d * Math.sin(a), heading: Number(e.angle) + rotation }, ref));
+        } else if (e.type === "SaveLandmark" && keep && at[key(e.landmark)]) {
+          // already on the map: left where it is
         } else if (e.type === "SaveLandmark") {
           at[key(e.landmark)] = [x, y];
           out.landmarks.push(Object.assign({ landmark: e.landmark, x, y, icon: e.icon_path || null,
@@ -81,7 +84,7 @@
             out.depths.push(Object.assign({ landmark: e.landmark, depth: Number(e.depth), x, y, angle: da, zoom: dz }, ref));
           }
         } else if (STAKE_TYPES[e.type]) {
-          if (e.type === "SavedStake" && e.landmark) at[key(e.landmark)] = [x, y];
+          if (e.type === "SavedStake" && e.landmark && !(keep && at[key(e.landmark)])) at[key(e.landmark)] = [x, y];
           out.stakes.push(Object.assign({ kind: STAKE_TYPES[e.type], x, y, text: e.text || null }, ref));
         } else if (e.type === "TieOff") {
           out.tieoffs.push(Object.assign({ x, y }, ref));
@@ -90,20 +93,36 @@
         }
         box = [[Math.min(box[0][0], x), Math.min(box[0][1], y)], [Math.max(box[1][0], x), Math.max(box[1][1], y)]];
       });
+      return [x, y];
     }
+    // How far a run's end has to move to join up, as a share of its length: from the stretch and the turn.
+    const misclose = (stretch, turnDeg) => Math.sqrt(stretch * stretch + 1 - 2 * stretch * Math.cos(turnDeg * PI / 180));
+    // Jamie 2026-11-25: a line is never stretched or turned to join up by more than this. Past it, the run is drawn
+    // exactly as measured, ending short, and the gap is listed (geo.gaps) for the map and the Survey book to show.
+    const MAX_JOIN = 0.05;
 
     for (const step of data.plan) {
       if (step.mode === "draw") {
         draw(step.start, step.run, 1, 0);
       } else if (step.mode === "loop") {
         const [d1, a1] = runVector(data.runs[step.run] || []), [d2, a2] = runVector(data.runs[step.run2] || []);
-        draw(step.start, step.run, 2 * d2 / (d1 + d2), (a1 - a2) / 2);
-        draw(step.start, step.run2, 2 * d1 / (d1 + d2), (a2 - a1) / 2);
+        const m1 = misclose(2 * d2 / (d1 + d2), (a1 - a2) / 2), m2 = misclose(2 * d1 / (d1 + d2), (a2 - a1) / 2);
+        if (Math.max(m1, m2) > MAX_JOIN && at[key(step.start)]) {
+          const e1 = draw(step.start, step.run, 1, 0, true), e2 = draw(step.start, step.run2, 1, 0, true);
+          out.gaps.push({ run: step.run2, other: step.run, x0: e2[0], y0: e2[1], x1: e1[0], y1: e1[1], ft: Math.hypot(e1[0] - e2[0], e1[1] - e2[1]), share: Math.max(m1, m2) });
+        } else {
+          draw(step.start, step.run, 2 * d2 / (d1 + d2), (a1 - a2) / 2);
+          draw(step.start, step.run2, 2 * d1 / (d1 + d2), (a2 - a1) / 2);
+        }
       } else if (step.mode === "fit") {
         const p0 = at[key(step.start)], p1 = at[key(step.end)];
         if (!p0 || !p1) { out.warnings.push(`${step.run}: ${p0 ? step.end : step.start} isn't on the map yet`); continue; }
         const [d1, a1] = polar(p1[0] - p0[0], p1[1] - p0[1]), [d2, a2] = runVector(data.runs[step.run] || []);
-        draw(step.start, step.run, d1 / d2, a2 - a1);
+        const m = misclose(d1 / d2, a2 - a1);
+        if (m > MAX_JOIN) {
+          const target = p1.slice(), e = draw(step.start, step.run, 1, 0, true);
+          out.gaps.push({ run: step.run, end: step.end, x0: e[0], y0: e[1], x1: target[0], y1: target[1], ft: Math.hypot(target[0] - e[0], target[1] - e[1]), share: m });
+        } else draw(step.start, step.run, d1 / d2, a2 - a1);
       } else {
         out.warnings.push(`Unknown plan step ${JSON.stringify(step)}`);
       }
