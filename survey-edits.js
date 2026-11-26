@@ -20,6 +20,8 @@
                                                          move the stake or tie-off at entry <index> anywhere: the
                                                          line entries <before.i> and <after.i> on either side of
                                                          it get the new length and heading, so the line bends there
+     delete_point  { run, index }                        delete just the stake, tie-off or arrow at entry <index>;
+                                                         nothing else moves
 
    Indexes refer to the data as it is when that change is applied (after the changes before it).
    Works in the browser (window.SurveyEdits) and in Node (module.exports), for testing. */
@@ -168,6 +170,12 @@
         r[c.index] = Object.assign({}, p);   // a copy, so the map shows it as changed
         return;
       }
+      case "delete_point": {
+        const r = runOf(d, c.run), p = r[c.index];
+        check(Number.isInteger(c.index) && p && /^(Stake|TieOff|RemovedStake|Arrow)$/.test(p.type), "That stake or tie-off isn't there any more.");
+        r.splice(c.index, 1);
+        return;
+      }
       case "drop_segment": {
         const r = runOf(d, c.run);
         check(Number.isInteger(c.index) && r[c.index] && LINE.test(r[c.index].type), "That line isn't there any more.");
@@ -240,6 +248,7 @@
         const e = (data.runs[c.run] || [])[c.index] || {}, leg = g => `${Math.round(g.length_ft * 10) / 10} ft at ${Math.round(g.angle)}°`;
         return `Move the ${e.type === "TieOff" ? "tie-off" : "stake"} on ${runName(c.run)}: line before it now ${leg(c.before)}${c.after ? `, line after it ${leg(c.after)}` : ""}`;
       }
+      case "delete_point": { const e = (data.runs[c.run] || [])[c.index] || {}; return `Delete the ${e.type === "TieOff" ? "tie-off" : e.type === "Arrow" ? "arrow" : "stake"} on ${runName(c.run)}`; }
       case "drop_segment": { const e = (data.runs[c.run] || [])[c.index] || {}; return `Take out line ${nth(c.run, c.index)} of ${runName(c.run)} (${feet(e)} at ${e.angle}°)`; }
       default: return "Unknown change";
     }
