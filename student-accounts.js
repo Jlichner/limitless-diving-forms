@@ -235,6 +235,9 @@
   }
   function notStaffBox() {
     const { esc } = L(), email = C().user.email || "";
+    if (C().roleError) return `<h2 class="sec">Couldn't check your staff role</h2>
+      <p class="hint">You're signed in as <b>${esc(email)}</b>, but the login server (Supabase) didn't answer when we asked for your role. It may be busy or restarting. Wait a minute and press <b>Check again</b>.</p>
+      <div class="row-actions"><button class="btn primary" data-sa="recheck">Check again</button><button class="btn" data-sa="signout">Sign out</button></div>`;
     return `<h2 class="sec">This is a student account</h2>
       <p class="hint">You're signed in as <b>${esc(email)}</b>, which doesn't have a staff role. An Admin can give it one under <b>Staff and roles</b>. Students manage their details on the <a href="account.html">Student portal</a> page.</p>
       <details><summary>Setting up the very first Admin?</summary>
@@ -599,7 +602,7 @@ on conflict (user_id) do update set role = 'admin';</code></pre></details>
         try { await navigator.clipboard.writeText(accountPageUrl()); L().toast("Link copied"); } catch (err) { L().toast("Couldn't copy. Select the link and copy it."); }
         break;
       case "signout": await C().signOut(); v.accounts = null; v.staff = null; v.members = null; setNote(""); rerender(); break;
-      case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast("Still a student account. Ask an Admin for a staff role."); } break;
+      case "recheck": await C().refreshRole(); headerButton(); if (C().can("divemaster")) loadAccounts(); else { setNote(""); rerender(); L().toast(C().roleError ? "The login server still isn't answering. Try again in a minute." : "Still a student account. Ask an Admin for a staff role."); } break;
       case "refresh": setNote(""); loadAccounts(); break;
       case "sitemaps": v.dview = v.dview === "sitemaps" && !b.closest("#record") ? null : "sitemaps"; rerender(); break;
       case "dpick": v.dsel = b.dataset.acc; v.dview = null; v.delAsk = null; rerender(); { const r = document.getElementById("record"); if (r && window.innerWidth < 820) r.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
