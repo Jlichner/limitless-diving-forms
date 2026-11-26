@@ -30,7 +30,7 @@
   const held = r => r[11] === 1 && isBlank(r);
   const isTitle = r => str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^(loop with |gps\b)/i.test(str(r[1])));
   const st = { open: false, rows: null, lm: [], base: 0, savedAt: null, check: null, msg: null, busy: false, summary: "", confirm: false, drawing: false, timer: null, warnOpen: false,
-    undo: [], edits: [] };   // undo: the book before each change made with the map tools; edits: suggestions added in
+    undo: [], edits: [], orig: null };   // orig: the website's book when this one was started (to see what you changed)   // undo: the book before each change made with the map tools; edits: suggestions added in
   // How much room the map above the book takes: each person's choice, kept in this browser.
   // "side" puts the map on the left and the book on the right, for wide screens (Jamie 2026-11-26, 1920 × 1080);
   // it's the first choice on a screen at least 1300 px wide.
@@ -75,7 +75,7 @@
   function sameAsWebsite() { return plain(st.rows) === plain(fromWebsite().rows); }
   function current() { return SS.joinLevels(S.data, ratedLayers()).data; }
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify({ rows: st.rows, lm: st.lm, base: st.base, edits: st.edits, at: new Date().toISOString() })); } catch (e) { /* private window */ }
+    try { localStorage.setItem(KEY, JSON.stringify({ rows: st.rows, lm: st.lm, base: st.base, edits: st.edits, orig: st.orig, at: new Date().toISOString() })); } catch (e) { /* private window */ }
   }
   function loadDraft() {
     try { const d = JSON.parse(localStorage.getItem(KEY) || "null"); return d && Array.isArray(d.rows) ? d : null; } catch (e) { return null; }
@@ -242,7 +242,7 @@
       <p class="hint">Enter the survey the way it's written on the slate: one row per leg, from station to station. <b>To</b> is Rock for a tie-off,
         Stake for a stake, or the station's name. Mistakes show in red as you type, and the map above shows the result (new lines in orange, removed ones in red).
         Your work is kept in this browser until you publish.</p>
-      ${stale ? `<p class="se-msg bad">The map was published again (version ${esc(S.versionName ? S.versionName() : String(S.version))}) since this book was started from version ${esc(String(st.base))}. Publishing this book would undo those changes, so it isn't allowed. Press <b>Download spreadsheet</b> to keep your work, then <b>Start from the website</b> and add your changes again.</p>` : ""}
+      ${stale ? `<p class="se-msg bad">The map was published again (version ${esc(S.versionName ? S.versionName() : String(S.version))}) since this book was started from version ${esc(String(st.base))}. When you publish, the lines you changed go on top of that version and everyone else's lines stay. You'll see what came in before it goes on the map.</p>` : ""}
       <div class="sb-bar"><button type="button" class="btn primary" data-sb="line-add">+ New line</button>
         ${st.undo.length ? `<button type="button" class="btn" data-sb="undo-map">Undo: ${esc(st.undo[st.undo.length - 1].what)}</button>` : ""}
         <button type="button" class="btn" data-sb="print-blank">Print blank slate</button>
@@ -421,10 +421,7 @@
     check();
     const c = st.check;
     if (c.errors.length) return drawChecks();
-    if (st.base !== S.version) {
-      st.msg = { kind: "bad", text: "Someone published the map after this book was started, so publishing it would undo their work. Download the spreadsheet to keep yours, then press Start from the website and add your changes again." };
-      return render();
-    }
+    if (st.base !== S.version) return catchUp();
     if (c.warnings.length && !st.confirm) { st.confirm = true; return drawChecks(); }
     st.busy = true; st.msg = null; drawChecks();
     try {
@@ -438,12 +435,54 @@
       try { localStorage.setItem(SIGNAL, JSON.stringify({ at: Date.now(), name: S.versionName ? S.versionName() : String(v) })); } catch (e) { /* the map tab just won't hear */ }
       if (S.reloadLayers) await S.reloadLayers();
       dropDraft(); st.summary = ""; st.confirm = false; st.undo = []; st.edits = [];
-      const w = fromWebsite(); st.rows = w.rows; st.lm = w.lm; st.base = S.version;
+      const w = fromWebsite(); st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.orig = copyBook(w);
       st.msg = { kind: "ok", text: `Published as version ${S.versionName ? S.versionName() : v}.` };
       check();
     } catch (err) {
       const m = (err && err.message) || "";
-      st.msg = { kind: "bad", text: err && err.code === "40001" ? "Someone published the map while you were working, so this wasn't published (it would have undone their work). Download the spreadsheet to keep yours, reload the page, press Start from the website and add your changes again." : /publish_site_map_book|schema cache|does not exist/i.test(m) ? "Run the latest supabase/schema.sql in Supabase first, then try again. Your work is kept." : (C.explain ? C.explain(err) : m) };
+      if (err && err.code === "40001") { st.busy = false; return catchUp(); }
+      st.msg = { kind: "bad", text: /publish_site_map_book|schema cache|does not exist/i.test(m) ? "Run the latest supabase/schema.sql in Supabase first, then try again. Your work is kept." : (C.explain ? C.explain(err) : m) };
+    }
+    st.busy = false; render();
+  }
+
+  // ----- someone else published while you were working -----
+  // Only your changes go on the map (Jamie 2026-11-26): the lines you added, changed or deleted are put on top of the
+  // latest version, and everyone else's lines stay as they are. Then you check the map and publish again.
+  const copyBook = b => JSON.parse(JSON.stringify({ rows: b.rows, lm: b.lm }));
+  async function catchUp() {
+    st.busy = true; st.msg = { kind: "", text: "Someone published the map since you started. Fetching their version…" }; render();
+    try {
+      let q = await C.client.from("site_maps").select("data, version, updated_at, label").eq("id", site).maybeSingle();
+      if (q.error && /label/.test(q.error.message || "")) q = await C.client.from("site_maps").select("data, version, updated_at").eq("id", site).maybeSingle();
+      if (q.error) throw q.error;
+      if (q.data && q.data.version !== S.version) S.setPublished(q.data.data, q.data.version, q.data.updated_at, q.data.label);
+      if (S.reloadLayers) await S.reloadLayers();
+      if (S.layersError) throw new Error("The other levels' lines didn't load: " + S.layersError);
+      // What the book looked like when you started: kept with your work, or (for work started before this was
+      // kept) the version you started from, out of the map's history.
+      let orig = st.orig;
+      if (!orig) {
+        const h = await C.client.from("site_map_history").select("data, layers").eq("site_id", site).eq("version", st.base).maybeSingle();
+        if (h.error || !h.data || !h.data.layers) {
+          st.busy = false;
+          st.msg = { kind: "bad", text: "Someone published the map after this book was started, and the version you started from can't be matched up line by line. Download the spreadsheet to keep your work, then press Start from the website and add your changes again." };
+          return render();
+        }
+        const j = SS.joinLevels(h.data.data, h.data.layers), o = SS.fromSurvey(j.data, j.runLevel);
+        orig = { rows: o.rows.map(r => r.slice(0, 11).map(v => v == null ? "" : v)), lm: o.landmarkRows };
+      }
+      const theirs = fromWebsite();
+      const r = window.SurveyMerge.merge(orig, { rows: st.rows, lm: st.lm }, theirs);
+      remember("bringing in the latest version");
+      st.rows = r.rows.map(x => x.slice()); st.lm = r.lm; st.base = S.version; st.orig = copyBook(theirs); st.confirm = false;
+      save(); check();
+      const list = a => a.length > 6 ? a.slice(0, 6).map(x => `"${x}"`).join(", ") + ` and ${a.length - 6} more` : a.map(x => `"${x}"`).join(", ");
+      st.msg = { kind: r.conflicts.length ? "bad" : "ok", text: `Brought in version ${S.versionName ? S.versionName() : S.version}${r.theirsChanged.length ? ` (their changes: ${list(r.theirsChanged)})` : ""}. Your changes are on top of it: ${r.changed.length ? list(r.changed) : "none"}.`
+        + (r.conflicts.length ? ` You both changed ${list(r.conflicts)}: your version is kept, so check ${r.conflicts.length === 1 ? "it" : "them"} against theirs.` : "")
+        + " Check the map, then press Publish again." };
+    } catch (err) {
+      st.msg = { kind: "bad", text: "Couldn't bring in the latest version: " + (C.explain ? C.explain(err) : (err && err.message) || err) + " Your work is kept. Try Publish again." };
     }
     st.busy = false; render();
   }
@@ -509,14 +548,14 @@
   function start(fresh) {
     const w = fromWebsite(), d = fresh ? null : loadDraft();
     if (d) {
-      st.rows = d.rows; st.lm = d.lm && d.lm.length ? d.lm : w.lm; st.base = d.base; st.savedAt = d.at; st.edits = Array.isArray(d.edits) ? d.edits : [];
+      st.rows = d.rows; st.lm = d.lm && d.lm.length ? d.lm : w.lm; st.base = d.base; st.savedAt = d.at; st.edits = Array.isArray(d.edits) ? d.edits : []; st.orig = d.orig || null;
       // The book publishes the whole survey, so work started on an older version would wipe out whatever was
       // published since (Jamie 2026-11-26: a night's survey went missing). Publishing it is refused; say so now.
       st.msg = d.base !== S.version
-        ? { kind: "bad", text: `This is unpublished work from ${new Date(d.at).toLocaleString()}, started before the map's latest version was published. Publishing it would undo that version, so it will be refused. Download it as a spreadsheet to keep it, then press "Start from the website" and add your changes again.` }
+        ? { kind: "bad", text: `This is unpublished work from ${new Date(d.at).toLocaleString()}, started before the map's latest version was published. When you publish, only the lines you changed go on top of the latest version; everyone else's lines stay.` }
         : { kind: "ok", text: `Picked up your unpublished work from ${new Date(d.at).toLocaleString()}.` };
     }
-    else { st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.msg = null; st.edits = []; dropDraft(); }
+    else { st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.msg = null; st.edits = []; st.orig = copyBook(w); dropDraft(); }
     st.confirm = false; st.undo = [];
     check(); render();
   }
