@@ -31,7 +31,7 @@
     // Every site is measured from one starting point at (0, 0): Bonnie Castle's is the Bar.
     const origin = data.origin || "BAR";
     const at = { [key(origin)]: [0, 0] };
-    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], gaps: [], totalSurveyedFt: 0 };
+    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], gaps: [], jumps: [], totalSurveyedFt: 0 };
     let box = [[0, 0], [0, 0]];
 
     // Where a run ends, relative to its start, ignoring stretch and turn: [distance, angle].
@@ -68,7 +68,7 @@
             out.segments.push(Object.assign({ kind: lineType, x0: x, y0: y, x1, y1, lengthFt: L, heading: Number(e.angle) }, ref,
               e.alt_text ? { text: e.alt_text, flipText: !!e.flip_text_side } : null));
             if (lineType !== "platform") out.totalSurveyedFt += L;
-          }
+          } else out.jumps.push(Object.assign({ x0: x, y0: y, x1, y1, lengthFt: L }, ref));   // not drawn, but the Survey book can show it
           x = x1; y = y1;
         } else if (e.type === "Arrow") {
           const a = radians(Number(e.angle) + rotation - opt.declination), d = e.distance == null ? 10 : Number(e.distance);

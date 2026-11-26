@@ -203,6 +203,9 @@ body.pm-open { overflow: hidden; }
 .sb-open.sb-map-off #sm-map { display: none; }
 .sb-check select { font: inherit; padding: 2px 4px; border: 1px solid #cfdcdf; border-radius: 4px; }
 details.sb-warn summary { cursor: pointer; }
+.sb-glow-line { animation: sb-pulse 1.2s ease-in-out 4; }
+@keyframes sb-pulse { 50% { stroke-opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .sb-glow-line { animation: none; } }
 .sb-pub ul { max-height: 22vh; overflow: auto; }
 #sm-book-btn.on { background: var(--deep, #0e5a6e); color: #fff; }
 .sm-book { margin-top: 14px; border-top: 2px solid var(--line, #d7e3e6); padding-top: 10px; }

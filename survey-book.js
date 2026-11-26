@@ -293,12 +293,29 @@
       if (act === "line-add") { const n = box.querySelectorAll(".sb-name"); const last = n[n.length - 1]; if (last && last.select) { last.focus(); last.select(); } }
     }
   });
+  // "Show on map": zoom to the line and light it up (jumps too, dashed), until the map is tapped or another line is shown.
+  let glow = null;
+  function clearGlow() { if (glow) { glow.remove(); glow = null; } }
   function showLine(blk) {
     const name = blk.title != null ? str(st.rows[blk.title][0]) : null, d = st.check && st.check.data;
+    clearGlow();
     if (!d || !S.geo) return;
     const ids = Object.keys(d.runNames || {}).filter(k => d.runNames[k] === name);
-    const pts = S.geo.segments.filter(s => ids.includes(s.run)).flatMap(s => [S.ll(s.x0, s.y0), S.ll(s.x1, s.y1)]);
-    if (!pts.length) return;
+    const mine = s => ids.includes(s.run);
+    const segs = S.geo.segments.filter(mine), jumps = (S.geo.jumps || []).filter(mine);
+    const pts = segs.concat(jumps).flatMap(s => [S.ll(s.x0, s.y0), S.ll(s.x1, s.y1)]);
+    if (!pts.length) { st.msg = { kind: "bad", text: `"${name || "This line"}" isn't on the map yet. Check its From station.` }; return drawChecks(); }
+    if (!S.map.getPane("sb-glow")) { S.map.createPane("sb-glow").style.zIndex = 645; }
+    const renderer = L.svg({ pane: "sb-glow" }), opt = { pane: "sb-glow", renderer, interactive: false, lineCap: "round" };
+    const line = (s, o) => L.polyline([S.ll(s.x0, s.y0), S.ll(s.x1, s.y1)], Object.assign({}, opt, o));
+    const all = segs.concat(jumps), first = all[0], last = all[all.length - 1];
+    glow = L.layerGroup([
+      ...all.map(s => line(s, { color: "#fff", weight: 12, opacity: 0.9 })),
+      ...all.map(s => line(s, { color: "#ff00d4", weight: 6, opacity: 1, className: "sb-glow-line", dashArray: jumps.includes(s) ? "8 8" : null })),
+      L.circleMarker(S.ll(first.x0, first.y0), Object.assign({}, opt, { radius: 8, color: "#fff", weight: 3, fillColor: "#ff00d4", fillOpacity: 1 })),
+      L.circleMarker(S.ll(last.x1, last.y1), Object.assign({}, opt, { radius: 6, color: "#ff00d4", weight: 3, fillColor: "#fff", fillOpacity: 1 })),
+    ]).addTo(S.map);
+    S.map.once("click", clearGlow);
     S.map.getContainer().scrollIntoView({ behavior: "smooth", block: "start" });
     S.map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: S.geoRef() ? 20 : 3 });
   }
@@ -404,6 +421,7 @@
     if (!PAGE) box.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function close() {
+    clearGlow();
     st.open = false; S.editing = false;
     host.classList.remove("sb-open", "sb-map-small", "sb-map-off"); btn.classList.remove("on"); btn.setAttribute("aria-pressed", "false");
     render();
