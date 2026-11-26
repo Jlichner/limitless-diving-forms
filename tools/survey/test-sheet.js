@@ -110,4 +110,12 @@ if (full && full.runs && Object.keys(full.runs).length) {
   const lb = SS.fromSurvey(L1.data), L2 = SS.toSurvey(lb.rows, lb.landmarkRows, { id: "t" });
   ok("run label round trip", JSON.stringify(L2.data.plan) === JSON.stringify(L1.data.plan), L2.data.plan);
 }
+{ // Lines drawn on top of each other.
+  const dup = [["", "Log", 70], ["A"], ["Log", "Rock", 70, "", 90, 40], ["Rock", "End A", 70, "", 0, 30], [], ["B"], ["Log", "Rock", 70, "", 90, 40], ["Rock", "End B", 70, "", 180, 20],
+    [], ["C"], ["End A", "Rock", 70, "", 270, 25]];
+  const d = SS.toSurvey(dup, [], { id: "t" }), ov = G.overlaps(G.compute(d.data));
+  ok("overlap found", !d.errors.length && ov.length === 1 && Math.abs(ov[0].ft - 40) < 0.01 && [ov[0].a, ov[0].b].sort().join() === "A,B", d.errors.concat([ov]));
+  const o2 = G.overlaps(G.compute(r.data));   // LOOP A sets off back along MAIN LINE for 10 ft
+  ok("overlap going back along a line", o2.length === 1 && o2[0].b === "LoopA" && Math.abs(o2[0].ft - 10) < 0.2, o2);
+}
 console.log(fails ? fails + " failed" : "all passed"); process.exit(fails ? 1 : 0);
