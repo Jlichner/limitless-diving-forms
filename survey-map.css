@@ -337,3 +337,11 @@ div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-lef
 /* Edit map: how a stake moves (anywhere / along its line) */
 .se-choice { border: 0; padding: 0; margin: 0 0 .5rem; display: grid; gap: .35rem; }
 .sm-gap-note { color: #c92a2a; }
+/* Survey book with the map beside it (Map: "Beside the book", wide screens): map on the left, stays in view while the
+   book on the right scrolls. */
+.sb-open.sb-map-side { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); column-gap: 16px; align-items: start; }
+.sb-open.sb-map-side > * { grid-column: 1 / -1; }
+.sb-open.sb-map-side > .sm-work { grid-column: 1; grid-row: 2; position: sticky; top: 8px; }
+.sb-open.sb-map-side > #sm-book { grid-column: 2; grid-row: 2 / span 6; margin-top: 0; }
+.sb-open.sb-map-side #sm-map { height: calc(100vh - 24px); min-height: 360px; }
+body.sb-wide .layout, body.sb-wide .pub { max-width: none; }

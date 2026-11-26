@@ -31,12 +31,18 @@
   const isTitle = r => str(r[0]) && [2, 3, 4, 5, 7].every(k => str(r[k]) === "") && (!str(r[1]) || /^(loop with |gps\b)/i.test(str(r[1])));
   const st = { open: false, rows: null, lm: [], base: 0, savedAt: null, check: null, msg: null, busy: false, summary: "", confirm: false, drawing: false, timer: null, warnOpen: false };
   // How much room the map above the book takes: each person's choice, kept in this browser.
-  let mapSize = "small";
-  try { mapSize = localStorage.getItem("sb-map-size") || "small"; } catch (e) { /* private window */ }
-  if (!/^(large|small|off)$/.test(mapSize)) mapSize = "small";
+  // "side" puts the map on the left and the book on the right, for wide screens (Jamie 2026-11-26, 1920 × 1080);
+  // it's the first choice on a screen at least 1300 px wide.
+  const wide = () => window.innerWidth >= 1300;
+  let mapSize = wide() ? "side" : "small";
+  try { mapSize = localStorage.getItem("sb-map-layout") || mapSize; } catch (e) { /* private window */ }
+  if (!/^(side|large|small|off)$/.test(mapSize)) mapSize = "small";
   function applyMapSize() {
-    host.classList.toggle("sb-map-small", mapSize === "small");
+    const side = mapSize === "side" && wide();
+    host.classList.toggle("sb-map-side", side);
+    host.classList.toggle("sb-map-small", mapSize === "small" || (mapSize === "side" && !side));
     host.classList.toggle("sb-map-off", mapSize === "off");
+    document.body.classList.toggle("sb-wide", side);
     setTimeout(() => S.map.invalidateSize(), 50);
   }
 
@@ -232,7 +238,7 @@
         <label class="btn sb-file">Load spreadsheet (CSV)<input type="file" accept=".csv,text/csv" data-sb="csv-in" hidden></label>
         <button type="button" class="btn" data-sb="reload">Start from the website</button>
         <label class="sb-check"><input type="checkbox" data-sb="drawing"${st.drawing ? " checked" : ""}> Drawing column</label>
-        <label class="sb-check">Map <select data-sb="mapsize">${[["large", "Large"], ["small", "Small"], ["off", "Hidden"]].map(([v, t]) => `<option value="${v}"${mapSize === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div>
+        <label class="sb-check">Map <select data-sb="mapsize">${[["side", "Beside the book"], ["large", "Large"], ["small", "Small"], ["off", "Hidden"]].map(([v, t]) => `<option value="${v}"${mapSize === v ? " selected" : ""}>${t}</option>`).join("")}</select></label></div>
       <div class="sb-origin"><b>Starting point</b> (every line is measured from here):
         ${o ? `<label><span>Station</span><input data-r="${bl.origin}" data-c="1" value="${esc(str(o[1]))}"></label><label><span>Depth ft</span><input data-r="${bl.origin}" data-c="2" inputmode="decimal" value="${esc(str(o[2]))}"></label>` : "<i>none yet</i>"}</div>
       <div class="sb-lines">${bl.list.map(blockHtml).join("")}</div>
@@ -283,7 +289,7 @@
       r[9] = (el.checked ? ["show name = yes"] : []).concat(rest).join("; ");
       st.confirm = false; st.msg = null; save(); check(); return drawChecks();
     }
-    if (el.dataset.sb === "mapsize") { mapSize = el.value; try { localStorage.setItem("sb-map-size", mapSize); } catch (x) { /* ignore */ } return applyMapSize(); }
+    if (el.dataset.sb === "mapsize") { mapSize = el.value; try { localStorage.setItem("sb-map-layout", mapSize); } catch (x) { /* ignore */ } return applyMapSize(); }
     if (el.dataset.sb === "csv-in" && el.files[0]) {
       const text = await el.files[0].text(), rows = parseCsv(text).map(r => Array.from({ length: 11 }, (_, k) => r[k] == null ? "" : r[k]));
       if (!rows.length) { st.msg = { kind: "bad", text: "That file has no rows." }; return render(); }
@@ -495,11 +501,12 @@
   function close() {
     clearGlow();
     st.open = false; S.editing = false;
-    host.classList.remove("sb-open", "sb-map-small", "sb-map-off"); btn.classList.remove("on"); btn.setAttribute("aria-pressed", "false");
+    host.classList.remove("sb-open", "sb-map-small", "sb-map-off", "sb-map-side"); document.body.classList.remove("sb-wide"); btn.classList.remove("on"); btn.setAttribute("aria-pressed", "false");
     render();
     setTimeout(() => S.map.invalidateSize(), 50);
     try { S.reset(); } catch (e) { console.error(e); }
   }
+  let resizeT; window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (st.open) applyMapSize(); }, 200); });
   S.onPublished(() => { if (st.open) render(); });
   if (!PAGE) {
     // On the map: the button opens the book in a new tab. When the book there publishes, offer a refresh here.
