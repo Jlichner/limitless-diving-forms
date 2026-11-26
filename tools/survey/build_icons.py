@@ -14,6 +14,10 @@ GLYPH_TO_TABLER = {
     'glyphicons-basic-677-car-wheel': 'steering-wheel', 'glyphicons-basic-137-cogwheel': 'wheel',
     'glyphicons-basic-154-square-empty': 'square', 'glyphicons-basic-500-skull': 'skull',
 }
+# Extra symbols (Jamie 2026-11-26: plane, van, car, helicopter), saved as icons/<name>.svg. Tabler has no van, so
+# van.svg is drawn in the same style and kept next to this script.
+EXTRA_SVG = {'plane': 'plane', 'van': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'van.svg'),
+             'car': 'car', 'helicopter': 'helicopter'}
 icons = {}
 for f in sorted(os.listdir(icons_dir)):
     if f.endswith('.png') and f != 'north.png':
@@ -25,6 +29,11 @@ for glyph, name in GLYPH_TO_TABLER.items():
     svg = svg.replace('<svg ', '<svg aria-hidden="true" ', 1)
     for suffix in ('@2x', '@3x'):
         icons[f'glyphicons-pro/glyphicons-basic-2-3/png/{glyph}{suffix}.png'] = {'svg': svg}
+for key, src in EXTRA_SVG.items():
+    svg = open(src if src.endswith('.svg') else os.path.join(tabler_dir, src + '.svg')).read()
+    svg = re.sub(r'<!--.*?-->', '', svg, flags=re.S).strip()
+    svg = re.sub(r'\s*class="[^"]*"', '', svg).replace('\n', '').replace('  ', ' ')
+    icons['icons/' + key + '.svg'] = {'svg': svg.replace('<svg ', '<svg aria-hidden="true" ', 1)}
 with open(out, 'w') as fh:
     fh.write('/* Limitless Diving — landmark icons for survey-map.html, keyed by the icon_path used in the survey data.\n'
              '   PNGs are the hand-made icons from the underwatersurvey project; SVGs are Tabler icons (MIT licence,\n'

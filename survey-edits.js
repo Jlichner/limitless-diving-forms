@@ -35,7 +35,8 @@
   const MOVABLE = /^(Stake|TieOff|RemovedStake)$/;
   // Symbols a diver can pick for a point (icons in survey-icons.js). "" = the plain dot.
   const SYMBOLS = [["", "Plain dot"], ["icons/shipwreck.png", "Shipwreck"], ["icons/tugboat.png", "Tugboat"],
-    ["icons/spookytree.png", "Tree"], ["icons/cribbing.png", "Cribbing"], ["icons/mooringblock.png", "Mooring block"]];
+    ["icons/spookytree.png", "Tree"], ["icons/cribbing.png", "Cribbing"], ["icons/mooringblock.png", "Mooring block"],
+    ["icons/plane.svg", "Plane"], ["icons/helicopter.svg", "Helicopter"], ["icons/car.svg", "Car"], ["icons/van.svg", "Van"]];
   const ICON_OK = /^icons\/[a-z0-9_-]{1,60}\.(png|svg)$/;
   const lenFt = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
   const withLen = (e, ft) => { const o = Object.assign({}, e, { length_ft: ft }); delete o.length_in; return o; };
