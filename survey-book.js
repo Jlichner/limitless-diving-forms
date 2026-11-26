@@ -145,6 +145,19 @@
     });
     return { list: out, origin };
   }
+  // Joining lines: a line can be added onto the end of the line that finishes at the station it starts from.
+  const plainTo = v => /^(rock|stake|tie-?off|tie off)?$/i.test(str(v));
+  function endOf(b) { const t = b.legs.length ? str(st.rows[b.legs[b.legs.length - 1]][1]) : ""; return t && !plainTo(t) ? t.toLowerCase() : null; }
+  function joinTarget(list, k) {
+    const b = list[k], first = b.legs.length && str(st.rows[b.legs[0]][0]).toLowerCase();
+    // A loop (either of its two lines) or a GPS line stays on its own.
+    const looped = new Set(list.filter(o => o.title != null).map(o => str(st.rows[o.title][1]).replace(/^loop with /i, "").trim().toLowerCase()).filter(Boolean));
+    const alone = o => o.title != null && (str(st.rows[o.title][1]) || looped.has(str(st.rows[o.title][0]).toLowerCase()));
+    if (!first || alone(b)) return null;
+    let best = null;
+    list.forEach((o, j) => { if (j !== k && o.legs.length && !alone(o) && endOf(o) === first && (best == null || Math.abs(j - k) < Math.abs(best - k))) best = j; });
+    return best;
+  }
   const sel = (i, c, opts, extra) => `<select data-r="${i}" data-c="${c}" aria-label="${extra}">${opts.map(([v, l]) => `<option value="${esc(v)}"${str(st.rows[i][c]).toLowerCase() === v.toLowerCase() ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
   function kindOpts(v) {
     const o = KINDS.map(k => [k, k]); if (v && !KINDS.some(k => k.toLowerCase() === v.toLowerCase())) o.push([v, v]);
@@ -163,7 +176,8 @@
       <span class="sb-acts"><button type="button" class="sb-x" data-sb="row-ins" data-i="${i}" title="Add a leg after this one" aria-label="Add a leg after leg ${n}">+</button><button type="button" class="sb-x" data-sb="row-del" data-i="${i}" title="Remove this leg" aria-label="Remove leg ${n}">✕</button></span>
       <div class="sb-msgs" data-msgs="${i}"></div></div>`;
   }
-  function blockHtml(b, k) {
+  function blockHtml(b, k, list) {
+    const jt = joinTarget(list, k), jName = jt == null ? "" : (list[jt].title != null ? str(st.rows[list[jt].title][0]) : `Line ${jt + 1}`);
     const t = b.title != null ? st.rows[b.title] : null, lv = t ? str(t[10]) : "";
     const legs = b.legs.length, feet = b.legs.reduce((s, i) => s + (Number(str(st.rows[i][5])) || 0), 0);
     return `<div class="sb-line${st.drawing ? " drawing" : ""}" data-block="${k}">
@@ -174,6 +188,7 @@
         <span class="sb-sum">${legs} leg${legs === 1 ? "" : "s"} · ${Math.round(feet)} ft</span>
         <span class="sb-lacts"><button type="button" class="btn small" data-sb="show" data-k="${k}">Show on map</button>
           <button type="button" class="btn small" data-sb="print" data-k="${k}">Print slate</button>
+          ${jt != null ? `<button type="button" class="btn small" data-sb="line-join" data-k="${k}" data-t="${jt}" title="Add this line's legs onto the end of ${esc(jName)}, which finishes where this line starts">Join onto ${esc(jName.length > 28 ? jName.slice(0, 27) + "…" : jName)}</button>` : ""}
           <button type="button" class="btn small" data-sb="line-del" data-k="${k}">Delete line</button></span></div>
       ${t ? `<div class="sb-msgs" data-msgs="${b.title}"></div>` : ""}
       <div class="sb-head" aria-hidden="true"><span>#</span><span>From</span><span></span><span>To</span><span>Depth ft</span><span>Heading °</span><span>Back °</span><span>Feet</span><span>In</span><span>Kind</span><span>Level from here</span><span>Note</span>${st.drawing ? "<span>Drawing</span>" : ""}<span></span></div>
@@ -283,6 +298,31 @@
       const idx = [blk.title, ...blk.legs].filter(x => x != null).sort((a, z) => z - a);
       idx.forEach(i => st.rows.splice(i, 1));
     }
+    if (act === "line-join" && blk) {
+      const tgt = bl.list[+b.dataset.t];
+      if (!tgt || joinTarget(bl.list, +b.dataset.k) !== +b.dataset.t) return render();
+      const lvl = r => (r != null ? str(st.rows[r][10]) : "");
+      const moved = blk.legs.map(i => st.rows[i]);
+      // Keep its level: if it differs from the line it joins, it's set on its first leg ("Level from here").
+      if (lvl(blk.title) !== lvl(tgt.title) && !str(moved[0][10])) moved[0][10] = lvl(blk.title) || "Green circle";
+      // The joined line goes where either of the two was; whichever keeps the other lines in order (stations named
+      // before they're used) wins.
+      const tRows = [tgt.title, ...tgt.legs].filter(x => x != null), bRows = [blk.title, ...blk.legs].filter(x => x != null);
+      const place = at => {
+        const out = [];
+        st.rows.forEach((r, i) => {
+          if (bRows.includes(i)) { if (at === "here" && i === bRows[0]) out.push(...tRows.map(x => st.rows[x]), ...moved); return; }
+          if (at === "here" && tRows.includes(i)) return;
+          out.push(r);
+          if (at === "target" && i === tgt.legs[tgt.legs.length - 1]) out.push(...moved);
+        });
+        return out;
+      };
+      const errs = rows => SS.toSurvey(rows.filter(r => !held(r)).map(r => r.slice(0, 11)), st.lm, { id: site }).errors.length;
+      const a1 = place("target"), a2 = place("here");
+      st.rows = errs(a2) < errs(a1) ? a2 : a1;
+      st.msg = { kind: "ok", text: "Joined. Check the map, then publish." };
+    }
     if (act === "show" && blk) return showLine(blk);
     if (act === "print" && blk) return printSlate(blk);
     if (act === "print-blank") return printSlate(null);
@@ -292,7 +332,7 @@
       return start(true);
     }
     if (act === "publish") return publish();
-    if (["row-del", "row-ins", "leg-add", "line-add", "line-del"].includes(act)) {
+    if (["row-del", "row-ins", "leg-add", "line-add", "line-del", "line-join"].includes(act)) {
       // keep blank lines between lines; drop runs of extra blank rows
       st.rows = st.rows.filter((r, i, a) => !(isBlank(r) && !held(r) && i > 0 && isBlank(a[i - 1]) && !held(a[i - 1])));
       st.confirm = false; save(); check(); render();
