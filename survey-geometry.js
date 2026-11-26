@@ -31,7 +31,7 @@
     // Every site is measured from one starting point at (0, 0): Bonnie Castle's is the Bar.
     const origin = data.origin || "BAR";
     const at = { [key(origin)]: [0, 0] };
-    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], gaps: [], jumps: [], totalSurveyedFt: 0 };
+    const out = { segments: [], stakes: [], tieoffs: [], arrows: [], landmarks: [], depths: [], warnings: [], gaps: [], jumps: [], runLabels: [], totalSurveyedFt: 0 };
     let box = [[0, 0], [0, 0]];
 
     // Where a run ends, relative to its start, ignoring stretch and turn: [distance, angle].
@@ -102,6 +102,8 @@
     const MAX_JOIN = 0.05;
 
     for (const step of data.plan) {
+      if (step.label) out.runLabels.push(step.run);
+      if (step.label2 && step.run2) out.runLabels.push(step.run2);
       if (step.mode === "draw") {
         draw(step.start, step.run, 1, 0);
       } else if (step.mode === "loop") {

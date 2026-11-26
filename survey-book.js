@@ -169,7 +169,8 @@
     return `<div class="sb-line${st.drawing ? " drawing" : ""}" data-block="${k}">
       <div class="sb-lh">${t ? `<input class="sb-name" data-r="${b.title}" data-c="0" value="${esc(str(t[0]))}" aria-label="Line name">` : `<b class="sb-name">Line ${k + 1}</b>`}
         ${t ? `<label class="sb-lv"><span class="sb-dot" style="background:${LEVEL_DOT[lv.toLowerCase()] || LEVEL_DOT["green circle"]}"></span>${sel(b.title, 10, [["", "Green circle"]].concat(LEVELS.slice(1).map(l => [l, l])), "Line level")}</label>
-          <label class="sb-join"><span>Loop with / GPS</span><input data-r="${b.title}" data-c="1" value="${esc(str(t[1]))}" placeholder="optional" autocomplete="off"></label>` : ""}
+          <label class="sb-join"><span>Loop with / GPS</span><input data-r="${b.title}" data-c="1" value="${esc(str(t[1]))}" placeholder="optional" autocomplete="off"></label>
+          <label class="sb-check" title="Show this line's name along it on the map"><input type="checkbox" data-sb="runlabel" data-t="${b.title}"${/show name\s*=\s*(yes|y|true|1)/i.test(str(t[9])) ? " checked" : ""}> Label on map</label>` : ""}
         <span class="sb-sum">${legs} leg${legs === 1 ? "" : "s"} · ${Math.round(feet)} ft</span>
         <span class="sb-lacts"><button type="button" class="btn small" data-sb="show" data-k="${k}">Show on map</button>
           <button type="button" class="btn small" data-sb="print" data-k="${k}">Print slate</button>
@@ -242,6 +243,11 @@
   box.addEventListener("change", async e => {
     const el = e.target;
     if (el.dataset.sb === "drawing") { st.drawing = el.checked; return render(); }
+    if (el.dataset.sb === "runlabel") {
+      const r = st.rows[+el.dataset.t], rest = str(r[9]).split(";").map(x => x.trim()).filter(x => x && !/^show name\s*=/i.test(x));
+      r[9] = (el.checked ? ["show name = yes"] : []).concat(rest).join("; ");
+      st.confirm = false; st.msg = null; save(); check(); return drawChecks();
+    }
     if (el.dataset.sb === "mapsize") { mapSize = el.value; try { localStorage.setItem("sb-map-size", mapSize); } catch (x) { /* ignore */ } return applyMapSize(); }
     if (el.dataset.sb === "csv-in" && el.files[0]) {
       const text = await el.files[0].text(), rows = parseCsv(text).map(r => Array.from({ length: 11 }, (_, k) => r[k] == null ? "" : r[k]));

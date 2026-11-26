@@ -116,6 +116,7 @@
           <label><input type="checkbox" data-layer="icons" checked> Landmark icons</label>
           <label><input type="checkbox" data-layer="moorings" checked> Mooring blocks</label>
           <label><input type="checkbox" data-layer="ratings" checked> Difficulty symbols</label>
+          <label><input type="checkbox" data-layer="runNames" checked> Line names</label>
           <label>Icon size <select id="sm-icon-size"><option value="0.75">Small</option><option value="1">Medium</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
           <span class="sm-tools-end"><button type="button" class="btn" id="sm-kml" hidden>Google Earth file</button>
           <button type="button" class="btn" id="sm-fit">Show the whole site</button>
@@ -297,6 +298,18 @@
       return best;
     },
     _onClick(e) {
+      if (!hitAt(this, e) && e.type === "click" && document.elementsFromPoint) {
+        // A stake or icon (a marker, not drawn on a canvas) in a lower layer, under this layer's canvas: pass the tap to it.
+        const els = document.elementsFromPoint(e.clientX, e.clientY), i = els.indexOf(this._container);
+        for (const el of i < 0 ? [] : els.slice(i + 1)) {
+          if (el.tagName === "CANVAS") break;
+          if (el.classList.contains("leaflet-marker-icon") && el.classList.contains("leaflet-interactive")) {
+            L.DomEvent.stop(e);
+            el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY, view: window }));
+            return;
+          }
+        }
+      }
       const below = !hitAt(this, e) && this._below();
       return below ? below._onClick(e) : L.Canvas.prototype._onClick.call(this, e);
     },
@@ -578,7 +591,21 @@ ${marks}
       layers.ratings.addLayer(L.marker(ll((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2), { pane: paneOf(s), keyboard: false, interactive: false,
         icon: L.divIcon({ className: "sm-rating", iconSize: rid === "double-black" ? [26, 14] : [14, 14], html: ratingSvg(rid) }) }));
     }
-    const defaults = { shapes: true, lines: true, points: true, icons: true, depths: true, moorings: true, ratings: true };
+    // Runs with "Label on map" (Survey book) show their name along the middle of the run, turned to follow it.
+    layers.runNames = L.layerGroup();
+    for (const run of geo.runLabels || []) {
+      const segs = geo.segments.filter(s => s.run === run && s.kind !== "removed"), total = segs.reduce((t, s) => t + s.lengthFt, 0);
+      if (!segs.length) continue;
+      let left = total / 2, s = segs[0];
+      for (const x of segs) { s = x; if (left <= x.lengthFt) break; left -= x.lengthFt; }
+      const f = s.lengthFt ? Math.min(1, left / s.lengthFt) : 0.5, x = s.x0 + (s.x1 - s.x0) * f, y = s.y0 + (s.y1 - s.y0) * f;
+      const a = S.map.project(ll(s.x0, s.y0), 0), b = S.map.project(ll(s.x1, s.y1), 0);
+      let deg = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      if (deg > 90) deg -= 180; else if (deg < -90) deg += 180;   // never upside down
+      layers.runNames.addLayer(L.marker(ll(x, y), { pane: paneOf(s), keyboard: false, interactive: false,
+        icon: L.divIcon({ className: "sm-run-name", iconSize: [0, 0], html: `<span style="transform:translate(-50%,-50%) rotate(${deg.toFixed(1)}deg) translateY(-0.8em)">${esc((d.runNames && d.runNames[run]) || S.runName(run))}</span>` }) }));
+    }
+    const defaults = { shapes: true, lines: true, points: true, icons: true, depths: true, moorings: true, ratings: true, runNames: true };
     for (const k of Object.keys(layers)) {
       const cb = main.querySelector(`[data-layer="${k}"]`);
       if (cb ? cb.checked : (k in visible ? visible[k] : defaults[k])) layers[k].addTo(S.map);
