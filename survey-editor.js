@@ -18,6 +18,10 @@
     msg: null, busy: false, summary: "", pending: [], mine: [], history: null, declining: null };
 
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
+  // On the Survey book page the tools change the book, which publishes everything together (Jamie 2026-11-26: all
+  // survey changes in the Survey book). Admins don't get Edit map on the map page; the survey team still suggests
+  // changes there, and Admins review them in the book.
+  const BOOK = () => !!(S.book && S.book.active() && isAdmin());
   const hasFile = !!(fileData && fileData.plan && fileData.plan.length);   // a survey in the page's data file (not for private sites)
   const say = (text, kind) => { st.msg = text ? { text, kind: kind || "" } : null; };
   const lineFeet = e => (Number(e.length_ft) || 0) + (Number(e.length_in) || 0) / 12;
@@ -32,7 +36,7 @@
   }
   // What edits apply to. Admins and Dive site admins edit the main survey and the rated layers together (runLayer
   // says which layer each run is in); the survey team's suggestions are for the main survey only.
-  const base = () => isAdmin() ? S.combine(S.data) : { data: S.data, runLayer: null };
+  const base = () => BOOK() ? (S.book.base() || Object.assign(S.combine(S.data), { broken: true })) : isAdmin() ? S.combine(S.data) : { data: S.data, runLayer: null };
   const current = () => E.apply(base().data, st.draft);   // the map with the draft applied
 
   // ----- previewing on the map -----
@@ -40,7 +44,9 @@
     if (!st.open) return;
     if (st.review) { S.show(st.review.data, { base: S.data }); S.select(null); if (st.review.focus) { st.review.focus = false; S.focusChanges(); } return; }
     const changes = st.draft.concat(st.mode === "add" && !st.add.pickingEnd ? addChanges(false) : st.mode === "point" ? pointChanges() : st.mode === "move" ? moveChanges() : []);
+    if (BOOK() && !changes.length) { S.book.preview(); S.select(st.mode === "idle" ? st.sel : null); return; }
     const b = base(), r = E.apply(b.data, changes);
+    if (BOOK()) { S.show(r.data, { base: S.book.published(), runLayer: b.runLayer }); S.select(null); return; }
     // Admins edit with the layers in the data; for the survey team the map adds the rated lines on top as usual.
     S.show(r.data, b.runLayer ? { base: b.data, runLayer: b.runLayer } : { base: b.data });
     const err = panel.querySelector("#se-preview-err");
@@ -139,6 +145,7 @@
     if (ch && !ch.length && fillStraight()) ch = addChanges(true);   // only the end point picked: go straight there
     if (!ch) { say("Fix the rows marked below first.", "bad"); return render(); }
     if (!ch.length) { say(st.add.end ? "Add at least one line: its length and heading." : "Add at least one line: its length and heading, or pick the point it ends at to draw it straight there.", "bad"); return render(); }
+    if (BOOK()) return commit(ch);
     const r = E.apply(base().data, st.draft.concat(ch));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ch);
@@ -185,6 +192,7 @@
     if (p.depth !== "" && !(Number(p.depth) >= 0 && Number(p.depth) <= 400)) { say("Depth is in feet, 0 to 400.", "bad"); return render(); }
     const ch = pointChanges();
     if (!ch.length) { say("That's right on the starting point. Tap a little way off it.", "bad"); return render(); }
+    if (BOOK()) return commit(ch);
     const r = E.apply(base().data, st.draft.concat(ch));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ch);
@@ -284,6 +292,7 @@
   function saveMove() {
     const ch = moveChanges();
     if (!ch.length) { say(st.mv.free ? "Tap the map where it should go." : "Tap the line where it should go.", "bad"); return render(); }
+    if (BOOK()) return commit(ch);
     const r = E.apply(base().data, st.draft.concat(ch));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ch);
@@ -321,6 +330,13 @@
     commit(ops);
   }
   function commit(ops) {
+    if (BOOK()) {
+      const err = S.book.apply(ops, E.describeAll(base().data, ops).join("; ").slice(0, 120));
+      if (err) { say(err, "bad"); return render(); }
+      st.mode = "idle"; st.confirm = null; st.sel = null; st.add = null; st.pt = null; st.mv = null; setPlacing(false);
+      say("Added to the book. Publish there when you're ready.", "ok");
+      return render();
+    }
     const r = E.apply(base().data, st.draft.concat(ops));
     if (r.error) { say(r.error, "bad"); return render(); }
     pushDraft(ops);
@@ -441,20 +457,37 @@
   }
   async function reviewVersion(v) {
     if (v === 0) { st.review = { kind: "version", focus: true, version: 0, data: fileData, error: null, warnings: [] }; return; }
-    const { data, error } = await C.client.from("site_map_history").select("data").eq("site_id", site).eq("version", v).single();
+    // Versions published from the Survey book also keep the rated layers (blue to Secret Squirrel), so putting one
+    // back brings back all its lines. Before schema.sql is re-run there's no layers column: just the green lines then.
+    let r = await C.client.from("site_map_history").select("data, layers").eq("site_id", site).eq("version", v).single();
+    if (r.error && /layers/.test(r.error.message || "")) r = await C.client.from("site_map_history").select("data").eq("site_id", site).eq("version", v).single();
+    const { data, error } = r;
     if (error) { say(C.explain(error), "bad"); return; }
-    st.review = { kind: "version", focus: true, version: v, data: data.data, error: null, warnings: [] };
+    st.review = { kind: "version", focus: true, version: v, data: data.data, layers: data.layers || null, error: null, warnings: [] };
   }
   async function approve() {
     const rv = st.review;
     if (!rv || rv.error) return;
+    if (BOOK()) {
+      // Into the book, published with everything else (a suggestion is marked approved when the book is published).
+      const err = rv.kind === "edit"
+        ? S.book.apply(rv.edit.changes, `${rv.edit.author_name || "A member"}'s suggestion`, rv.edit.id)
+        : S.book.loadVersion(!rv.data.georef && S.data.georef ? Object.assign({}, rv.data, { georef: S.data.georef }) : rv.data, rv.layers, rv.version ? vname(rv.version).replace(/^v/, "V") : "The original survey map");
+      if (err) { say(err, "bad"); return render(); }
+      say(rv.kind === "edit" ? "The suggestion is in the book. Publish there to put it on the map." : "That version is in the book. Publish there to put it back on the map.", "ok");
+      st.review = null; st.declining = null;
+      return render();
+    }
     st.busy = true; render();
     try {
       const summary = rv.kind === "edit" ? `${rv.edit.author_name || "A member"}: ${rv.edit.summary}` : (rv.version ? `Put back ${vname(rv.version)}` : "Put back the original survey map");
       if (rv.kind === "version" && !rv.data.georef && S.data.georef) rv.data = Object.assign({}, rv.data, { georef: S.data.georef });
-      const { data, error } = await C.client.rpc("publish_site_map", { site, new_data: rv.data, expected_version: S.version, summary, edit_id: rv.kind === "edit" ? rv.edit.id : null });
+      const { data, error } = rv.kind === "version" && rv.layers
+        ? await C.client.rpc("publish_site_map_book", { site, new_data: rv.data, expected_version: S.version, summary, layers: rv.layers })
+        : await C.client.rpc("publish_site_map", { site, new_data: rv.data, expected_version: S.version, summary, edit_id: rv.kind === "edit" ? rv.edit.id : null });
       if (error) throw error;
       S.setPublished(rv.data, data, new Date().toISOString());
+      if (rv.layers && S.reloadLayers) await S.reloadLayers();
       say(`Published as version ${S.versionName()}.`, "ok");
       st.review = null; st.history = null;
       await loadLists();
@@ -557,7 +590,7 @@
       ${rv.error ? `<p class="se-err">It doesn't fit the map any more: ${esc(rv.error)} Decline it and ask them to make it again.</p>` : ""}
       ${rv.warnings.length ? `<p class="se-err">${rv.warnings.map(esc).join("<br>")}</p>` : ""}
       <div class="se-acts">
-        ${!rv.error ? `<button type="button" class="btn primary" data-act="approve"${st.busy ? " disabled" : ""}>${rv.kind === "edit" ? "Approve and publish" : "Put this version back"}</button>` : ""}
+        ${!rv.error ? `<button type="button" class="btn primary" data-act="approve"${st.busy ? " disabled" : ""}>${BOOK() ? (rv.kind === "edit" ? "Add to the book" : "Put this version in the book") : rv.kind === "edit" ? "Approve and publish" : "Put this version back"}</button>` : ""}
         ${rv.kind === "edit" ? (st.declining === rv.edit.id
           ? `<label class="se-wide">Note to the member (optional) <input id="se-decline-note" maxlength="500"></label>
              <button type="button" class="btn danger" data-act="decline-go">Decline</button>`
@@ -577,10 +610,11 @@
     }
     const descs = E.describeAll(base().data, st.draft), cur = current();
     const body = st.review ? reviewCard() : st.mode === "add" ? addForm() : st.mode === "point" ? pointForm() : st.mode === "move" ? moveForm() : st.mode === "confirm" ? confirmCard() : selCard();
-    panel.innerHTML = `<div class="se-head"><h2>Edit the map</h2><button type="button" class="btn" data-act="close">Done</button></div>
+    const broken = BOOK() && base().broken;
+    panel.innerHTML = `<div class="se-head"><h2>${BOOK() ? "Map tools" : "Edit the map"}</h2>${BOOK() ? "" : `<button type="button" class="btn" data-act="close">Done</button>`}</div>
       ${st.msg ? `<p class="se-msg ${st.msg.kind}" role="status">${esc(st.msg.text)}</p>` : ""}
-      ${body}
-      ${st.review ? "" : `<section class="se-sec"><h3>Your changes${st.groups.length ? ` (${st.groups.length})` : ""}</h3>
+      ${broken && !st.review ? `<p class="se-msg bad">Fix the problems marked in the Survey book first. The map tools work on the book.</p>` : body}
+      ${st.review || BOOK() ? "" : `<section class="se-sec"><h3>Your changes${st.groups.length ? ` (${st.groups.length})` : ""}</h3>
         ${st.draft.length ? `<ol class="se-list">${descs.map((t, i) => `<li${i === cur.failedAt ? ' class="bad"' : ""}>${esc(t)}</li>`).join("")}</ol>
           ${cur.error ? `<p class="se-err">The map has changed since you made these: ${esc(cur.error)}</p>` : ""}
           <div class="se-acts"><button type="button" class="btn" data-act="undo">Undo last change</button><button type="button" class="btn" data-act="clear">Start over</button></div>
@@ -692,6 +726,7 @@
   panel.addEventListener("change", onField);
 
   async function open() {
+    if (BOOK()) { st.draft = []; st.groups = []; }   // the book holds the changes here
     st.open = true; S.editing = true;
     S.setPicker(pick);
     say(null); render();
@@ -711,10 +746,13 @@
   }
 
   btn.addEventListener("click", () => (st.open ? close() : open()));
-  S.onPublished(() => { if (st.open) render(); else S.show(S.data); });
+  S.onPublished(() => { if (BOOK()) { st.history = null; loadLists().then(render); } else if (st.open) render(); else S.show(S.data); });
+  // The Survey book page opens the tools beside the book (survey-book.js).
+  S.openTools = () => { if (BOOK() && !st.open) open(); };
+  S.toolsRender = () => { if (BOOK() && st.open) render(); };
   loadDraft();
   if (C && C.available && S.canEdit()) {
-    btn.hidden = false;
+    btn.hidden = isAdmin();   // Admins change the survey in the Survey book
     C.onChange(() => { if (st.open) { st.history = null; loadLists().then(render); } });
     S.adminListeners.push(() => { if (st.open) { st.history = null; loadLists().then(render); } });
   }

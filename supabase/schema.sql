@@ -1265,6 +1265,9 @@ create table if not exists public.site_map_history (
   published_by_name text not null default '',
   unique (site_id, version)
 );
+-- The rated layers (blue to Secret Squirrel) at that version, for versions published from the Survey book, so
+-- "Put this version back" brings back every line (2026-11-26).
+alter table public.site_map_history add column if not exists layers jsonb;
 alter table public.site_map_history enable row level security;
 drop policy if exists "Admins read site map history" on public.site_map_history;
 create policy "Admins read site map history" on public.site_map_history for select to authenticated
@@ -2005,8 +2008,11 @@ grant execute on function public.claim_site_map_issue_notice(uuid) to authentica
 -- ---------- Survey book: publish the whole survey from the website (added 2026-11-25) ----------
 -- The website's Survey book (survey-book.js) replaces the Google Sheet. Like sheet_publish_site_map, it publishes the
 -- main (green) map and the blue, black and double black layers together, but as the signed-in Admin or Dive site admin.
+-- edit_ids: survey team suggestions the Admin added into the book; they're marked approved (2026-11-26).
+drop function if exists public.publish_site_map_book(text, jsonb, integer, text, jsonb);
 create or replace function public.publish_site_map_book(site text, new_data jsonb, expected_version integer,
-                                                        summary text default '', layers jsonb default null)
+                                                        summary text default '', layers jsonb default null,
+                                                        edit_ids uuid[] default null)
 returns integer language plpgsql security definer set search_path = '' as $$
 declare cur integer; nv integer; k text; sv jsonb; who text;
   names jsonb := '{"blue": ["Blue square · Intermediate", "Advanced divers and up", 101],
@@ -2032,8 +2038,9 @@ begin
     from auth.users u left join public.student_profiles p on p.id = u.id where u.id = (select auth.uid());
   insert into public.site_maps (id, data, version, updated_at, updated_by) values (site, new_data, nv, now(), (select auth.uid()))
     on conflict (id) do update set data = excluded.data, version = excluded.version, updated_at = excluded.updated_at, updated_by = excluded.updated_by;
-  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name)
-    values (site, nv, new_data, left(coalesce(summary, ''), 2000), (select auth.uid()), coalesce(who, ''));
+  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name, layers)
+    values (site, nv, new_data, left(coalesce(summary, ''), 2000), (select auth.uid()), coalesce(who, ''),
+            case when jsonb_typeof(layers) = 'object' then layers end);
   if layers is not null then
     if jsonb_typeof(layers) <> 'object' then raise exception 'The rated layers aren''t complete' using errcode = '22023'; end if;
     foreach k in array array['blue', 'black', 'double-black', 'squirrel'] loop
@@ -2048,7 +2055,11 @@ begin
       end if;
     end loop;
   end if;
+  if edit_ids is not null then
+    update public.site_map_edits set status = 'approved', reviewed_by = (select auth.uid()), reviewed_at = now()
+     where id = any(edit_ids) and site_id = site and status = 'pending';
+  end if;
   return nv;
 end $$;
-revoke all on function public.publish_site_map_book(text, jsonb, integer, text, jsonb) from public, anon;
-grant execute on function public.publish_site_map_book(text, jsonb, integer, text, jsonb) to authenticated;
+revoke all on function public.publish_site_map_book(text, jsonb, integer, text, jsonb, uuid[]) from public, anon;
+grant execute on function public.publish_site_map_book(text, jsonb, integer, text, jsonb, uuid[]) to authenticated;
