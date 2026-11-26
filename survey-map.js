@@ -298,6 +298,18 @@
       return best;
     },
     _onClick(e) {
+      if (!hitAt(this, e) && e.type === "click" && document.elementsFromPoint) {
+        // A stake or icon (a marker, not drawn on a canvas) in a lower layer, under this layer's canvas: pass the tap to it.
+        const els = document.elementsFromPoint(e.clientX, e.clientY), i = els.indexOf(this._container);
+        for (const el of i < 0 ? [] : els.slice(i + 1)) {
+          if (el.tagName === "CANVAS") break;
+          if (el.classList.contains("leaflet-marker-icon") && el.classList.contains("leaflet-interactive")) {
+            L.DomEvent.stop(e);
+            el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY, view: window }));
+            return;
+          }
+        }
+      }
       const below = !hitAt(this, e) && this._below();
       return below ? below._onClick(e) : L.Canvas.prototype._onClick.call(this, e);
     },
