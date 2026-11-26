@@ -199,6 +199,11 @@ body.pm-open { overflow: hidden; }
 .sb-open { overflow: visible !important; }
 .sb-open .sm-work { position: sticky; top: 0; z-index: 6; background: var(--card, #fff); padding-bottom: 6px; }
 .sb-open #sm-map { height: 42vh; min-height: 260px; }
+.sb-open.sb-map-small #sm-map { height: 24vh; min-height: 160px; }
+.sb-open.sb-map-off #sm-map { display: none; }
+.sb-check select { font: inherit; padding: 2px 4px; border: 1px solid #cfdcdf; border-radius: 4px; }
+details.sb-warn summary { cursor: pointer; }
+.sb-pub ul { max-height: 22vh; overflow: auto; }
 #sm-book-btn.on { background: var(--deep, #0e5a6e); color: #fff; }
 .sm-book { margin-top: 14px; border-top: 2px solid var(--line, #d7e3e6); padding-top: 10px; }
 .sb-top { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -235,9 +240,9 @@ input.sb-name:hover, input.sb-name:focus { border-color: #cfdcdf; background: #f
 .sb-err, .sb-warn { margin: 2px 0; font-size: .88em; }
 .sb-err { color: #c62828; }
 .sb-warn { color: #a35400; }
-div.sb-err, div.sb-warn { border-radius: 8px; padding: 6px 10px; background: #fff6f6; margin: 8px 0; }
-div.sb-warn { background: #fff8ec; }
-div.sb-err ul, div.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
+div.sb-err, div.sb-warn, details.sb-warn { border-radius: 8px; padding: 6px 10px; background: #fff6f6; margin: 8px 0; }
+div.sb-warn, details.sb-warn { background: #fff8ec; }
+div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
 .sb-add { margin: 6px 8px 8px; }
 .sb-pub { position: sticky; bottom: 0; background: var(--card, #fff); border-top: 1px solid var(--line, #d7e3e6); padding: 8px 0 4px; margin-top: 6px; }
 .sb-pubrow { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
@@ -256,6 +261,7 @@ div.sb-err ul, div.sb-warn ul { margin: 4px 0 0; padding-left: 1.2em; }
   .sb-lacts { margin-left: 0; }
   .sb-name { width: 100%; }
   .sb-open #sm-map { height: 34vh; min-height: 200px; }
+  .sb-open.sb-map-small #sm-map { height: 20vh; min-height: 130px; }
 }
 
 /* Survey slate printout */
