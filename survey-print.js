@@ -50,6 +50,9 @@
       notes: p.notes != null ? p.notes : "Lengths and headings are as the divers measured them; routes that meet again are stretched slightly to join. Dive within your training.",
       credit: p.credit != null ? p.credit : (meta.creditText || ((S.data.surveyors || []).length ? `Surveyed by ${S.data.surveyors.join(", ")}.` : "")),
       bottom: Array.isArray(p.bottom) && p.bottom.length === 2 ? p.bottom : null,
+      // The site's limits for printing (Jamie 2026-11-26: "set site limits so that when i go to print map we dont cut
+      // off anything important beyond the survey"): four corners in survey feet, or null to fit the survey.
+      area: Array.isArray(p.area) && p.area.length === 4 ? p.area : null,
       // Which landmark names to print (Jamie 2026-11-25: "jumbled with too many labels"): "marked" = only points with a
       // symbol or with "Show the name on the map" ticked; "all"; or "none". Older settings had names: true/false.
       names: p.names === false ? "none" : (p.names === "all" || p.names === "none" ? p.names : "marked"),
@@ -172,7 +175,17 @@
     const tp = pts.map(p => T(p[0], p[1])), xs = tp.map(p => p[0]), ys = tp.map(p => p[1]);
     let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
     if (set.bottom) for (const p of set.bottom) { const q = T(p[0], p[1]); y0 = Math.min(y0, q[1]); }
-    const pad = u(46);
+    // Site limits: the sheet shows that area (whatever the survey covers) instead of fitting the survey.
+    if (set.area) {
+      const ta = set.area.map(p => T(p[0], p[1]));
+      x0 = Math.min(...ta.map(q => q[0])); x1 = Math.max(...ta.map(q => q[0])); y0 = Math.min(...ta.map(q => q[1])); y1 = Math.max(...ta.map(q => q[1]));
+    }
+    // While the limits are being tapped, zoom out so there is room to tap beyond the survey.
+    if (!st.forPrint && st.areaPick) {
+      const ex = Math.max(x1 - x0, y1 - y0, 50) * 0.6;
+      x0 -= ex; x1 += ex; y0 -= ex; y1 += ex;
+    }
+    const pad = set.area && !st.areaPick ? u(6) : u(46);
     const k = Math.min((map.w - 2 * pad) / Math.max(x1 - x0, 1), (map.h - 2 * pad) / Math.max(y1 - y0, 1));
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const P = (x, y) => { const [a, b] = T(x, y); return [map.x + map.w / 2 + (a - cx) * k, map.y + map.h / 2 - (b - cy) * k]; };
@@ -274,6 +287,12 @@
       ptsB.forEach(p => { const [a, b] = P(p[0], p[1]); o.push(el("circle", { cx: n(a), cy: n(b), r: n(u(5)), fill: "#e8590c", stroke: "#fff", "stroke-width": n(u(1.2)), "data-preview": "1" })); });
       if (ptsB.length === 2) { const [a, b] = P(...ptsB[0]), [c3, d3] = P(...ptsB[1]); o.push(el("line", { x1: n(a), y1: n(b), x2: n(c3), y2: n(d3), stroke: "#e8590c", "stroke-width": n(u(2)), "stroke-dasharray": `${u(6)} ${u(4)}`, "data-preview": "1" })); }
     }
+    // The site limits while setting them up (not printed).
+    if (!st.forPrint && st.areaPick) {
+      const corners = st.areaPick.length === 1 ? null : set.area;
+      if (corners) o.push(el("polygon", { points: corners.map(p => P(p[0], p[1]).map(v => n(v)).join(",")).join(" "), fill: "#e8590c", "fill-opacity": 0.06, stroke: "#e8590c", "stroke-width": n(u(2)), "stroke-dasharray": `${u(6)} ${u(4)}`, "data-preview": "1" }));
+      st.areaPick.forEach(p => { const [a, b] = P(p[0], p[1]); o.push(el("circle", { cx: n(a), cy: n(b), r: n(u(5)), fill: "#e8590c", stroke: "#fff", "stroke-width": n(u(1.2)), "data-preview": "1" })); });
+    }
     o.push(el("rect", { x: n(map.x), y: n(map.y), width: n(map.w), height: n(map.h), fill: "none", stroke: ink, "stroke-width": n(u(1)) }));
     // North arrow, turned with the map.
     const [nx, ny] = T(nv.v[0], nv.v[1]), ang = Math.atan2(nx, ny) * 180 / Math.PI;
@@ -353,7 +372,7 @@
     o.push(text(cx0 + pad2, ly + u(23), `Lines shown: ${LEVEL_TEXT[set.levels]}`, u(8)));
 
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${o.join("")}</svg>`;
-    return { svg, W, H, map, unP };
+    return { svg, W, H, map, unP, T, unT: (a, b) => [a * c2 + b * s2, -a * s2 + b * c2] };
   }
 
   // ----- the setup page -----
@@ -384,6 +403,12 @@
               <button type="button" class="btn" data-pm="pick">${set.bottom ? "Tap the shore again" : "Tap two points along the shore"}</button>
               ${set.bottom ? `<button type="button" class="btn" data-pm="pick-clear">North up instead</button>` : ""}`}
         </fieldset>
+        <fieldset class="pm-fs"><legend>Site limits (the area printed)</legend>
+          ${st.areaPick ? `<p class="se-pick">${st.areaPick.length ? "Now tap the opposite corner." : "The sheet is zoomed out. Tap one corner of the area to print."}</p><button type="button" class="btn" data-pm="area-cancel">Cancel</button>`
+            : `<p class="hint">${set.area ? "Set: the sheet shows the area you marked, so the shore and anything near the survey stay on the map." : "Not set: the sheet fits the survey lines. Mark the site limits to keep the shore and other things beyond the survey on the map."}</p>
+              <button type="button" class="btn" data-pm="area">${set.area ? "Mark the limits again" : "Mark the site limits"}</button>
+              ${set.area ? `<button type="button" class="btn" data-pm="area-clear">Fit the survey instead</button>` : ""}`}
+        </fieldset>
         <fieldset class="pm-fs"><legend>Show</legend>
           <label class="pm-f">Landmark names <select data-k="names">${[["marked", "Symbols and marked names"], ["all", "All points"], ["none", "None"]]
             .map(([v, l]) => `<option value="${v}"${set.names === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
@@ -398,7 +423,7 @@
           <button type="button" class="btn" data-pm="save"${st.busy ? " disabled" : ""}>Save these settings</button></div>
         <p class="hint">Saved settings are used next time anyone with Map setup prints this map.</p>
       </aside>
-      <div class="pm-preview"><div class="pm-sheet${st.picking ? " picking" : ""}" style="aspect-ratio:${sh.W} / ${sh.H}">${sh.svg}</div></div></div>`;
+      <div class="pm-preview"><div class="pm-sheet${st.picking || st.areaPick ? " picking" : ""}" style="aspect-ratio:${sh.W} / ${sh.H}">${sh.svg}</div></div></div>`;
   }
 
   function sheetPoint(e) {
@@ -458,7 +483,7 @@
     st.busy = true; render();
     try {
       const s = st.set, print = { levels: s.levels, background: s.background, bgOpacity: s.bgOpacity, paper: s.paper, title: s.title, place: s.place, notes: s.notes, credit: s.credit,
-        bottom: s.bottom, names: s.names, depths: s.depths, points: s.points, moorings: s.moorings };
+        bottom: s.bottom, area: s.area, names: s.names, depths: s.depths, points: s.points, moorings: s.moorings };
       const data = Object.assign({}, S.data, { print });
       const { data: ver, error } = await C.client.rpc("publish_site_map", { site, new_data: data, expected_version: S.version, summary: "Saved the print map settings", edit_id: null });
       if (error) throw error;
@@ -468,18 +493,33 @@
     st.busy = false; render();
   }
 
-  btn.addEventListener("click", () => { st.open = true; st.set = defaults(); st.picking = null; st.showBottom = true; say(null); render(); });
+  btn.addEventListener("click", () => { st.open = true; st.set = defaults(); st.picking = null; st.areaPick = null; st.showBottom = true; say(null); render(); });
   box.addEventListener("click", e => {
     const b = e.target.closest("[data-pm]");
     if (b) {
       const act = b.dataset.pm;
-      if (act === "close") { st.open = false; st.picking = null; return render(); }
-      if (act === "pick") { st.picking = []; say(null); return render(); }
+      if (act === "close") { st.open = false; st.picking = null; st.areaPick = null; return render(); }
+      if (act === "pick") { st.picking = []; st.areaPick = null; say(null); return render(); }
+      if (act === "area") { st.areaPick = []; st.picking = null; st.areaWas = st.set.area; say(null); return render(); }
+      if (act === "area-cancel") { st.set.area = st.areaWas || null; st.areaPick = null; return render(); }
+      if (act === "area-clear") { st.set.area = null; say("The sheet fits the survey again. Save the settings to keep it.", "ok"); return render(); }
       if (act === "pick-cancel") { st.picking = null; return render(); }
       if (act === "pick-clear") { st.set.bottom = null; return render(); }
       if (act === "pdf") return downloadPdf();
       if (act === "save") return saveSettings();
       return;
+    }
+    if (st.areaPick && e.target.closest(".pm-sheet")) {
+      const p = sheetPoint(e); if (!p) return;
+      st.areaPick.push(p);
+      if (st.areaPick.length === 2) {
+        const [a0, b0] = frame.T(...st.areaPick[0]), [a1, b1] = frame.T(...st.areaPick[1]);
+        if (Math.abs(a1 - a0) < 5 || Math.abs(b1 - b0) < 5) { st.areaPick = [st.areaPick[0]]; say("Tap the opposite corner further away, so the area has some width and height.", "bad"); return render(); }
+        const r1 = v => Math.round(v * 10) / 10;
+        st.set.area = [[a0, b0], [a1, b0], [a1, b1], [a0, b1]].map(([a, b]) => frame.unT(a, b).map(r1));
+        st.areaPick = null; say("Site limits set. Save the settings to keep them.", "ok");
+      }
+      return render();
     }
     if (st.picking && e.target.closest(".pm-sheet")) {
       const p = sheetPoint(e); if (!p) return;
@@ -506,7 +546,7 @@
   };
   box.addEventListener("input", onField);
   box.addEventListener("change", onField);
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && st.open) { if (st.picking) st.picking = null; else st.open = false; render(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && st.open) { if (st.areaPick) { st.set.area = st.areaWas || null; st.areaPick = null; } else if (st.picking) st.picking = null; else st.open = false; render(); } });
   // Access can change on log in or out.
   if (C && C.onChange) C.onChange(() => { btn.hidden = !allowed(); });
 });
