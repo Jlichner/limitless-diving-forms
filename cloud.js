@@ -28,9 +28,17 @@
     url, key,
     onChange(fn) { listeners.push(fn); },
     async refreshRole() {
-      C.role = "student"; C.instructor = false; C.techAccess = false; C.toolAccess = { nitrox: true, physics: true };
+      C.role = "student"; C.roleError = false; C.instructor = false; C.techAccess = false; C.toolAccess = { nitrox: true, physics: true };
       if (!C.client || !C.user) { techLink(); return C.role; }
-      const [r, t, k] = await Promise.all([C.client.rpc("my_role"), C.client.rpc("my_tech_access"), C.client.rpc("my_tool_access")]);
+      // A slow or restarting Supabase (e.g. during a plan upgrade) answers with an error: try again a few times, and
+      // remember it failed (C.roleError) so pages say "couldn't reach the server" rather than "this is a student account".
+      let r, t, k;
+      for (let i = 0; i < 3; i++) {
+        if (i) await new Promise(res => setTimeout(res, 1500 * i));
+        [r, t, k] = await Promise.all([C.client.rpc("my_role"), C.client.rpc("my_tech_access"), C.client.rpc("my_tool_access")]);
+        if (!r.error) break;
+      }
+      C.roleError = !!r.error;
       if (!r.error && C.ROLES.includes(r.data)) C.role = r.data;
       C.instructor = C.can("instructor");
       // Before schema.sql is re-run there's no my_tech_access(): only Instructors and Admins get in then.
