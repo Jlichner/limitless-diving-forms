@@ -231,7 +231,7 @@
       <p class="hint">Enter the survey the way it's written on the slate: one row per leg, from station to station. <b>To</b> is Rock for a tie-off,
         Stake for a stake, or the station's name. Mistakes show in red as you type, and the map above shows the result (new lines in orange, removed ones in red).
         Your work is kept in this browser until you publish.</p>
-      ${stale ? `<p class="se-err">The map was published again (version ${esc(S.versionName ? S.versionName() : String(S.version))}) since this book was started from version ${esc(String(st.base))}. Publishing will replace those changes. To see them, use <b>Start from the website</b> (this drops your unpublished work).</p>` : ""}
+      ${stale ? `<p class="se-msg bad">The map was published again (version ${esc(S.versionName ? S.versionName() : String(S.version))}) since this book was started from version ${esc(String(st.base))}. Publishing this book would undo those changes, so it isn't allowed. Press <b>Download spreadsheet</b> to keep your work, then <b>Start from the website</b> and add your changes again.</p>` : ""}
       <div class="sb-bar"><button type="button" class="btn primary" data-sb="line-add">+ New line</button>
         <button type="button" class="btn" data-sb="print-blank">Print blank slate</button>
         <button type="button" class="btn" data-sb="csv">Download spreadsheet</button>
@@ -403,12 +403,16 @@
     check();
     const c = st.check;
     if (c.errors.length) return drawChecks();
-    if ((c.warnings.length || st.base !== S.version) && !st.confirm) { st.confirm = true; return drawChecks(); }
+    if (st.base !== S.version) {
+      st.msg = { kind: "bad", text: "Someone published the map after this book was started, so publishing it would undo their work. Download the spreadsheet to keep yours, then press Start from the website and add your changes again." };
+      return render();
+    }
+    if (c.warnings.length && !st.confirm) { st.confirm = true; return drawChecks(); }
     st.busy = true; st.msg = null; drawChecks();
     try {
       const before = current();
       const summary = (st.summary.trim() ? st.summary.trim() + " — " : "") + "from the Survey book: " + SS.describeChange(before, c.data);
-      const { data: v, error } = await C.client.rpc("publish_site_map_book", { site, new_data: c.sp.src.green, expected_version: S.version, summary: summary.slice(0, 2000),
+      const { data: v, error } = await C.client.rpc("publish_site_map_book", { site, new_data: c.sp.src.green, expected_version: st.base, summary: summary.slice(0, 2000),
         layers: { blue: c.sp.src.blue, black: c.sp.src.black, "double-black": c.sp.src["double-black"], squirrel: c.sp.src.squirrel } });
       if (error) throw error;
       S.setPublished(c.sp.src.green, v, new Date().toISOString());
@@ -420,7 +424,7 @@
       check();
     } catch (err) {
       const m = (err && err.message) || "";
-      st.msg = { kind: "bad", text: /publish_site_map_book|schema cache|does not exist/i.test(m) ? "Run the latest supabase/schema.sql in Supabase first, then try again. Your work is kept." : (C.explain ? C.explain(err) : m) };
+      st.msg = { kind: "bad", text: err && err.code === "40001" ? "Someone published the map while you were working, so this wasn't published (it would have undone their work). Download the spreadsheet to keep yours, reload the page, press Start from the website and add your changes again." : /publish_site_map_book|schema cache|does not exist/i.test(m) ? "Run the latest supabase/schema.sql in Supabase first, then try again. Your work is kept." : (C.explain ? C.explain(err) : m) };
     }
     st.busy = false; render();
   }
@@ -485,7 +489,14 @@
   // ----- open and close -----
   function start(fresh) {
     const w = fromWebsite(), d = fresh ? null : loadDraft();
-    if (d) { st.rows = d.rows; st.lm = d.lm && d.lm.length ? d.lm : w.lm; st.base = d.base; st.savedAt = d.at; st.msg = { kind: "ok", text: `Picked up your unpublished work from ${new Date(d.at).toLocaleString()}.` }; }
+    if (d) {
+      st.rows = d.rows; st.lm = d.lm && d.lm.length ? d.lm : w.lm; st.base = d.base; st.savedAt = d.at;
+      // The book publishes the whole survey, so work started on an older version would wipe out whatever was
+      // published since (Jamie 2026-11-26: a night's survey went missing). Publishing it is refused; say so now.
+      st.msg = d.base !== S.version
+        ? { kind: "bad", text: `This is unpublished work from ${new Date(d.at).toLocaleString()}, started before the map's latest version was published. Publishing it would undo that version, so it will be refused. Download it as a spreadsheet to keep it, then press "Start from the website" and add your changes again.` }
+        : { kind: "ok", text: `Picked up your unpublished work from ${new Date(d.at).toLocaleString()}.` };
+    }
     else { st.rows = w.rows; st.lm = w.lm; st.base = S.version; st.msg = null; dropDraft(); }
     st.confirm = false;
     check(); render();

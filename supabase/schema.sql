@@ -1265,6 +1265,9 @@ create table if not exists public.site_map_history (
   published_by_name text not null default '',
   unique (site_id, version)
 );
+-- The rated layers (blue to Secret Squirrel) at that version, for versions published from the Survey book, so
+-- "Put this version back" brings back every line (2026-11-26).
+alter table public.site_map_history add column if not exists layers jsonb;
 alter table public.site_map_history enable row level security;
 drop policy if exists "Admins read site map history" on public.site_map_history;
 create policy "Admins read site map history" on public.site_map_history for select to authenticated
@@ -2032,8 +2035,9 @@ begin
     from auth.users u left join public.student_profiles p on p.id = u.id where u.id = (select auth.uid());
   insert into public.site_maps (id, data, version, updated_at, updated_by) values (site, new_data, nv, now(), (select auth.uid()))
     on conflict (id) do update set data = excluded.data, version = excluded.version, updated_at = excluded.updated_at, updated_by = excluded.updated_by;
-  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name)
-    values (site, nv, new_data, left(coalesce(summary, ''), 2000), (select auth.uid()), coalesce(who, ''));
+  insert into public.site_map_history (site_id, version, data, summary, published_by, published_by_name, layers)
+    values (site, nv, new_data, left(coalesce(summary, ''), 2000), (select auth.uid()), coalesce(who, ''),
+            case when jsonb_typeof(layers) = 'object' then layers end);
   if layers is not null then
     if jsonb_typeof(layers) <> 'object' then raise exception 'The rated layers aren''t complete' using errcode = '22023'; end if;
     foreach k in array array['blue', 'black', 'double-black', 'squirrel'] loop

@@ -441,9 +441,13 @@
   }
   async function reviewVersion(v) {
     if (v === 0) { st.review = { kind: "version", focus: true, version: 0, data: fileData, error: null, warnings: [] }; return; }
-    const { data, error } = await C.client.from("site_map_history").select("data").eq("site_id", site).eq("version", v).single();
+    // Versions published from the Survey book also keep the rated layers (blue to Secret Squirrel), so putting one
+    // back brings back all its lines. Before schema.sql is re-run there's no layers column: just the green lines then.
+    let r = await C.client.from("site_map_history").select("data, layers").eq("site_id", site).eq("version", v).single();
+    if (r.error && /layers/.test(r.error.message || "")) r = await C.client.from("site_map_history").select("data").eq("site_id", site).eq("version", v).single();
+    const { data, error } = r;
     if (error) { say(C.explain(error), "bad"); return; }
-    st.review = { kind: "version", focus: true, version: v, data: data.data, error: null, warnings: [] };
+    st.review = { kind: "version", focus: true, version: v, data: data.data, layers: data.layers || null, error: null, warnings: [] };
   }
   async function approve() {
     const rv = st.review;
@@ -452,9 +456,12 @@
     try {
       const summary = rv.kind === "edit" ? `${rv.edit.author_name || "A member"}: ${rv.edit.summary}` : (rv.version ? `Put back ${vname(rv.version)}` : "Put back the original survey map");
       if (rv.kind === "version" && !rv.data.georef && S.data.georef) rv.data = Object.assign({}, rv.data, { georef: S.data.georef });
-      const { data, error } = await C.client.rpc("publish_site_map", { site, new_data: rv.data, expected_version: S.version, summary, edit_id: rv.kind === "edit" ? rv.edit.id : null });
+      const { data, error } = rv.kind === "version" && rv.layers
+        ? await C.client.rpc("publish_site_map_book", { site, new_data: rv.data, expected_version: S.version, summary, layers: rv.layers })
+        : await C.client.rpc("publish_site_map", { site, new_data: rv.data, expected_version: S.version, summary, edit_id: rv.kind === "edit" ? rv.edit.id : null });
       if (error) throw error;
       S.setPublished(rv.data, data, new Date().toISOString());
+      if (rv.layers && S.reloadLayers) await S.reloadLayers();
       say(`Published as version ${S.versionName()}.`, "ok");
       st.review = null; st.history = null;
       await loadLists();
