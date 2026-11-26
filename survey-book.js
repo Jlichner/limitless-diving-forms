@@ -170,7 +170,7 @@
       <div class="sb-lh">${t ? `<input class="sb-name" data-r="${b.title}" data-c="0" value="${esc(str(t[0]))}" aria-label="Line name">` : `<b class="sb-name">Line ${k + 1}</b>`}
         ${t ? `<label class="sb-lv"><span class="sb-dot" style="background:${LEVEL_DOT[lv.toLowerCase()] || LEVEL_DOT["green circle"]}"></span>${sel(b.title, 10, [["", "Green circle"]].concat(LEVELS.slice(1).map(l => [l, l])), "Line level")}</label>
           <label class="sb-join"><span>Loop with / GPS</span><input data-r="${b.title}" data-c="1" value="${esc(str(t[1]))}" placeholder="optional" autocomplete="off"></label>
-          <label class="sb-check" title="Show this run's name along it on the map"><input type="checkbox" data-sb="runlabel" data-t="${b.title}"${/show name\s*=\s*(yes|y|true|1)/i.test(str(t[9])) ? " checked" : ""}> Label on map</label>` : ""}
+          <label class="sb-check" title="Show this line's name along it on the map"><input type="checkbox" data-sb="runlabel" data-t="${b.title}"${/show name\s*=\s*(yes|y|true|1)/i.test(str(t[9])) ? " checked" : ""}> Label on map</label>` : ""}
         <span class="sb-sum">${legs} leg${legs === 1 ? "" : "s"} · ${Math.round(feet)} ft</span>
         <span class="sb-lacts"><button type="button" class="btn small" data-sb="show" data-k="${k}">Show on map</button>
           <button type="button" class="btn small" data-sb="print" data-k="${k}">Print slate</button>

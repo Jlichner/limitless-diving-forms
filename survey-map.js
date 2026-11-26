@@ -116,7 +116,7 @@
           <label><input type="checkbox" data-layer="icons" checked> Landmark icons</label>
           <label><input type="checkbox" data-layer="moorings" checked> Mooring blocks</label>
           <label><input type="checkbox" data-layer="ratings" checked> Difficulty symbols</label>
-          <label><input type="checkbox" data-layer="runNames" checked> Run names</label>
+          <label><input type="checkbox" data-layer="runNames" checked> Line names</label>
           <label>Icon size <select id="sm-icon-size"><option value="0.75">Small</option><option value="1">Medium</option><option value="1.5">Large</option><option value="2">Extra large</option></select></label>
           <span class="sm-tools-end"><button type="button" class="btn" id="sm-kml" hidden>Google Earth file</button>
           <button type="button" class="btn" id="sm-fit">Show the whole site</button>
