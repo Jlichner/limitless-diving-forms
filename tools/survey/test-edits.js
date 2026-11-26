@@ -184,4 +184,18 @@ t("move a stake anywhere: the lines either side bend, the rest stays put", () =>
   assert.ok(E.apply(d2, [Object.assign({}, c, { after: Object.assign({}, c.after, { i: 3 }) })]).error);
 });
 
+t("delete_point takes out just the stake", () => {
+  const d = { origin: "A", landmarks: { A: "A", END: "End" }, plan: [{ mode: "draw", start: "A", run: "R" }], runNames: { R: "R" },
+    runs: { R: [{ type: "SurveyedLine", length_ft: 30, angle: 90 }, { type: "Stake" }, { type: "SurveyedLine", length_ft: 40, angle: 0 }, { type: "SaveLandmark", landmark: "END" }] } };
+  const c = { op: "delete_point", run: "R", index: 1 }, r = E.apply(d, [c]);
+  assert.strictEqual(r.error, null);
+  assert.strictEqual(r.data.runs.R.length, 3);
+  const g0 = G.compute(d), g1 = G.compute(r.data);
+  assert.strictEqual(g1.stakes.length, 0);
+  assert.ok(Math.hypot(g1.at.END[0] - g0.at.END[0], g1.at.END[1] - g0.at.END[1]) < 1e-9, "nothing else moves");
+  assert.ok(/Delete the stake on R/.test(E.describe(c, d)));
+  assert.ok(E.apply(d, [{ op: "delete_point", run: "R", index: 0 }]).error, "a line can't be deleted this way");
+  assert.ok(E.apply(d, [{ op: "delete_point", run: "R", index: 3 }]).error, "a named point can't be deleted this way");
+});
+
 console.log(`${n} tests passed`);

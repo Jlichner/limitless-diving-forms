@@ -477,7 +477,8 @@
         ${onRun && hasAfter ? `<button type="button" class="btn" data-act="cut">${f.kind === "segment" ? "Delete this line and the rest of the run" : "Delete the rest of this run from here"}</button>
           <button type="button" class="btn" data-act="mark">${f.kind === "segment" ? "Mark as removed line from here" : "Mark the rest as removed line"}</button>` : ""}
         ${f.kind === "segment" ? `<button type="button" class="btn" data-act="drop">Take out just this line</button>` : ""}
-        ${(f.kind === "stake" || f.kind === "tieoff") && r && r[f.index] && E.MOVABLE.test(r[f.index].type) ? `<button type="button" class="btn" data-act="move">Move it</button>` : ""}
+        ${(f.kind === "stake" || f.kind === "tieoff") && r && r[f.index] && E.MOVABLE.test(r[f.index].type) ? `<button type="button" class="btn" data-act="move">Move it</button>
+          <button type="button" class="btn" data-act="del-point">Delete just this ${f.kind === "tieoff" ? "tie-off" : "stake"}</button>` : ""}
         ${onRun ? `<button type="button" class="btn danger" data-act="run">Delete the whole run: ${esc(S.runName(f.run))}</button>` : ""}
         <button type="button" class="btn" data-act="unselect">Cancel</button></div>
       ${f.kind === "segment" ? `<p class="hint">"Take out just this line" keeps everything after it where it is. "Mark as removed line" keeps it on the map in grey, for line that was pulled.</p>` : ""}</div>`;
@@ -623,6 +624,7 @@
     if (act === "pt-start") { startPoint(); return render(); }
     if (act === "pt-save") return savePoint();
     if (act === "move") { startMove(f); return render(); }
+    if (act === "del-point") return commit([{ op: "delete_point", run: f.run, index: f.index }]);
     if (act === "mv-save") return saveMove();
     if (act === "mv-cancel") { st.mode = "idle"; st.mv = null; setPlacing(false); say(null); return render(); }
     if (act === "pt-cancel") { st.mode = "idle"; st.pt = null; setPlacing(false); say(null); return render(); }
