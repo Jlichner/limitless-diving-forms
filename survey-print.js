@@ -50,7 +50,10 @@
       notes: p.notes != null ? p.notes : "Lengths and headings are as the divers measured them; routes that meet again are stretched slightly to join. Dive within your training.",
       credit: p.credit != null ? p.credit : (meta.creditText || ((S.data.surveyors || []).length ? `Surveyed by ${S.data.surveyors.join(", ")}.` : "")),
       bottom: Array.isArray(p.bottom) && p.bottom.length === 2 ? p.bottom : null,
-      names: p.names !== false, depths: p.depths !== false, points: p.points !== false, moorings: p.moorings !== false,
+      // Which landmark names to print (Jamie 2026-11-25: "jumbled with too many labels"): "marked" = only points with a
+      // symbol or with "Show the name on the map" ticked; "all"; or "none". Older settings had names: true/false.
+      names: p.names === false ? "none" : (p.names === "all" || p.names === "none" ? p.names : "marked"),
+      depths: p.depths !== false, points: p.points !== false, moorings: p.moorings !== false,
     };
   }
   function imageLayers() { return (S.layers || []).filter(l => l.kind === "image" && l.imageUrl && l.bounds); }
@@ -232,7 +235,12 @@
       const [a, b] = P(dp.x, dp.y);
       o.push(text(a + u(5), b - u(4), `${dp.depth}'`, u(7.5), { "font-family": SANS, fill: "#0b4f6c" }));
     }
-    // Landmarks: icon in a white box, name beside it.
+    // Landmarks: icon in a white box, name beside it. A name that would print on top of another name is left off,
+    // and the names that matter most (symbols, then points marked "show name") are placed first.
+    const taken = [], hits = (b) => taken.some(t => b.x0 < t.x1 && b.x1 > t.x0 && b.y0 < t.y1 && b.y1 > t.y0);
+    const wanted = l => set.names === "all" || (set.names === "marked" && (l.label || l.origin || (l.icon && l.icon !== MOORING)));
+    const rank = l => (l.icon && l.icon !== MOORING ? 0 : l.label ? 1 : 2);
+    const nameJobs = [];
     for (const l of geo.landmarks) {
       if (l.origin && !l.icon) continue;
       const [a, b] = P(l.x, l.y), name = S.name(l.landmark);
@@ -247,11 +255,18 @@
         if (ic.png) o.push(el("image", { href: ic.png, x: n(a - z * 0.42), y: n(b - z * 0.42), width: n(z * 0.84), height: n(z * 0.84) }));
         else o.push(`<g transform="translate(${n(a - z * 0.42)},${n(b - z * 0.42)}) scale(${n(z * 0.84 / 24, 4)})" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ic.svg.replace(/<svg[^>]*>|<\/svg>/g, "").replace(/currentColor/g, ink)}</g>`);
       } else o.push(el("circle", { cx: n(a), cy: n(b), r: n(u(3)), fill: "#ffffff", stroke: "#0f7c8c", "stroke-width": n(u(1.2)) }));
-      if (set.names && name) {
-        const tx = a + (ic ? z / 2 + u(3) : u(5)), ty = b + u(3);
-        o.push(text(tx, ty, name, u(8.5), { stroke: "#ffffff", "stroke-width": n(u(2.2)), "stroke-linejoin": "round" }));
-        o.push(text(tx, ty, name, u(8.5)));
-      }
+      taken.push(ic ? { x0: a - z / 2, x1: a + z / 2, y0: b - z / 2, y1: b + z / 2 } : { x0: a - u(3), x1: a + u(3), y0: b - u(3), y1: b + u(3) });
+      if (name && wanted(l)) nameJobs.push({ l, name, tx: a + (ic ? z / 2 + u(3) : u(5)), ty: b + u(3) });
+    }
+    const fs = u(8.5), placed = [];
+    for (const j of nameJobs.sort((p, q) => rank(p.l) - rank(q.l))) {
+      const w = j.name.length * fs * 0.52, box2 = { x0: j.tx, x1: j.tx + w, y0: j.ty - fs * 0.8, y1: j.ty + fs * 0.25 };
+      if (hits(box2)) continue;
+      taken.push(box2); placed.push(j);
+    }
+    for (const j of placed) {
+      o.push(text(j.tx, j.ty, j.name, fs, { stroke: "#ffffff", "stroke-width": n(u(2.2)), "stroke-linejoin": "round" }));
+      o.push(text(j.tx, j.ty, j.name, fs));
     }
     // The tapped shore line while setting it up (not printed once Download is pressed).
     if (!st.forPrint && (st.picking || st.showBottom)) {
@@ -370,7 +385,9 @@
               ${set.bottom ? `<button type="button" class="btn" data-pm="pick-clear">North up instead</button>` : ""}`}
         </fieldset>
         <fieldset class="pm-fs"><legend>Show</legend>
-          ${[["names", "Landmark names"], ["depths", "Depths"], ["points", "Stakes and tie-offs"], ["moorings", "Mooring blocks"]].map(([k2, l]) => `<label class="sm-check"><input type="checkbox" data-k="${k2}"${set[k2] ? " checked" : ""}> ${l}</label>`).join("")}
+          <label class="pm-f">Landmark names <select data-k="names">${[["marked", "Only points with a symbol or a shown name"], ["all", "All points"], ["none", "None"]]
+            .map(([v, l]) => `<option value="${v}"${set.names === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+          ${[["depths", "Depths"], ["points", "Stakes and tie-offs"], ["moorings", "Mooring blocks"]].map(([k2, l]) => `<label class="sm-check"><input type="checkbox" data-k="${k2}"${set[k2] ? " checked" : ""}> ${l}</label>`).join("")}
         </fieldset>
         <label class="pm-f">Title <input data-k="title" maxlength="80" value="${esc(set.title)}"></label>
         <label class="pm-f">Place <input data-k="place" maxlength="120" value="${esc(set.place)}" placeholder="e.g. Alexandria Bay, St. Lawrence River, NY"></label>
