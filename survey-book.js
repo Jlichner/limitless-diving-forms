@@ -426,5 +426,14 @@
     box.innerHTML = `<p class="acct-note bad">The Survey book is for Admins and Dive site admins. <a href="${esc(location.pathname)}">Back to the map</a></p>`;
     return;
   }
-  open();
+  // Wait for the rated layers (blue, black, double black, Secret Squirrel): the book holds every level's lines.
+  box.hidden = false;
+  box.innerHTML = `<p class="hint">Loading every level's lines…</p>`;
+  (S.layersLoaded || Promise.resolve()).then(() => {
+    if (S.layersError) {
+      box.innerHTML = `<p class="acct-note bad">The rated lines (blue, black, double black) couldn't be loaded, so the Survey book can't open safely: ${esc(S.layersError)}. <a href="${esc(location.href)}">Try again</a></p>`;
+      return;
+    }
+    open();
+  });
 });
