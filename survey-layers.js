@@ -31,8 +31,15 @@
 
   // ----- loading -----
   S.reloadLayers = () => loadLayers();
+  // The Survey book waits for the first load: it shows and publishes the rated layers too, so starting it before
+  // they're here would leave them out (and publishing then would empty them).
+  let firstLoaded;
+  S.layersLoaded = new Promise(r => { firstLoaded = r; });
   async function loadLayers() {
-    if (!cloud()) return;
+    if (!cloud()) { firstLoaded(); return; }
+    try { await loadLayersNow(); } finally { S.layersError = st.loadErr || null; firstLoaded(); }
+  }
+  async function loadLayersNow() {
     const { data, error } = await C.client.from("site_map_layers").select("*").eq("site_id", site).order("sort").order("created_at");
     if (error) { st.loadErr = /site_map_layers|does not exist|schema cache/i.test(error.message || "") ? "setup" : C.explain(error); st.layers = []; }
     else {
