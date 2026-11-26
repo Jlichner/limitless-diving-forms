@@ -17,6 +17,7 @@
   if (!S || !S.map || !L) return;
   const esc = S.esc, site = S.site;
   const box = document.getElementById("sm-layers"), setupBox = document.getElementById("sm-setup");
+  const BOOK_PAGE = new URLSearchParams(location.search).has("book");
   const VIEW = "ld-sitemap-view2-" + site;
   const cloud = () => !!(C && C.available);
   const isAdmin = () => S.isSiteAdmin();   // Admins and Dive site admins
@@ -314,6 +315,13 @@
   }
   function drawSetup() {
     if (!isAdmin()) { setupBox.innerHTML = ""; return; }
+    // Map setup is on the Survey book page, with everything else that changes the map (Jamie 2026-11-26).
+    if (!BOOK_PAGE) {
+      setupBox.innerHTML = `<section class="panel sm-setup"><div class="se-head"><h2 class="sec">Map setup</h2>
+        <a class="btn" href="${esc(location.pathname)}?book" target="_blank" rel="noopener">Open the Survey book</a></div>
+        <p class="hint">Placing the map on the earth, version numbers, picture layers and photos to approve are in the Survey book, with the survey.</p></section>`;
+      return;
+    }
     const gr = S.data.georef || {}, g = S.geoRef();
     const pending = st.photos.filter(p => !p.approved);
     if (!st.setupOpen) {
