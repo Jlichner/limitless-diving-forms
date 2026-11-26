@@ -72,7 +72,7 @@
   const ICON_SIZE = "ld-sitemap-icon-size";
   let iconScale = 1;
   try { iconScale = Number(localStorage.getItem(ICON_SIZE)) || 1; } catch (e) { /* private mode */ }
-  const LEGEND_NAMES = { "icons/shipwreck.png": "Shipwreck" }; // icons used by more than one landmark
+  const LEGEND_NAMES = { "icons/shipwreck.png": "Shipwreck", "icons/plane.svg": "Plane", "icons/helicopter.svg": "Helicopter", "icons/car.svg": "Car", "icons/van.svg": "Van" }; // icons used by more than one landmark
 
   const S = window.SurveyMap = {
     site, data: (window.SITE_MAPS || {})[site], version: 0, label: null, updatedAt: null, map: null, esc,
