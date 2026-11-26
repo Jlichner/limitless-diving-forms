@@ -121,7 +121,11 @@
         if (!p0 || !p1) { out.warnings.push(`${step.run}: ${p0 ? step.end : step.start} isn't on the map yet`); continue; }
         const [d1, a1] = polar(p1[0] - p0[0], p1[1] - p0[1]), [d2, a2] = runVector(data.runs[step.run] || []);
         const m = misclose(d1 / d2, a2 - a1);
-        if (m > MAX_JOIN) {
+        // A run with no drawn line (a point placed by tapping the map: a hidden jump to it) just goes to where the
+        // point already is, however far off: nothing is stretched that anyone can see (Jamie 2026-11-26: "the red
+        // lines are on points").
+        const hiddenOnly = !(data.runs[step.run] || []).some(e => LINE_TYPES[e.type]);
+        if (m > MAX_JOIN && !hiddenOnly) {
           const target = p1.slice(), e = draw(step.start, step.run, 1, 0, true);
           out.gaps.push({ run: step.run, end: step.end, x0: e[0], y0: e[1], x1: target[0], y1: target[1], ft: Math.hypot(target[0] - e[0], target[1] - e[1]), share: m });
         } else draw(step.start, step.run, d1 / d2, a2 - a1);
