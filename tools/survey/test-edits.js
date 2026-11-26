@@ -2,6 +2,7 @@
 const assert = require("assert");
 const E = require("../../survey-edits.js"), G = require("../../survey-geometry.js");
 const base = require("./local-data.js")("bonnie-castle");
+const PI_ = Math.PI;
 let n = 0; const t = (name, fn) => { fn(); n++; console.log("ok -", name); };
 const geo0 = G.compute(base);
 assert.deepStrictEqual(geo0.warnings, []);
@@ -36,10 +37,19 @@ t("add a line from a stake", () => {
 });
 
 t("a line can end at an existing landmark and is fitted to it", () => {
-  const r = E.apply(base, [{ op: "add_run", run: "RUN_FIT", name: "Fit", start: "UMBRELLA", end: "CAR",
-    entries: [{ type: "SurveyedLine", length_ft: 30, angle: 100 }, { type: "SurveyedLine", length_ft: 30, angle: 140 }] }]);
+  // Two legs that measure 3% long and 1° off the straight line from Umbrella to Car: close enough to join up.
+  const [ux, uy] = geo0.at.UMBRELLA, [cx, cy] = geo0.at.CAR, L = Math.hypot(cx - ux, cy - uy), hd = 90 - Math.atan2(cy - uy, cx - ux) * 180 / Math.PI;
+  const legs = k => [{ type: "SurveyedLine", length_ft: Math.round(L * k / 2 * 100) / 100, angle: ((hd + 1) % 360 + 360) % 360 }, { type: "SurveyedLine", length_ft: Math.round(L * k / 2 * 100) / 100, angle: ((hd + 1) % 360 + 360) % 360 }];
+  const r = E.apply(base, [{ op: "add_run", run: "RUN_FIT", name: "Fit", start: "UMBRELLA", end: "CAR", entries: legs(1.03) }]);
   const g = G.compute(r.data), segs = g.segments.filter(s => s.run === "RUN_FIT");
   assert.ok(Math.hypot(segs[1].x1 - g.at.CAR[0], segs[1].y1 - g.at.CAR[1]) < 1e-6);
+  assert.ok(!g.gaps.some(x => x.run === "RUN_FIT"));
+  // 20% long: never stretched that far (Jamie 2026-11-25). Drawn as measured, ending past Car, and the gap is listed.
+  const r2 = E.apply(base, [{ op: "add_run", run: "RUN_FIT", name: "Fit", start: "UMBRELLA", end: "CAR", entries: legs(1.2) }]);
+  const g2 = G.compute(r2.data), s2 = g2.segments.filter(s => s.run === "RUN_FIT"), gap = g2.gaps.find(x => x.run === "RUN_FIT");
+  assert.ok(gap && Math.abs(gap.ft - L * Math.hypot(1.2 - Math.cos(PI_ / 180), Math.sin(PI_ / 180))) < 0.1, "the gap is listed");
+  assert.ok(Math.abs(s2[0].lengthFt - legs(1.2)[0].length_ft) < 1e-9, "drawn as measured");
+  assert.ok(Math.hypot(g2.at.CAR[0] - cx, g2.at.CAR[1] - cy) < 1e-9, "Car stays where it was");
 });
 
 t("bad input is refused with a plain message", () => {

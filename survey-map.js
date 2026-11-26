@@ -223,6 +223,7 @@
       ${from.length ? `<br><span class="dm-pop">Lines from here: ${from.map(esc).join("; ")}</span>` : ""}
       <div class="sm-photos" data-photos="${esc(f.landmark)}"></div>`;
   }
+  const gapOf = run => ((S.geo && S.geo.gaps) || []).find(g => g.run === run || g.other === run);
   function segmentPopup(s) {
     const d = S.shown, e = d.runs[s.run][s.index], k = KIND[s.kind];
     const n = d.runs[s.run].slice(0, s.index + 1).filter(x => /Line$/.test(x.type)).length;
@@ -232,7 +233,8 @@
     return `<b>${esc(S.runName(s.run))}</b>${lay && !lay.rating ? ` <span class="dm-pop">(${esc(lay.name)})</span>` : ""}
       ${r ? `<br><span class="sm-pop-rating">${ratingSvg(rid, 12)} ${esc(r.name)} · ${esc(r.level)}</span>` : ""}<br>${esc(k.label)} ${n}: ${esc(ftIn(e))} at ${esc(e.angle)}°
       ${e.note ? `<br><span class="dm-pop">Note: ${esc(e.note)}</span>` : ""}
-      ${stretch > 0.005 ? `<br><span class="dm-pop">Drawn ${Math.round(stretch * 100)}% ${s.lengthFt > measured ? "longer" : "shorter"} so the route joins up</span>` : ""}`;
+      ${stretch > 0.005 ? `<br><span class="dm-pop">Drawn ${Math.round(stretch * 100)}% ${s.lengthFt > measured ? "longer" : "shorter"} so the route joins up</span>` : ""}
+      ${gapOf(s.run) ? `<br><span class="dm-pop sm-gap-note">Drawn as measured: it doesn't join up by ${Math.round(gapOf(s.run).ft * 10) / 10} ft (more than 5% would be needed). Check the tape and headings.</span>` : ""}`;
   }
   function pointPopup(f) {
     const e = S.shown.runs[f.run][f.index] || {};
@@ -522,7 +524,11 @@ ${marks}
       gone.forEach(s => changed.push(ll(s.x0, s.y0), ll(s.x1, s.y1)));
       gone.forEach(s => lines.unshift(L.polyline([ll(s.x0, s.y0), ll(s.x1, s.y1)], { renderer: canvas, pane: "sm-p-base", color: GONE, weight: 3, dashArray: "6 5", interactive: false })));
     }
-    layers.lines = L.layerGroup(lines);
+    // A run that would need stretching or turning more than 5% to join up is drawn as measured; a red dashed
+    // line shows the gap to where it should end (Jamie 2026-11-25).
+    const gapLines = (geo.gaps || []).map(g => L.polyline([ll(g.x0, g.y0), ll(g.x1, g.y1)], { pane: paneOf(g), color: GONE, weight: 2, dashArray: "4 4", opacity: 0.9 })
+      .bindTooltip(`${esc(S.runName(g.run))} doesn't join up: ${Math.round(g.ft * 10) / 10} ft off. Check the tape and headings.`, { sticky: true }));
+    layers.lines = L.layerGroup(lines.concat(gapLines));
 
     const stakeIcon = fresh => L.divIcon({ className: "sm-stake" + (fresh ? " new" : ""), iconSize: [7, 7] });
     const arrowIcon = h => L.divIcon({ className: "sm-arrow", iconSize: [10, 10], html: `<svg viewBox="0 0 12 12" style="transform:rotate(${h}deg)"><polygon points="6,1 11,11 1,11"/></svg>` });
