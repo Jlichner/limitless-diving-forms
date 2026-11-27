@@ -57,6 +57,13 @@
       const s = at[key(start)];
       if (!s) { out.warnings.push(`${runName} starts at ${start}, which isn't on the map yet`); return; }
       let [x, y] = s;
+      // A stake or tie-off with only jumps on both sides (jumps aren't drawn) isn't drawn either (Jamie 2026-11-27).
+      const isLeg = e => !!LINE_TYPES[e.type] || e.type === "Jump";
+      const onJumpsOnly = i => {
+        let a = i - 1; while (a >= 0 && !isLeg(entries[a])) a--;
+        let b = i + 1; while (b < entries.length && !isLeg(entries[b])) b++;
+        return a >= 0 && entries[a].type === "Jump" && (b >= entries.length || entries[b].type === "Jump");
+      };
       entries.forEach((e, i) => {
         const ref = { run: runName, index: i };
         const lineType = LINE_TYPES[e.type];
@@ -85,9 +92,9 @@
           }
         } else if (STAKE_TYPES[e.type]) {
           if (e.type === "SavedStake" && e.landmark && !(keep && at[key(e.landmark)])) at[key(e.landmark)] = [x, y];
-          out.stakes.push(Object.assign({ kind: STAKE_TYPES[e.type], x, y, text: e.text || null }, ref));
+          if (!onJumpsOnly(i)) out.stakes.push(Object.assign({ kind: STAKE_TYPES[e.type], x, y, text: e.text || null }, ref));
         } else if (e.type === "TieOff") {
-          out.tieoffs.push(Object.assign({ x, y }, ref));
+          if (!onJumpsOnly(i)) out.tieoffs.push(Object.assign({ x, y }, ref));
         } else {
           out.warnings.push(`${runName} #${i + 1}: unknown entry type ${e.type}`);
         }

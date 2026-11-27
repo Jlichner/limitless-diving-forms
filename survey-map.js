@@ -451,7 +451,11 @@
 
   // The published survey with every survey layer this person may see added on.
   function combine(d) {
-    const extra = S.layers.filter(l => l.kind === "survey" && l.survey && l.survey.runs);
+    // Rated layers join in rating order (green, blue, black, ...), the order the ratings are checked in, not the Layers
+    // panel's order: a line can start or end on a point in a lower-rated layer (Jamie 2026-11-27: Snowman Line).
+    const RANK = (window.SurveyRatings && window.SurveyRatings.RANK) || {};
+    const rk = l => RANK[l.rating] != null ? RANK[l.rating] : 99;
+    const extra = S.layers.filter(l => l.kind === "survey" && l.survey && l.survey.runs).slice().sort((a, b) => rk(a) - rk(b));
     const runLayer = {};
     if (!extra.length) return { data: d, runLayer };
     const out = Object.assign({}, d, { runs: Object.assign({}, d.runs), plan: d.plan.slice(), landmarks: Object.assign({}, d.landmarks), runNames: Object.assign({}, d.runNames) });
@@ -460,6 +464,8 @@
       Object.assign(out.landmarks, l.survey.landmarks || {}); Object.assign(out.runNames, l.survey.runNames || {});
       for (const st of l.survey.plan || []) if (runLayer[st.run] === l.id) out.plan.push(st);
     }
+    // Each line after the one its starting (or joining) point is on. Leaves a plan that's already in order as it is.
+    if (window.SurveyRatings) out.plan = window.SurveyRatings.orderPlan(out.plan, out.runs, [out.origin || "BAR"]);
     return { data: out, runLayer };
   }
 
