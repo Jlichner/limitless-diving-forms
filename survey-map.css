@@ -356,6 +356,13 @@ div.sb-err ul, div.sb-warn ul, details.sb-warn ul { margin: 4px 0 0; padding-lef
 .sb-open.sb-map-side > .sm-work.editing { grid-template-columns: minmax(0, 1fr); }
 .sb-open.sb-map-side > #sm-edit { grid-column: 2; grid-row: 4; max-height: 46vh; border: 1px solid var(--line, #d7e3e6); border-radius: 10px; padding: 8px 12px; background: var(--card, #fff); margin-bottom: 12px; }
 .sb-open.sb-map-side > #sm-book { grid-column: 2; grid-row: 5 / span 5; margin-top: 0; max-height: calc(100vh - 24px); overflow: auto; overscroll-behavior: contain; padding-bottom: 0; }
+/* Slimmer section bars on the Survey book page (Jamie 2026-11-27: "can these be smaller?") */
+.sb-page #sm-layers-panel, .sb-page #sm-setup .sm-setup { padding: 4px 10px; margin-bottom: 8px; }
+.sb-open.sb-map-side > #sm-edit { padding: 4px 10px; margin-bottom: 8px; }
+.sb-open.sb-map-side > #sm-setup .sm-setup { margin: 0 0 8px; }
+.sb-page #sm-layers-panel > .se-head, .sb-page #sm-setup .sm-setup > .se-head, .sb-page #sm-edit > .se-head { padding: 2px 0; }
+.sb-page #sm-layers-panel h2.sec, .sb-page #sm-setup .sm-setup h2.sec, .sb-page #sm-edit > .se-head h2 { font-size: 16px; margin: 0; }
+.sb-page #sm-layers-panel > .se-head .btn, .sb-page #sm-setup .sm-setup > .se-head .btn, .sb-page #sm-edit > .se-head .btn { padding: 2px 8px; font-size: 12px; }
 /* A line someone is editing (Survey book) */
 .sb-hold { margin: 4px 0 6px; padding: 6px 10px; border-radius: 8px; background: #fff4e5; color: #7a4a00; font-size: 13px; }
 .sb-hold.mine { background: #e8f4ff; color: #0b4a7a; }
